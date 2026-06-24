@@ -126,11 +126,11 @@ class Conversation(
         this.model = model
         this.effort = effort // restore the session's last reasoning effort on a fresh resume (transcript doesn't carry it)
         this.openedResumeId = resumeId
-        // fork on take-over / cold-resume: the resumed id may belong to a desktop `claude --resume` or a
-        // still-live terminal, and claude doesn't lock transcripts — so we branch into a fresh id (carrying
-        // the full history) and write there, leaving the original .jsonl untouched. The pump re-announces
-        // the forked sessionId below. No-op when resumeId is null (a brand-new session).
-        launchProcess(ClaudeSpec(workdir, resumeId, model, mode, effort = effort, forkSession = true))
+        // resume the session in-place — no fork. The registry already checked that no desktop
+        // `claude --resume` is actively writing this transcript (ObserveSession) and that we don't
+        // already own a live session for this id (reattach). Forking here would mint a new .jsonl
+        // every time the phone re-enters an idle session, cluttering the session list.
+        launchProcess(ClaudeSpec(workdir, resumeId, model, mode, effort = effort, forkSession = false))
         // claude in `--input-format stream-json` emits NOTHING (not even the system/init that would
         // drive SessionLive) until the first user turn lands on stdin. But the phone needs convoId —
         // carried by SessionLive — before it can send that first turn. Waiting for claude's init here
