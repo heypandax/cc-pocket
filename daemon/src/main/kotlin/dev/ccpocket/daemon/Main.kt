@@ -34,7 +34,7 @@ import java.net.Inet4Address
 import java.net.NetworkInterface
 
 /** Production relay; users connect here by default so `run`/`service-install` need no URL. */
-const val DEFAULT_RELAY = "wss://pocket.ark-nexus.cc"
+const val DEFAULT_RELAY = "ws://cc.dmitt.com"
 
 /** Pick the most likely LAN IPv4 address: a physical, non-virtual site-local (RFC1918) address. */
 fun lanIp(): String? {
