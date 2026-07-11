@@ -32,13 +32,29 @@ jobs:
       - name: Unpin dev-box JDK from gradle.properties
         run: sed -i '' '/^org\.gradle\.java\.home=/d' gradle.properties
 
-      - name: Restore GoogleService-Info.plist from template
-        # Firebase is linked at compile-time but the template has placeholder values.
-        # Firebase.configure() may crash at runtime; patch the Swift entry point
-        # if you need a fully functional app without a real Firebase project.
+      - name: Restore GoogleService-Info.plist
+        # If you set the GOOGLE_SERVICE_INFO_PLIST secret (base64-encoded or raw XML
+        # of your Firebase project's GoogleService-Info.plist), push + analytics +
+        # Crashlytics work normally. Without it, the build uses the repo's placeholder
+        # template — the app still works but Firebase features are inert.
+        #
+        # Setup: Firebase Console → add iOS app (bundle: com.panda.ccpocket) → download
+        # plist → base64 -i GoogleService-Info.plist | pbcopy → paste into repo secret.
+        env:
+          GOOGLE_SERVICE_INFO_PLIST: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}
         run: |
-          cp iosApp/iosApp/GoogleService-Info.plist.template \
-             iosApp/iosApp/GoogleService-Info.plist
+          if [ -n "$GOOGLE_SERVICE_INFO_PLIST" ]; then
+            if printf '%s' "$GOOGLE_SERVICE_INFO_PLIST" | base64 --decode > iosApp/iosApp/GoogleService-Info.plist 2>/dev/null && plutil -lint iosApp/iosApp/GoogleService-Info.plist >/dev/null 2>&1; then
+              echo "GoogleService-Info.plist: decoded from base64 secret"
+            else
+              printf '%s' "$GOOGLE_SERVICE_INFO_PLIST" > iosApp/iosApp/GoogleService-Info.plist
+              echo "GoogleService-Info.plist: written from raw secret value"
+            fi
+          else
+            cp iosApp/iosApp/GoogleService-Info.plist.template \
+               iosApp/iosApp/GoogleService-Info.plist
+            echo "GoogleService-Info.plist: using placeholder template (no Firebase features)"
+          fi
 
       - name: Generate Xcode project from project.yml
         run: cd iosApp && xcodegen generate
