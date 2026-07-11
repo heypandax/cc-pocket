@@ -24,6 +24,9 @@ interface AgentBackend {
     /** Models currently available to this backend's signed-in account; empty when unsupported. */
     fun availableModels(): List<AgentModel> = emptyList()
 
+    /** Optional provider-specific explanation for a process that exited without a terminal result. */
+    fun processExitError(exitCode: Int?, stderr: String?): String? = null
+
     /** Build the OS process for [spec]. Pure (no side effects); the caller starts it. */
     fun processBuilder(spec: AgentSpec): ProcessBuilder
 

@@ -4,12 +4,14 @@ import dev.ccpocket.daemon.agent.AgentEvent
 import dev.ccpocket.daemon.agent.AgentIo
 import dev.ccpocket.daemon.agent.AgentSpec
 import dev.ccpocket.protocol.PermissionMode
+import dev.ccpocket.protocol.ImageData
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.test.assertFalse
 
 class CursorBackendTest {
     @Test
@@ -46,6 +48,23 @@ class CursorBackendTest {
     }
 
     @Test
+    fun image_is_written_as_a_temporary_workspace_reference_then_cleaned() = runBlocking {
+        val dir = java.nio.file.Files.createTempDirectory("cursor-images")
+        val calls = mutableListOf<String>()
+        val backend = CursorBackend(null)
+        backend.attach(
+            AgentIo(writeLine = { calls += it }, emit = {}, closeInput = {}),
+            AgentSpec(dir),
+        )
+        backend.sendPrompt("inspect", listOf(ImageData("image/png", "iVBORw0KGgo=")))
+        val name = Regex("@([^\\s]+\\.png)").find(calls.single())!!.groupValues[1]
+        val image = dir.resolve(name)
+        assertTrue(java.nio.file.Files.exists(image))
+        backend.onProcessEnded(null)
+        assertFalse(java.nio.file.Files.exists(image))
+    }
+
+    @Test
     fun launcher_maps_permission_modes() {
         fun args(mode: PermissionMode) = CursorLauncher.buildArgs(AgentSpec(Path.of("/repo"), mode = mode))
         assertTrue("--auto-review" in args(PermissionMode.DEFAULT))
@@ -61,5 +80,13 @@ class CursorBackendTest {
         )
         assertEquals(listOf("auto", "claude-fable-5-high"), models.map { it.id })
         assertEquals("Fable 5 1M (NO ZDR)", models.last().name)
+    }
+
+    @Test
+    fun cursor_exit_errors_are_actionable() {
+        val backend = CursorBackend(null)
+        assertTrue("cursor-agent login" in backend.processExitError(1, "Not authenticated; login required"))
+        assertTrue("model" in backend.processExitError(1, "invalid model").lowercase())
+        assertTrue("permission" in backend.processExitError(1, "Permission denied").lowercase())
     }
 }

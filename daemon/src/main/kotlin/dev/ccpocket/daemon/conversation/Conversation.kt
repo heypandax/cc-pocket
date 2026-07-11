@@ -620,8 +620,9 @@ class Conversation(
             if (healSessionLock(p)) return
             // carry the exit code + the agent's last stderr line: a --resume that dies before its first
             // init (bad session id, context overflow) used to surface as a bare "agent process ended"
+            val providerError = backend.processExitError(p.exitCode(), p.lastStderr)
             val why = p.lastStderr?.let { " — ${it.take(300)}" } ?: ""
-            sink.emit(PocketError("process_exited", "agent process ended (exit ${p.exitCode() ?: "?"})$why", convoId))
+            sink.emit(PocketError("process_exited", providerError ?: "agent process ended (exit ${p.exitCode() ?: "?"})$why", convoId))
         }
     }
 

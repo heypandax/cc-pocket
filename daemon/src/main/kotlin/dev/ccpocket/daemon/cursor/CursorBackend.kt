@@ -20,6 +20,8 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
 import java.nio.file.Path
+import java.nio.file.Files
+import java.util.Base64
 import java.util.concurrent.TimeUnit
 
 /** Cursor Agent adapter for `--print --output-format stream-json` (one process per run). */
@@ -31,6 +33,9 @@ class CursorBackend(private val cursorBin: String?) : AgentBackend {
     @Volatile private var model: String? = null
     private val emittedAssistant = LinkedHashSet<String>()
     private var finalText: String? = null
+    private var workdir: Path = Path.of(".")
+    private val temporaryImages = mutableListOf<Path>()
+    private var cursorError: String? = null
 
     override val kind = AgentKind.CURSOR
     override val exitsAfterTurn = true
@@ -58,8 +63,11 @@ class CursorBackend(private val cursorBin: String?) : AgentBackend {
         this.io = io
         mode = spec.mode
         model = spec.model
+        workdir = spec.workdir
         emittedAssistant.clear()
         finalText = null
+        cursorError = null
+        cleanupImages()
     }
 
     override suspend fun parse(line: String): List<AgentEvent> {
@@ -73,6 +81,10 @@ class CursorBackend(private val cursorBin: String?) : AgentBackend {
             "assistant" -> assistant(root)
             "tool_call" -> toolCall(root)
             "result" -> result(root)
+            "error" -> {
+                cursorError = root.str("message") ?: root.str("error") ?: "Cursor Agent reported an error"
+                emptyList()
+            }
             else -> emptyList()
         }
     }
@@ -121,12 +133,13 @@ class CursorBackend(private val cursorBin: String?) : AgentBackend {
                 cacheReadInputTokens = it.long("cacheReadTokens"),
             )
         }
-        val text = root.str("result") ?: finalText
+        val text = root.str("result") ?: cursorError ?: finalText
         return listOf(AgentEvent.TurnResult(text, u, root.bool("is_error") == true || root.str("subtype") != "success"))
     }
 
     override suspend fun sendPrompt(text: String, images: List<ImageData>) {
-        val suffix = if (images.isEmpty()) "" else "\n\n[CC Pocket: image attachments are not yet supported by the Cursor backend.]"
+        val refs = images.mapIndexedNotNull { index, image -> writeImage(index, image) }
+        val suffix = if (refs.isEmpty()) "" else refs.joinToString(prefix = "\n\nAttached images:\n", separator = "\n") { "@${it.fileName}" }
         io?.writeLine(text + suffix)
         io?.closeInput()
     }
@@ -141,12 +154,46 @@ class CursorBackend(private val cursorBin: String?) : AgentBackend {
         return true
     }
 
-    override suspend fun onProcessEnded(sessionId: String?) = Unit
+    override suspend fun onProcessEnded(sessionId: String?) { cleanupImages() }
     override fun transcriptDir(workdir: String): Path = CursorPaths.sessionsRoot()
     override fun listSessions(workdir: String): List<SessionSummary> = CursorSessionScanner.scan(workdir)
-    override fun replayHistory(workdir: String, sessionId: String): List<HistoryMessage> = emptyList()
+    override fun replayHistory(workdir: String, sessionId: String): List<HistoryMessage> =
+        CursorPaths.transcript(sessionId)?.let(CursorTranscriptReplay::read).orEmpty()
     override fun resumeContextTokens(workdir: String, sessionId: String): Long? = null
     override fun defaultModel(workdir: String): String = "auto"
+
+    override fun processExitError(exitCode: Int?, stderr: String?): String {
+        val detail = stderr?.trim().orEmpty()
+        val lower = detail.lowercase()
+        return when {
+            "not authenticated" in lower || "login" in lower && "required" in lower ->
+                "Cursor Agent is not logged in on this computer. Run: cursor-agent login"
+            "model" in lower && ("invalid" in lower || "not found" in lower || "unsupported" in lower) ->
+                "The selected Cursor model is unavailable for this account. Refresh the model list or choose Auto."
+            "permission" in lower || "denied" in lower ->
+                "Cursor blocked this action under the current permission mode. Choose Balanced/Autonomous or update Cursor CLI permissions."
+            detail.isNotBlank() -> "Cursor Agent exited (code ${exitCode ?: "?"}): ${detail.take(300)}"
+            else -> "Cursor Agent exited without a result (code ${exitCode ?: "?"}). Check cursor-agent status on the computer."
+        }
+    }
+
+    private fun writeImage(index: Int, image: ImageData): Path? = runCatching {
+        val suffix = when (image.mediaType.lowercase()) {
+            "image/jpeg", "image/jpg" -> ".jpg"
+            "image/gif" -> ".gif"
+            "image/webp" -> ".webp"
+            else -> ".png"
+        }
+        val path = Files.createTempFile(workdir, ".cc-pocket-image-${index + 1}-", suffix)
+        Files.write(path, Base64.getDecoder().decode(image.base64))
+        temporaryImages.add(path)
+        path
+    }.getOrNull()
+
+    private fun cleanupImages() {
+        temporaryImages.forEach { runCatching { Files.deleteIfExists(it) } }
+        temporaryImages.clear()
+    }
 
     private fun JsonObject.str(key: String) = (this[key] as? JsonPrimitive)?.contentOrNull
     private fun JsonObject.long(key: String) = (this[key] as? JsonPrimitive)?.longOrNull

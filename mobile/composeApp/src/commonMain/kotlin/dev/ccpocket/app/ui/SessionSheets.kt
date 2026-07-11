@@ -304,6 +304,13 @@ private fun ModelPicker(repo: PocketRepository, onBack: () -> Unit, onDone: () -
         Text(stringResource(Res.string.qa_model), color = Tok.tx, fontSize = 20.sp, fontWeight = FontWeight.Bold)
     }
     Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (agent == AgentKind.CURSOR && repo.cursorModelsError.value != null) {
+            Text(
+                "Live model discovery failed — showing bundled models. You can still enter a custom model ID.",
+                color = Tok.warn, fontSize = 11.5.sp, lineHeight = 15.sp,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+            )
+        }
         choices.forEach { c ->
             val isSel = c.pick.equals(selected, ignoreCase = true)
             val isSwitching = switchingTo?.equals(c.pick, ignoreCase = true) == true

@@ -53,6 +53,10 @@ daemon 默认自动寻找 `cursor-agent`；自定义安装路径可用 `cc-pocke
 
 Fable 5 可选 `claude-fable-5-high` 或 `claude-fable-5-thinking-high`。Cursor 当前把 Fable 5 标记为 **NO ZDR**，对数据驻留或零保留有要求时请改用带 ZDR 的模型。
 
+Cursor 历史会话会从 `~/.cursor/projects/*/agent-transcripts/<会话-id>/*.jsonl` 回放到 App；用户与助手正文会显示，Cursor 注入的时间戳包装和 `[REDACTED]` 标记会被过滤。图片附件会临时写成项目根目录下的隐藏文件并以 `@文件` 交给 Cursor，Run 结束、取消或异常退出后立即删除，不会保留在项目中。
+
+权限与错误处理：Cursor headless 当前没有可供 CC Pocket 回传逐条人工决定的审批协议。Cautious 为只读 Plan，Balanced 使用 Cursor Smart Auto Review，Autonomous 使用沙箱内 `--force`，Full auto 使用关闭沙箱的 `--force`。登录失效、模型不可用、权限拒绝与其他进程退出会显示针对 Cursor 的处理建议，而不是笼统的「agent process ended」。
+
 - Claude 用 app 的赤陶色（terracotta）主题色；**Codex 用青色（teal）**，并且只有 Codex 会在列表与标题里被标记，Claude 保持不标。
 - 一个会话**始终绑定一个后端**：中途不能在 Claude 与 Codex 之间切换，想换就新建一个会话。
 - Codex 会话用一档**权限预设**，对应 Codex 的 approval-policy × sandbox 两个维度：

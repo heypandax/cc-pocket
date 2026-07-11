@@ -404,6 +404,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     val slashCommands = mutableStateListOf<SlashCommand>()   // composer "/" autocomplete, pushed by the daemon
     val cursorModels = mutableStateListOf<AgentModel>()      // live cursor-agent account catalog; bundled UI list is fallback
     val cursorModelsLoading = mutableStateOf(false)
+    val cursorModelsError = mutableStateOf<String?>(null)
     val terminalEntries = mutableStateListOf<TerminalEntry>() // quick-terminal history for the active session (issue #3)
     val terminalBusy = mutableStateOf(false)                  // a shell command is awaiting approval/result
     val changedFiles = mutableStateListOf<ChangedFile>()      // files this session touched (issue #36) — filled on demand
@@ -1347,6 +1348,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
             is CommandList -> if (f.convoId == convoId.value) replace(slashCommands, f.commands)
             is CursorModels -> {
                 cursorModelsLoading.value = false
+                cursorModelsError.value = f.error
                 if (f.models.isNotEmpty()) replace(cursorModels, f.models)
             }
             is Transcript -> onTranscript(f)
@@ -1757,6 +1759,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     fun refreshCursorModels() {
         if (cursorModelsLoading.value) return
         cursorModelsLoading.value = true
+        cursorModelsError.value = null
         scope.launch { send(ListCursorModels) }
     }
 
