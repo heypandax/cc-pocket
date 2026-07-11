@@ -307,18 +307,27 @@ private fun ModelPicker(repo: PocketRepository, onBack: () -> Unit, onDone: () -
     LaunchedEffect(agent) {
         if (agent == AgentKind.CURSOR) repo.refreshCursorModels()
     }
+    val selected = if (agent != AgentKind.CLAUDE) repo.model.value else modelAlias(repo.model.value)
+    // On the first open, don't flash the small bundled catalog and replace it seconds later with Cursor's
+    // account catalog. Keep only the optimistic current row until discovery completes; bundled models are
+    // used only after an explicit discovery error.
+    val cursorWaiting = agent == AgentKind.CURSOR && repo.cursorModels.isEmpty() && repo.cursorModelsError.value == null
     val choices = when (agent) {
         AgentKind.CODEX -> CODEX_MODEL_OPTIONS.map { ModelChoice(it, it, it, "", false) }
         AgentKind.CURSOR -> {
-            mergedCursorModels(repo.cursorModels.toList())
-                .map { (name, id) -> ModelChoice(name, id, id, "", false) }
+            if (cursorWaiting) {
+                val id = selected?.takeIf { it.isNotBlank() } ?: "auto"
+                listOf(ModelChoice(if (id == "auto") "Auto (default)" else id, id, id, "", false))
+            } else {
+                mergedCursorModels(repo.cursorModels.toList())
+                    .map { (name, id) -> ModelChoice(name, id, id, "", false) }
+            }
         }
         AgentKind.CLAUDE -> CLAUDE_MODEL_OPTIONS.map { (name, alias) ->
             val big = contextWindowFor(alias) == LARGE_CONTEXT_WINDOW
             ModelChoice(name, alias, alias, if (big) "1M" else "200K", big)
         }
     }
-    val selected = if (agent != AgentKind.CLAUDE) repo.model.value else modelAlias(repo.model.value)
     var switchingTo by remember { mutableStateOf<String?>(null) }
     var query by remember(agent) { mutableStateOf("") }
     val visibleChoices = choices.filter {
@@ -341,6 +350,17 @@ private fun ModelPicker(repo: PocketRepository, onBack: () -> Unit, onDone: () -
         Text(stringResource(Res.string.qa_model), color = Tok.tx, fontSize = 20.sp, fontWeight = FontWeight.Bold)
     }
     Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (cursorWaiting) {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Tok.surface)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(Modifier.size(15.dp), color = Tok.accent, strokeWidth = 2.dp)
+                Spacer(Modifier.width(9.dp))
+                Text("Loading models available to this Cursor account…", color = Tok.tx2, fontSize = 12.5.sp)
+            }
+        }
         if (choices.size > 6) {
             OutlinedTextField(
                 query, { query = it }, singleLine = true,
