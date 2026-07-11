@@ -56,6 +56,7 @@ import dev.ccpocket.app.ui.CLAUDE_MODEL_OPTIONS
 import dev.ccpocket.app.ui.CODEX_MODEL_OPTIONS
 import dev.ccpocket.app.ui.mergedCursorModels
 import dev.ccpocket.app.ui.modelFamily
+import dev.ccpocket.app.ui.modelFamilyRank
 import dev.ccpocket.app.ui.EFFORT_OPTIONS
 import dev.ccpocket.app.ui.agentColor
 import dev.ccpocket.app.ui.agentTintBorder
@@ -210,7 +211,7 @@ fun QuickActionsPopover(model: DesktopModel, onDismiss: () -> Unit) {
                     modelQuery.isBlank() || label.contains(modelQuery.trim(), true) || pick.contains(modelQuery.trim(), true)
                 }
                 val groups = visible.groupBy { (_, pick) -> if (isActive(pick)) "Current" else modelFamily(pick) }
-                    .toList().sortedBy { (name, _) -> if (name == "Current") 0 else 1 }
+                    .toList().sortedBy { (name, _) -> modelFamilyRank(name) }
                 groups.forEach { (group, entries) ->
                     PopoverLabel(group)
                     entries.forEach { (label, pick) ->

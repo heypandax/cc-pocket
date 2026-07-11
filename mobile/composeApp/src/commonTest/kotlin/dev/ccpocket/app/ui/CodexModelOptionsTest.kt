@@ -53,5 +53,6 @@ class CodexModelOptionsTest {
         assertEquals("Codex", modelFamily("gpt-5.3-codex-high"))
         assertEquals("GPT", modelFamily("gpt-5.2"))
         assertEquals("Gemini", modelFamily("gemini-3.1-pro"))
+        assertTrue(modelFamilyRank("Fable") < modelFamilyRank("Codex"))
     }
 }

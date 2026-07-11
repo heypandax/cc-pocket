@@ -98,6 +98,18 @@ internal fun modelFamily(id: String): String = when {
     id.contains("gemini", true) -> "Gemini"
     else -> "Other"
 }
+
+internal fun modelFamilyRank(name: String): Int = when (name) {
+    "Current" -> 0
+    "Recommended" -> 1
+    "Fable" -> 2
+    "Claude" -> 3
+    "Codex" -> 4
+    "GPT" -> 5
+    "Composer" -> 6
+    "Gemini" -> 7
+    else -> 8
+}
 internal val CLAUDE_MODEL_OPTIONS = listOf("Fable" to "fable", "Opus" to "opus", "Sonnet" to "sonnet", "Haiku" to "haiku") // display name → alias; shared by both shells' pickers
 internal val EFFORT_OPTIONS = listOf("low", "medium", "high", "xhigh", "max") // shared: live /effort picker + Settings default
 
@@ -313,7 +325,7 @@ private fun ModelPicker(repo: PocketRepository, onBack: () -> Unit, onDone: () -
         query.isBlank() || it.name.contains(query.trim(), true) || it.id.contains(query.trim(), true)
     }
     val sections = visibleChoices.groupBy { if (it.pick.equals(selected, true)) "Current" else modelFamily(it.id) }
-        .toList().sortedBy { (name, _) -> if (name == "Current") 0 else 1 }
+        .toList().sortedBy { (name, _) -> modelFamilyRank(name) }
     // close once the daemon confirms the switch (model re-announced through SessionLive)…
     LaunchedEffect(switchingTo, repo.model.value) {
         val target = switchingTo ?: return@LaunchedEffect
