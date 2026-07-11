@@ -45,4 +45,13 @@ class CodexModelOptionsTest {
         assertTrue(merged.any { it.second == "claude-fable-5-high" })
         assertTrue(merged.any { it.second == "claude-fable-5-thinking-high" })
     }
+
+    @Test
+    fun models_are_grouped_into_families_for_fast_scanning() {
+        assertEquals("Recommended", modelFamily("auto"))
+        assertEquals("Fable", modelFamily("claude-fable-5-high"))
+        assertEquals("Codex", modelFamily("gpt-5.3-codex-high"))
+        assertEquals("GPT", modelFamily("gpt-5.2"))
+        assertEquals("Gemini", modelFamily("gemini-3.1-pro"))
+    }
 }

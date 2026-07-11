@@ -87,6 +87,17 @@ internal fun mergedCursorModels(live: List<AgentModel>): List<Pair<String, Strin
     CURSOR_MODEL_OPTIONS.forEach { id -> if (id !in merged) merged[id] = id }
     return merged.map { (id, name) -> name to id }
 }
+
+internal fun modelFamily(id: String): String = when {
+    id.equals("auto", true) -> "Recommended"
+    id.contains("fable", true) -> "Fable"
+    id.contains("claude", true) || id.contains("opus", true) || id.contains("sonnet", true) -> "Claude"
+    id.contains("codex", true) -> "Codex"
+    id.startsWith("gpt", true) -> "GPT"
+    id.contains("composer", true) -> "Composer"
+    id.contains("gemini", true) -> "Gemini"
+    else -> "Other"
+}
 internal val CLAUDE_MODEL_OPTIONS = listOf("Fable" to "fable", "Opus" to "opus", "Sonnet" to "sonnet", "Haiku" to "haiku") // display name → alias; shared by both shells' pickers
 internal val EFFORT_OPTIONS = listOf("low", "medium", "high", "xhigh", "max") // shared: live /effort picker + Settings default
 
@@ -297,6 +308,12 @@ private fun ModelPicker(repo: PocketRepository, onBack: () -> Unit, onDone: () -
     }
     val selected = if (agent != AgentKind.CLAUDE) repo.model.value else modelAlias(repo.model.value)
     var switchingTo by remember { mutableStateOf<String?>(null) }
+    var query by remember(agent) { mutableStateOf("") }
+    val visibleChoices = choices.filter {
+        query.isBlank() || it.name.contains(query.trim(), true) || it.id.contains(query.trim(), true)
+    }
+    val sections = visibleChoices.groupBy { if (it.pick.equals(selected, true)) "Current" else modelFamily(it.id) }
+        .toList().sortedBy { (name, _) -> if (name == "Current") 0 else 1 }
     // close once the daemon confirms the switch (model re-announced through SessionLive)…
     LaunchedEffect(switchingTo, repo.model.value) {
         val target = switchingTo ?: return@LaunchedEffect
@@ -312,6 +329,15 @@ private fun ModelPicker(repo: PocketRepository, onBack: () -> Unit, onDone: () -
         Text(stringResource(Res.string.qa_model), color = Tok.tx, fontSize = 20.sp, fontWeight = FontWeight.Bold)
     }
     Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (choices.size > 6) {
+            OutlinedTextField(
+                query, { query = it }, singleLine = true,
+                placeholder = { Text("Search model or ID", color = Tok.muted, fontSize = 13.sp) },
+                leadingIcon = { Text("⌕", color = Tok.muted, fontSize = 18.sp) },
+                textStyle = TextStyle(color = Tok.tx, fontSize = 14.sp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+            )
+        }
         if (agent == AgentKind.CURSOR && repo.cursorModelsError.value != null) {
             Text(
                 "Live model discovery failed — showing bundled models. You can still enter a custom model ID.",
@@ -319,7 +345,13 @@ private fun ModelPicker(repo: PocketRepository, onBack: () -> Unit, onDone: () -
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
             )
         }
-        choices.forEach { c ->
+        sections.forEach { (section, models) ->
+            Text(
+                section.uppercase(), color = if (section == "Current") Tok.accent else Tok.muted,
+                fontSize = 10.5.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 1.dp),
+            )
+            models.forEach { c ->
             val isSel = c.pick.equals(selected, ignoreCase = true)
             val isSwitching = switchingTo?.equals(c.pick, ignoreCase = true) == true
             val raised = isSwitching || (isSel && switchingTo == null)
@@ -356,6 +388,10 @@ private fun ModelPicker(repo: PocketRepository, onBack: () -> Unit, onDone: () -
                     }
                 }
             }
+        }
+        }
+        if (visibleChoices.isEmpty()) {
+            Text("No matching models", color = Tok.muted, fontSize = 13.sp, modifier = Modifier.padding(14.dp))
         }
     }
     // Custom model id (issue #54): third-party gateways (cc-switch presets etc.) route ids a fixed list

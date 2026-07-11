@@ -55,6 +55,7 @@ import dev.ccpocket.app.ui.AgentGlyph
 import dev.ccpocket.app.ui.CLAUDE_MODEL_OPTIONS
 import dev.ccpocket.app.ui.CODEX_MODEL_OPTIONS
 import dev.ccpocket.app.ui.mergedCursorModels
+import dev.ccpocket.app.ui.modelFamily
 import dev.ccpocket.app.ui.EFFORT_OPTIONS
 import dev.ccpocket.app.ui.agentColor
 import dev.ccpocket.app.ui.agentTintBorder
@@ -180,6 +181,7 @@ fun QuickActionsPopover(model: DesktopModel, onDismiss: () -> Unit) {
             }
             QaPage.MODEL -> {
                 QaBack("Model") { page = QaPage.MAIN }
+                var modelQuery by remember(model.chatAgent) { mutableStateOf("") }
                 LaunchedEffect(model.chatAgent) {
                     if (model.chatAgent == AgentKind.CURSOR) model.refreshCursorModels()
                 }
@@ -189,8 +191,31 @@ fun QuickActionsPopover(model: DesktopModel, onDismiss: () -> Unit) {
                     AgentKind.CURSOR -> mergedCursorModels(model.cursorModels)
                 }
                 fun isActive(pick: String) = model.chatModelId.equals(pick, true) || model.chatModel.equals(pick, true)
-                options.forEach { (label, pick) ->
-                    QaOption(label, isActive(pick)) { model.switchModel(pick); onDismiss() }
+                if (options.size > 6) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 7.dp).clip(RoundedCornerShape(8.dp))
+                            .border(1.dp, Tok.hair, RoundedCornerShape(8.dp)).padding(horizontal = 9.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("⌕", color = Tok.muted, fontSize = 14.sp, modifier = Modifier.padding(end = 6.dp))
+                        BasicTextField(
+                            modelQuery, { modelQuery = it }, singleLine = true,
+                            textStyle = TextStyle(color = Tok.tx, fontFamily = Dk.ui, fontSize = 11.sp),
+                            cursorBrush = SolidColor(Tok.accent), modifier = Modifier.weight(1f),
+                            decorationBox = { inner -> if (modelQuery.isBlank()) Text("Search models", color = Tok.muted, fontSize = 11.sp); inner() },
+                        )
+                    }
+                }
+                val visible = options.filter { (label, pick) ->
+                    modelQuery.isBlank() || label.contains(modelQuery.trim(), true) || pick.contains(modelQuery.trim(), true)
+                }
+                val groups = visible.groupBy { (_, pick) -> if (isActive(pick)) "Current" else modelFamily(pick) }
+                    .toList().sortedBy { (name, _) -> if (name == "Current") 0 else 1 }
+                groups.forEach { (group, entries) ->
+                    PopoverLabel(group)
+                    entries.forEach { (label, pick) ->
+                        QaOption(label, isActive(pick)) { model.switchModel(pick); onDismiss() }
+                    }
                 }
                 // custom id (issue #54): third-party gateways route ids the preset list can't know;
                 // `--model` takes any string, so pass it through. Enter submits. Prefilled when the
