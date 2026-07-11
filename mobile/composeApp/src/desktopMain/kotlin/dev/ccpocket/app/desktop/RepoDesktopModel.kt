@@ -484,6 +484,8 @@ class RepoDesktopModel(private val repo: PocketRepository, scope: CoroutineScope
     override fun switchEffort(level: String) = repo.switchEffort(level)
     override fun compactConversation() { repo.sendPrompt("/compact") }
     override fun clearConversation() = repo.clearConversation()
+    override val cursorModels: List<dev.ccpocket.protocol.AgentModel> get() = repo.cursorModels
+    override fun refreshCursorModels() = repo.refreshCursorModels()
 
     override fun send(text: String) {
         if (text.isBlank() && !repo.hasReadyImages()) return // an image-only send is legitimate

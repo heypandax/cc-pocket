@@ -53,4 +53,13 @@ class CursorBackendTest {
         assertTrue("--force" in args(PermissionMode.ACCEPT_EDITS))
         assertTrue("disabled" in args(PermissionMode.BYPASS_PERMISSIONS))
     }
+
+    @Test
+    fun model_catalog_parser_keeps_ids_and_display_names() {
+        val models = CursorBackend(null).parseModelLines(
+            listOf("Available models", "", "auto - Auto (default)", "claude-fable-5-high - Fable 5 1M (NO ZDR)", "Tip: use --model"),
+        )
+        assertEquals(listOf("auto", "claude-fable-5-high"), models.map { it.id })
+        assertEquals("Fable 5 1M (NO ZDR)", models.last().name)
+    }
 }

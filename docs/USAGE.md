@@ -49,7 +49,7 @@ cursor-agent status
 cursor-agent --list-models
 ```
 
-daemon 默认自动寻找 `cursor-agent`；自定义安装路径可用 `cc-pocket-daemon run --cursor-bin /path/to/cursor-agent`，或设置 `CC_POCKET_CURSOR_BIN`。Cursor 会话支持实时文本与思考流、工具事件、模型切换、停止和 `--resume` 连续对话；模型列表内置常用选项，完整账户专属 ID 可在「自定义」中输入。
+daemon 默认自动寻找 `cursor-agent`；自定义安装路径可用 `cc-pocket-daemon run --cursor-bin /path/to/cursor-agent`，或设置 `CC_POCKET_CURSOR_BIN`。Cursor 会话支持实时文本与思考流、工具事件、模型切换、停止和 `--resume` 连续对话。打开模型菜单时，App 会向 daemon 请求当前账户的 `cursor-agent --list-models` 实时结果；发现失败时才使用内置常用列表，完整账户专属 ID 仍可在「自定义」中输入。
 
 Fable 5 可选 `claude-fable-5-high` 或 `claude-fable-5-thinking-high`。Cursor 当前把 Fable 5 标记为 **NO ZDR**，对数据驻留或零保留有要求时请改用带 ZDR 的模型。
 

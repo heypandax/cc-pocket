@@ -1,6 +1,7 @@
 package dev.ccpocket.daemon.agent
 
 import dev.ccpocket.protocol.AgentKind
+import dev.ccpocket.protocol.AgentModel
 import dev.ccpocket.protocol.HistoryMessage
 import dev.ccpocket.protocol.ImageData
 import dev.ccpocket.protocol.PermissionMode
@@ -19,6 +20,9 @@ interface AgentBackend {
 
     /** True for CLIs whose structured mode handles one prompt and then exits (Cursor Agent). */
     val exitsAfterTurn: Boolean get() = false
+
+    /** Models currently available to this backend's signed-in account; empty when unsupported. */
+    fun availableModels(): List<AgentModel> = emptyList()
 
     /** Build the OS process for [spec]. Pure (no side effects); the caller starts it. */
     fun processBuilder(spec: AgentSpec): ProcessBuilder

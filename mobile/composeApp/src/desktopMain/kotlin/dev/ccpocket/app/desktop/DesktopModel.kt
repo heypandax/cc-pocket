@@ -291,6 +291,8 @@ interface DesktopModel {
     fun switchEffort(level: String) {}
     fun compactConversation() {}
     fun clearConversation() {}
+    val cursorModels: List<dev.ccpocket.protocol.AgentModel> get() = emptyList()
+    fun refreshCursorModels() {}
 
     /** Daemon-pushed "/" commands for the open session — the composer's slash autocomplete reads this. */
     val slashCommands: List<dev.ccpocket.protocol.SlashCommand> get() = emptyList()

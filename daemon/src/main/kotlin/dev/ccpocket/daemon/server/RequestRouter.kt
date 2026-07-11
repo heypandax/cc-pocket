@@ -23,6 +23,8 @@ import dev.ccpocket.protocol.FetchAuthStatus
 import dev.ccpocket.protocol.FetchUsage
 import dev.ccpocket.protocol.Frame
 import dev.ccpocket.protocol.ListDirectories
+import dev.ccpocket.protocol.ListCursorModels
+import dev.ccpocket.protocol.CursorModels
 import dev.ccpocket.protocol.ListPathEntries
 import dev.ccpocket.protocol.ListSessionFiles
 import dev.ccpocket.protocol.ListSessions
@@ -66,6 +68,11 @@ class RequestRouter(
                 val items = registry.listSessions(frame.workdir)
                     .map { if (it.sessionId in busy) it.copy(busy = true) else it }
                 sink.emit(Sessions(frame.workdir, items))
+            }
+
+            is ListCursorModels -> scope.launch {
+                val models = runCatching { registry.cursorModels() }.getOrDefault(emptyList())
+                sink.emit(CursorModels(models, if (models.isEmpty()) "cursor-agent model discovery failed" else null))
             }
 
             // heavy transcript scan → off the inbound pump so it can't wedge the socket

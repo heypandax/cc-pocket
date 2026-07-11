@@ -180,10 +180,15 @@ fun QuickActionsPopover(model: DesktopModel, onDismiss: () -> Unit) {
             }
             QaPage.MODEL -> {
                 QaBack("Model") { page = QaPage.MAIN }
+                LaunchedEffect(model.chatAgent) {
+                    if (model.chatAgent == AgentKind.CURSOR) model.refreshCursorModels()
+                }
                 val options = when (model.chatAgent) {
                     AgentKind.CLAUDE -> CLAUDE_MODEL_OPTIONS
                     AgentKind.CODEX -> CODEX_MODEL_OPTIONS.map { it to it }
-                    AgentKind.CURSOR -> CURSOR_MODEL_OPTIONS.map { it to it }
+                    AgentKind.CURSOR -> model.cursorModels.takeIf { it.isNotEmpty() }
+                        ?.map { it.name to it.id }
+                        ?: CURSOR_MODEL_OPTIONS.map { it to it }
                 }
                 fun isActive(pick: String) = model.chatModelId.equals(pick, true) || model.chatModel.equals(pick, true)
                 options.forEach { (label, pick) ->

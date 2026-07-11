@@ -9,6 +9,7 @@ import dev.ccpocket.daemon.disk.LiveProcesses
 import dev.ccpocket.daemon.disk.ProjectPaths
 import dev.ccpocket.daemon.disk.TranscriptScanner
 import dev.ccpocket.protocol.AgentKind
+import dev.ccpocket.protocol.AgentModel
 import dev.ccpocket.protocol.AuthBlockReason
 import dev.ccpocket.protocol.AuthBlocker
 import dev.ccpocket.protocol.CancelTurn
@@ -45,6 +46,7 @@ class SessionRegistry(
     private val processProbe: (workdir: String, transcript: Path) -> LiveProcesses.ExternalClaude =
         LiveProcesses::externalClaudeAt,
 ) {
+    fun cursorModels(): List<AgentModel> = backends[AgentKind.CURSOR]?.create()?.availableModels().orEmpty()
     private val mutex = Mutex()
     private val log = dev.ccpocket.daemon.util.logger("SessionRegistry")
     private val convos = mutableMapOf<String, Conversation>()

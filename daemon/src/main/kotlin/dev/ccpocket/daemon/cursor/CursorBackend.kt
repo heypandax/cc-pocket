@@ -5,6 +5,7 @@ import dev.ccpocket.daemon.agent.AgentEvent
 import dev.ccpocket.daemon.agent.AgentIo
 import dev.ccpocket.daemon.agent.AgentSpec
 import dev.ccpocket.protocol.AgentKind
+import dev.ccpocket.protocol.AgentModel
 import dev.ccpocket.protocol.HistoryMessage
 import dev.ccpocket.protocol.ImageData
 import dev.ccpocket.protocol.PermissionMode
@@ -19,6 +20,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
 import java.nio.file.Path
+import java.util.concurrent.TimeUnit
 
 /** Cursor Agent adapter for `--print --output-format stream-json` (one process per run). */
 class CursorBackend(private val cursorBin: String?) : AgentBackend {
@@ -32,6 +34,22 @@ class CursorBackend(private val cursorBin: String?) : AgentBackend {
 
     override val kind = AgentKind.CURSOR
     override val exitsAfterTurn = true
+
+    override fun availableModels(): List<AgentModel> {
+        val process = ProcessBuilder(exe().toString(), "--list-models").redirectErrorStream(true).start()
+        if (!process.waitFor(20, TimeUnit.SECONDS)) {
+            process.destroyForcibly()
+            return emptyList()
+        }
+        val lines = process.inputStream.bufferedReader().readLines()
+        if (process.exitValue() != 0) return emptyList()
+        return parseModelLines(lines)
+    }
+
+    internal fun parseModelLines(lines: List<String>): List<AgentModel> = lines.mapNotNull { line ->
+            val separator = line.indexOf(" - ")
+            if (separator <= 0) null else AgentModel(line.substring(0, separator).trim(), line.substring(separator + 3).trim())
+        }.distinctBy { it.id }
 
     private fun exe() = resolvedExe ?: CursorLauncher.resolveExecutable(cursorBin).also { resolvedExe = it }
     override fun processBuilder(spec: AgentSpec) = CursorLauncher.processBuilder(exe(), spec)

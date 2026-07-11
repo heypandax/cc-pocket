@@ -17,6 +17,11 @@ data class ListDirectories(val root: String? = null) : ToDaemon
 @SerialName("pocket/sessions.list")
 data class ListSessions(val workdir: String) : ToDaemon
 
+/** Ask the daemon-host Cursor CLI for the models available to its signed-in account. */
+@Serializable
+@SerialName("pocket/cursor.models.list")
+data object ListCursorModels : ToDaemon
+
 /** Fetch aggregated token usage over the last [days] local days (reads transcripts; no launch). Issue #26. */
 @Serializable
 @SerialName("pocket/usage.fetch")
@@ -293,6 +298,11 @@ data class Directories(val entries: List<DirectoryEntry>, val root: String? = nu
 @Serializable
 @SerialName("pocket/sessions")
 data class Sessions(val workdir: String, val items: List<SessionSummary>) : ToPhone
+
+/** Runtime Cursor model catalog. Empty + [error] means discovery failed; clients keep bundled fallbacks. */
+@Serializable
+@SerialName("pocket/cursor.models")
+data class CursorModels(val models: List<AgentModel> = emptyList(), val error: String? = null) : ToPhone
 
 /**
  * Aggregated token usage (issue #26). [tokensToday]/[requestsToday]/[cacheHitPct]/[costUsdToday] are for the

@@ -41,6 +41,10 @@ enum class AgentKind {
     @SerialName("cursor") CURSOR,
 }
 
+/** One model reported by an agent CLI for the signed-in account. */
+@Serializable
+data class AgentModel(val id: String, val name: String = id)
+
 /** One assistant content piece (closed set for M0: text | thinking). tool_use is a [ToolEvent]. */
 @Serializable
 sealed interface StreamPiece {

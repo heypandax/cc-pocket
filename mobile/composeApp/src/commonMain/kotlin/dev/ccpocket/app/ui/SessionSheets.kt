@@ -272,16 +272,20 @@ private fun CtxPill(ctx: String, big: Boolean) {
 @Composable
 private fun ModelPicker(repo: PocketRepository, onBack: () -> Unit, onDone: () -> Unit) {
     val agent = repo.sessionAgent.value ?: AgentKind.CLAUDE
-    val rawIds = when (agent) {
-        AgentKind.CLAUDE -> null
-        AgentKind.CODEX -> CODEX_MODEL_OPTIONS
-        AgentKind.CURSOR -> CURSOR_MODEL_OPTIONS
+    LaunchedEffect(agent) {
+        if (agent == AgentKind.CURSOR) repo.refreshCursorModels()
     }
-    val choices = if (rawIds != null) rawIds.map { ModelChoice(it, it, it, "", false) }
-    // window pill derives from the protocol table, so registering a new alias THERE is the only edit
-    else CLAUDE_MODEL_OPTIONS.map { (name, alias) ->
-        val big = contextWindowFor(alias) == LARGE_CONTEXT_WINDOW
-        ModelChoice(name, alias, alias, if (big) "1M" else "200K", big)
+    val choices = when (agent) {
+        AgentKind.CODEX -> CODEX_MODEL_OPTIONS.map { ModelChoice(it, it, it, "", false) }
+        AgentKind.CURSOR -> {
+            val live = repo.cursorModels.toList()
+            if (live.isNotEmpty()) live.map { ModelChoice(it.name, it.id, it.id, "", false) }
+            else CURSOR_MODEL_OPTIONS.map { ModelChoice(it, it, it, "", false) }
+        }
+        AgentKind.CLAUDE -> CLAUDE_MODEL_OPTIONS.map { (name, alias) ->
+            val big = contextWindowFor(alias) == LARGE_CONTEXT_WINDOW
+            ModelChoice(name, alias, alias, if (big) "1M" else "200K", big)
+        }
     }
     val selected = if (agent != AgentKind.CLAUDE) repo.model.value else modelAlias(repo.model.value)
     var switchingTo by remember { mutableStateOf<String?>(null) }

@@ -31,6 +31,8 @@ import dev.ccpocket.protocol.ChatRole
 import dev.ccpocket.protocol.ClearAllowRule
 import dev.ccpocket.protocol.CloseSession
 import dev.ccpocket.protocol.CommandList
+import dev.ccpocket.protocol.CursorModels
+import dev.ccpocket.protocol.AgentModel
 import dev.ccpocket.protocol.SlashCommand
 import dev.ccpocket.protocol.contextWindowFor
 import dev.ccpocket.protocol.ConvoHistory
@@ -46,6 +48,7 @@ import dev.ccpocket.protocol.FileContent
 import dev.ccpocket.protocol.FileDiff
 import dev.ccpocket.protocol.isImageFile
 import dev.ccpocket.protocol.ListDirectories
+import dev.ccpocket.protocol.ListCursorModels
 import dev.ccpocket.protocol.ListPathEntries
 import dev.ccpocket.protocol.ListSessionFiles
 import dev.ccpocket.protocol.ListSessions
@@ -399,6 +402,8 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     private var thinkStartMs: Long? = null                   // first Thinking chunk of the in-progress block
     val pendingAsk = mutableStateOf<PermissionAsk?>(null)
     val slashCommands = mutableStateListOf<SlashCommand>()   // composer "/" autocomplete, pushed by the daemon
+    val cursorModels = mutableStateListOf<AgentModel>()      // live cursor-agent account catalog; bundled UI list is fallback
+    val cursorModelsLoading = mutableStateOf(false)
     val terminalEntries = mutableStateListOf<TerminalEntry>() // quick-terminal history for the active session (issue #3)
     val terminalBusy = mutableStateOf(false)                  // a shell command is awaiting approval/result
     val changedFiles = mutableStateListOf<ChangedFile>()      // files this session touched (issue #36) — filled on demand
@@ -1340,6 +1345,10 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
             // also convo-scoped: a stale ConvoHistory would wipe the active convo and load the wrong transcript
             is ConvoHistory -> if (f.convoId == convoId.value) { messages.clear(); messages.addAll(f.messages.map(::historyItem)) }
             is CommandList -> if (f.convoId == convoId.value) replace(slashCommands, f.commands)
+            is CursorModels -> {
+                cursorModelsLoading.value = false
+                if (f.models.isNotEmpty()) replace(cursorModels, f.models)
+            }
             is Transcript -> onTranscript(f)
             is ShellResult -> if (f.convoId == convoId.value) {
                 terminalBusy.value = false
@@ -1742,6 +1751,13 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     fun browseFiles(subPath: String) {
         val wd = workdir.value ?: return
         scope.launch { send(ListPathEntries(wd, subPath)) }
+    }
+
+    /** Refresh Cursor's account-specific model catalog from the daemon-host CLI. */
+    fun refreshCursorModels() {
+        if (cursorModelsLoading.value) return
+        cursorModelsLoading.value = true
+        scope.launch { send(ListCursorModels) }
     }
 
     // ── voice input actions ───────────────────────────────────────────────
