@@ -261,10 +261,10 @@ private class PairCmd : CliktCommand(name = "pair") {
                 val info = runCatching { PocketJson.decodeFromString<LoopbackPair>(body) }.getOrNull()
                 if (info != null) {
                     echo("")
-                    echo("  Open CC Pocket on your phone and scan this — or type the code (valid ${info.ttlSec}s):")
+                    echo("  打开手机上的 CC Pocket 扫码 — 或手动输入配对码 (有效 ${info.ttlSec}s):")
                     echo("")
                     echo(QrTerminal.render("ccpocket://pair?code=${info.code}"))
-                    echo("        code:  ${info.code.chunked(3).joinToString(" ")}")
+                    echo("        配对码:  ${info.code.chunked(3).joinToString(" ")}")
                     echo("")
                     return@runBlocking
                 }
