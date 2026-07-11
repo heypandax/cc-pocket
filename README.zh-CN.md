@@ -29,7 +29,7 @@ flowchart LR
 - **接管不分叉** —— 终端里的会话默认只读旁观；「Continue here」原地接续，只有终端的 claude 确实还在写入时才会分支出新会话。
 - **树状浏览项目** —— 在电脑的目录里层层下钻（也可切回平铺最近列表），输入即筛选，带实时面包屑与每个项目的会话数。
 - **任意模型，含自定义 id** —— 会话中途切换模型；经第三方网关（cc-switch 等）路由的模型 id 直接可用。
-- **Claude 或 Codex 任选** —— 新建会话时挑后端，用和 Claude 一样的远程逐步批准来驱动 **OpenAI Codex**：看它流式输出、一步步批准它的命令与 diff、随时打断。Codex 会话有一档权限预设（Cautious / Balanced / Autonomous / Full auto），映射到 Codex 的 approval-policy × sandbox；列表与标题里 Codex 标记为青色（teal）。一个会话始终绑定一个后端。
+- **Claude、Codex 或 Cursor 任选** —— 新建会话时挑后端；除了 OpenAI Codex，也可直接驱动服务器上已登录的 **Cursor Agent CLI**，使用 Cursor Ultra 等账户额度操作当前工作目录。三种后端都支持流式输出、工具事件、模型切换与随时打断；一个会话始终绑定一个后端。
 
 语音听写、图片附件、斜杠命令自动补全、模型切换、任务完成推送等一并齐全。**[查看完整功能列表 →](https://heypandax.github.io/cc-pocket/features.html)**
 

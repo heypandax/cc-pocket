@@ -37,9 +37,19 @@ cc-pocket-daemon pair                      # 打出二维码 + 6 位配对码
 - **运行中的项目**点一下直达正在跑的会话；想翻这个目录的历史会话，点行尾的「历史」徽标进入会话列表自选；
 - 电脑终端里正在跑的 claude 会话也能看到：默认**只读旁观**实时输出，点「Continue here」可接管为手机控制。**接管不再随手分叉**——只有终端里的 claude 确实还在写入时才会分支出新会话（避免双写冲突），人已经退出的会话会原地接续。
 
-### 选择智能体（Claude / Codex）
+### 选择智能体（Claude / Codex / Cursor）
 
 **新建会话时可以挑后端**：除了 Claude Code，cc-pocket 也能驱动 **OpenAI Codex**。无论选哪个，体验一致——流式输出、命令与文件改动的批准、随时打断都一样，你照样能在手机上**一步步**远程批准 Codex 的命令或 diff。
+
+如果 daemon 所在电脑已安装并登录 **Cursor Agent CLI**，新建会话时还可以选择 **Cursor**。Cursor 直接操作服务器上的当前工作目录，使用该服务器的 Cursor 登录态和套餐额度，不需要 Cloud Agents API Key 或先把改动推到 GitHub。
+
+```bash
+cursor-agent --version
+cursor-agent status
+cursor-agent --list-models
+```
+
+daemon 默认自动寻找 `cursor-agent`；自定义安装路径可用 `cc-pocket-daemon run --cursor-bin /path/to/cursor-agent`，或设置 `CC_POCKET_CURSOR_BIN`。Cursor 会话支持实时文本与思考流、工具事件、模型切换、停止和 `--resume` 连续对话；模型列表内置常用选项，完整账户专属 ID 可在「自定义」中输入。
 
 - Claude 用 app 的赤陶色（terracotta）主题色；**Codex 用青色（teal）**，并且只有 Codex 会在列表与标题里被标记，Claude 保持不标。
 - 一个会话**始终绑定一个后端**：中途不能在 Claude 与 Codex 之间切换，想换就新建一个会话。
@@ -51,6 +61,8 @@ cc-pocket-daemon pair                      # 打出二维码 + 6 位配对码
 | Balanced | 折中：常规操作放行，敏感动作仍来问 |
 | Autonomous | 更放手：大部分自己来，少数情况才询问 |
 | Full auto | 全自动：一律不问，沙箱最宽（信任度最高，谨慎使用） |
+
+Cursor 对应关系：Cautious 使用 Plan + 沙箱，Balanced 使用 Smart Auto Review + 沙箱，Autonomous 使用 `--force` + 沙箱，Full auto 使用 `--force` 并关闭沙箱。Cursor 的 headless 接口暂不提供 CC Pocket 可回传的逐条人工审批协议，因此 Balanced 由 Cursor 自己审核安全调用。
 
 ### 配置 Codex 与选择模型
 

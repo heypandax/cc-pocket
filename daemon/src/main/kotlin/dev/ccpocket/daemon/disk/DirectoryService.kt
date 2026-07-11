@@ -51,10 +51,12 @@ class DirectoryService {
         val liveNorm = liveByCwd.entries.groupBy({ ProjectPaths.normCwd(it.key) }, { it.value }).mapValues { (_, v) -> v.flatten() }
         val claude = claudeDirectories(busyCwds, liveNorm)
         val codex = runCatching { dev.ccpocket.daemon.codex.CodexTranscriptScanner.cwdsByNewest() }.getOrDefault(emptyMap())
-        if (codex.isEmpty()) return claude
+        val cursor = runCatching { dev.ccpocket.daemon.cursor.CursorSessionScanner.cwdsByNewest() }.getOrDefault(emptyMap())
+        val other = (codex.keys + cursor.keys).associateWith { cwd -> maxOf(codex[cwd] ?: 0L, cursor[cwd] ?: 0L) }
+        if (other.isEmpty()) return claude
         val known = claude.mapTo(HashSet()) { ProjectPaths.normCwd(it.path) }
-        val codexByNorm = codex.entries.groupBy({ ProjectPaths.normCwd(it.key) }, { it.value })
-        val codexOnly = codex.entries
+        val otherByNorm = other.entries.groupBy({ ProjectPaths.normCwd(it.key) }, { it.value })
+        val otherOnly = other.entries
             .filter { (cwd, _) -> ProjectPaths.normCwd(cwd) !in known }
             .map { (cwd, mtime) ->
                 // daemon-driven sessions here (usually Codex ones) — before this, a running Codex session
@@ -78,10 +80,10 @@ class DirectoryService {
             .distinctBy { ProjectPaths.normCwd(it.path) }
         // a dir with both histories sorts by whichever agent wrote last
         val merged = claude.map { e ->
-            val codexM = codexByNorm[ProjectPaths.normCwd(e.path)]?.max() ?: 0L
-            if (codexM > e.lastModified) e.copy(lastModified = codexM) else e
+            val otherM = otherByNorm[ProjectPaths.normCwd(e.path)]?.max() ?: 0L
+            if (otherM > e.lastModified) e.copy(lastModified = otherM) else e
         }
-        return (merged + codexOnly).sortedByDescending { it.lastModified }
+        return (merged + otherOnly).sortedByDescending { it.lastModified }
     }
 
     /** Directories with Claude history, newest-first, deduped per cwd. [liveNorm] = daemon conversations

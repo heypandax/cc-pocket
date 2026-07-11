@@ -3,6 +3,7 @@ package dev.ccpocket.app.ui
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class CodexModelOptionsTest {
     @Test
@@ -20,5 +21,13 @@ class CodexModelOptionsTest {
             CODEX_MODEL_OPTIONS,
         )
         assertFalse(CODEX_MODEL_OPTIONS.any { it in setOf("gpt-5.1-codex", "gpt-5.1-codex-mini", "gpt-5-codex") })
+    }
+
+    @Test
+    fun cursor_presets_include_account_default_and_current_families() {
+        assertEquals("auto", CURSOR_MODEL_OPTIONS.first())
+        assertTrue("composer-2.5" in CURSOR_MODEL_OPTIONS)
+        assertTrue("gpt-5.6-sol-medium" in CURSOR_MODEL_OPTIONS)
+        assertTrue("claude-opus-4-8-high" in CURSOR_MODEL_OPTIONS)
     }
 }

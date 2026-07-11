@@ -12,6 +12,8 @@ import dev.ccpocket.daemon.claude.ClaudeBackend
 import dev.ccpocket.daemon.claude.ClaudeLauncher
 import dev.ccpocket.daemon.codex.CodexBackend
 import dev.ccpocket.daemon.codex.CodexLauncher
+import dev.ccpocket.daemon.cursor.CursorBackend
+import dev.ccpocket.daemon.cursor.CursorLauncher
 import dev.ccpocket.daemon.identity.Identity
 import dev.ccpocket.protocol.AgentKind
 import dev.ccpocket.daemon.relay.LoopbackPair
@@ -79,6 +81,7 @@ private class RunCmd : CliktCommand(name = "run") {
     private val port by option().int().default(8765)
     private val claudeBin by option("--claude-bin", help = "claude executable (default: auto-detect the installed Claude Code)")
     private val codexBin by option("--codex-bin", help = "codex executable (default: auto-detect the installed Codex CLI)")
+    private val cursorBin by option("--cursor-bin", help = "cursor-agent executable (default: auto-detect the installed Cursor CLI)")
     private val relay by option("--relay", help = "relay wss base").default(DEFAULT_RELAY)
     private val local by option("--local", help = "run a LAN-only WebSocket server instead of dialing the relay").flag()
     private val directBind by option(
@@ -108,6 +111,7 @@ private class RunCmd : CliktCommand(name = "run") {
             mapOf(
                 AgentKind.CLAUDE to AgentBackendFactory { ClaudeBackend(exe, claudeHome) },
                 AgentKind.CODEX to AgentBackendFactory { CodexBackend(codexBin) }, // resolves the binary lazily on first launch
+                AgentKind.CURSOR to AgentBackendFactory { CursorBackend(cursorBin) },
             ),
             prefs = prefs,
             claudeConfigDir = claudeHome,
@@ -355,6 +359,8 @@ private class StatusCmd : CliktCommand(name = "status") {
             if (claude == null) healthy = false
             val codex = runCatching { CodexLauncher.resolveExecutable(null) }.getOrNull()
             echo("  codex:    ${codex?.let { "✓ $it" } ?: "– not found (optional; Codex sessions unavailable)"}")
+            val cursor = runCatching { CursorLauncher.resolveExecutable(null) }.getOrNull()
+            echo("  cursor:   ${cursor?.let { "✓ $it" } ?: "– not found (optional; Cursor sessions unavailable)"}")
         } finally {
             client.close()
         }

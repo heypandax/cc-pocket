@@ -17,6 +17,9 @@ import java.nio.file.Path
 interface AgentBackend {
     val kind: AgentKind
 
+    /** True for CLIs whose structured mode handles one prompt and then exits (Cursor Agent). */
+    val exitsAfterTurn: Boolean get() = false
+
     /** Build the OS process for [spec]. Pure (no side effects); the caller starts it. */
     fun processBuilder(spec: AgentSpec): ProcessBuilder
 

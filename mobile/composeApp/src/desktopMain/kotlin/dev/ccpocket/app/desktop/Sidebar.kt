@@ -278,7 +278,7 @@ private fun PinRow(
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 72.dp),
             )
         }
-        if (p.agent == AgentKind.CODEX) AgentTag(AgentKind.CODEX)
+        if (p.agent != AgentKind.CLAUDE) AgentTag(p.agent)
         if (pending > 0) AttentionBadge(pending)
         if (hovered || dragging) {
             Icon(
@@ -531,7 +531,7 @@ private fun SessionRow(model: DesktopModel, s: DkSession, selected: Boolean, onC
                     }
                 }
             }
-            if (s.agent == AgentKind.CODEX) AgentTag(AgentKind.CODEX)
+            if (s.agent != AgentKind.CLAUDE) AgentTag(s.agent)
             if (s.pending > 0) {
                 Row(
                     Modifier.clip(RoundedCornerShape(999.dp)).background(Tok.accent).clickable(onClick = onClick)

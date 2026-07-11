@@ -4,7 +4,7 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-Drive Claude Code — or OpenAI Codex — on your computer from your phone, from anywhere, not just your LAN. Start/resume sessions, browse working directories, send prompts, and approve or deny the agent's tool-permission requests remotely. Pick your agent (Claude or Codex) per session; either way, streaming output, command and file-change approvals, and interrupts all work the same. Traffic flows through a **zero-knowledge relay** that only ever forwards end-to-end-encrypted ciphertext. Clean-room Kotlin, MIT.
+Drive Claude Code, OpenAI Codex, or Cursor Agent on your computer from your phone, from anywhere, not just your LAN. Start/resume sessions, browse working directories, send prompts, and follow agent tool activity remotely. Pick the backend per session; streaming output, model switching, and interrupts share one interface. Traffic flows through a **zero-knowledge relay** that only ever forwards end-to-end-encrypted ciphertext. Clean-room Kotlin, MIT.
 
 **🌐 Website:** <https://heypandax.github.io/cc-pocket/> · **📱 Get the app:** [App Store](https://apps.apple.com/cn/app/cc-pocket-%E9%9A%8F%E8%BA%AB%E7%BC%96%E7%A8%8B%E9%81%A5%E6%8E%A7/id6778773969) (iPhone & iPad) · [TestFlight beta](https://testflight.apple.com/join/8z26MWWr) (new versions first) · [Android APK](https://github.com/heypandax/cc-pocket/releases/latest/download/cc-pocket-android.apk) (GitHub Releases) · **🖥️ Desktop app:** macOS (.dmg, signed) — [Apple Silicon](https://github.com/heypandax/cc-pocket/releases/latest/download/cc-pocket-desktop-macos-arm64.dmg) · [Intel](https://github.com/heypandax/cc-pocket/releases/latest/download/cc-pocket-desktop-macos-x86_64.dmg) · [Windows (.msi)](https://github.com/heypandax/cc-pocket/releases/latest/download/cc-pocket-desktop-windows-x86_64.msi)
 
@@ -29,7 +29,7 @@ The relay pairs phone ↔ computer and routes opaque encrypted frames between th
 - **Take over without forking** — a terminal session is observed read-only; "Continue here" resumes it in place, branching only while the terminal claude is truly still writing.
 - **Browse projects as a tree** — drill through your computer's folders level by level (or a flat recents list), filter as you type, with a live breadcrumb and per-project session counts.
 - **Any model, even custom ids** — switch models mid-session; ids routed through third-party gateways (cc-switch and friends) work as-is.
-- **Pick Claude or Codex** — choose the agent when you start a session and drive **OpenAI Codex** with the same remote, step-by-step approval as Claude: stream its output, approve its commands and diffs one step at a time, interrupt anytime. Codex sessions get a permission preset (Cautious / Balanced / Autonomous / Full auto) mapped to Codex's approval-policy × sandbox, and are tagged teal in lists and headers. A session stays bound to one backend.
+- **Pick Claude, Codex, or Cursor** — choose the backend when you start a session. Cursor sessions drive the logged-in `cursor-agent` on the daemon host, using that account's models and quota against the current local working tree. All three stream output and tool activity, switch models, resume sessions, and interrupt from the same UI. A session stays bound to one backend.
 
 Voice dictation, image attachments, slash-command autocomplete, model switching, and finish-time push notifications round it out. **[See the full feature list →](https://heypandax.github.io/cc-pocket/features.html)**
 

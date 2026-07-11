@@ -82,6 +82,11 @@ class AgentProcess private constructor(
 
     suspend fun writeLine(json: String) = stdin.send(json)
 
+    /** Signal EOF without terminating the process (one-shot CLIs read their prompt from stdin). */
+    suspend fun closeInput() {
+        stdin.close()
+    }
+
     /** Bounded wait for the OS process to fully exit — its transcript is only flushed then. */
     suspend fun awaitExit(seconds: Long = 5) {
         withContext(Dispatchers.IO) { runCatching { process.waitFor(seconds, TimeUnit.SECONDS) } }

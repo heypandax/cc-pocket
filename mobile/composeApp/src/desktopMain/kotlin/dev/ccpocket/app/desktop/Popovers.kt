@@ -54,6 +54,7 @@ import dev.ccpocket.app.theme.Tok
 import dev.ccpocket.app.ui.AgentGlyph
 import dev.ccpocket.app.ui.CLAUDE_MODEL_OPTIONS
 import dev.ccpocket.app.ui.CODEX_MODEL_OPTIONS
+import dev.ccpocket.app.ui.CURSOR_MODEL_OPTIONS
 import dev.ccpocket.app.ui.EFFORT_OPTIONS
 import dev.ccpocket.app.ui.agentColor
 import dev.ccpocket.app.ui.agentTintBorder
@@ -119,6 +120,7 @@ fun NewSessionPopover(
             Row(Modifier.fillMaxWidth().padding(bottom = 14.dp), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                 AgentCard(AgentKind.CLAUDE, agent == AgentKind.CLAUDE, Modifier.weight(1f)) { agent = AgentKind.CLAUDE }
                 AgentCard(AgentKind.CODEX, agent == AgentKind.CODEX, Modifier.weight(1f)) { agent = AgentKind.CODEX }
+                AgentCard(AgentKind.CURSOR, agent == AgentKind.CURSOR, Modifier.weight(1f)) { agent = AgentKind.CURSOR }
             }
             PopoverLabel("Mode")
             CLAUDE_MODES.forEachIndexed { i, m ->
@@ -178,7 +180,11 @@ fun QuickActionsPopover(model: DesktopModel, onDismiss: () -> Unit) {
             }
             QaPage.MODEL -> {
                 QaBack("Model") { page = QaPage.MAIN }
-                val options = if (model.chatAgent == AgentKind.CODEX) CODEX_MODEL_OPTIONS.map { it to it } else CLAUDE_MODEL_OPTIONS
+                val options = when (model.chatAgent) {
+                    AgentKind.CLAUDE -> CLAUDE_MODEL_OPTIONS
+                    AgentKind.CODEX -> CODEX_MODEL_OPTIONS.map { it to it }
+                    AgentKind.CURSOR -> CURSOR_MODEL_OPTIONS.map { it to it }
+                }
                 fun isActive(pick: String) = model.chatModelId.equals(pick, true) || model.chatModel.equals(pick, true)
                 options.forEach { (label, pick) ->
                     QaOption(label, isActive(pick)) { model.switchModel(pick); onDismiss() }
@@ -289,7 +295,7 @@ internal fun AgentCard(agent: AgentKind, selected: Boolean, modifier: Modifier, 
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         AgentGlyph(agent, size = 17)
-        Text(if (agent == AgentKind.CODEX) "Codex" else "Claude", color = if (selected) Tok.tx else Tok.tx2, fontFamily = Dk.ui, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(dev.ccpocket.app.ui.agentName(agent), color = if (selected) Tok.tx else Tok.tx2, fontFamily = Dk.ui, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 

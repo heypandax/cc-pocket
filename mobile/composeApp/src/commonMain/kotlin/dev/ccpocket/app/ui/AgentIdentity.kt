@@ -31,9 +31,21 @@ import dev.ccpocket.protocol.AgentKind
  * Claude keeps the app accent (terracotta); Codex gets a calm teal. Per the design, the common Claude
  * case stays unmarked and ONLY Codex is tagged in lists/headers; the agent is always explicit in session info.
  */
-fun agentColor(agent: AgentKind): Color = if (agent == AgentKind.CODEX) Tok.codex else Tok.accent
-fun agentName(agent: AgentKind): String = if (agent == AgentKind.CODEX) "Codex" else "Claude"
-fun agentTagline(agent: AgentKind): String = if (agent == AgentKind.CODEX) "Codex · OpenAI" else "Claude Code · Anthropic"
+fun agentColor(agent: AgentKind): Color = when (agent) {
+    AgentKind.CLAUDE -> Tok.accent
+    AgentKind.CODEX -> Tok.codex
+    AgentKind.CURSOR -> Tok.info
+}
+fun agentName(agent: AgentKind): String = when (agent) {
+    AgentKind.CLAUDE -> "Claude"
+    AgentKind.CODEX -> "Codex"
+    AgentKind.CURSOR -> "Cursor"
+}
+fun agentTagline(agent: AgentKind): String = when (agent) {
+    AgentKind.CLAUDE -> "Claude Code · Anthropic"
+    AgentKind.CODEX -> "Codex · OpenAI"
+    AgentKind.CURSOR -> "Cursor Agent · Ultra"
+}
 
 /** The two standard agent-color tints — a 12% fill + a 42% border — shared by the chip and the selection cards. */
 internal fun Color.agentTintFill(): Color = copy(alpha = 0.12f)
@@ -54,6 +66,11 @@ fun AgentGlyph(agent: AgentKind, color: Color = agentColor(agent), size: Int = 1
             val d = Size(13.6f * s, 13.6f * s)
             drawArc(color, startAngle = -90f, sweepAngle = 90f, useCenter = false, topLeft = box, size = d, style = Stroke(width = w, cap = StrokeCap.Round))
             drawArc(color, startAngle = 90f, sweepAngle = 90f, useCenter = false, topLeft = box, size = d, style = Stroke(width = w, cap = StrokeCap.Round))
+        } else if (agent == AgentKind.CURSOR) {
+            val w = 1.7f * s
+            drawRoundRect(color, topLeft = p(4f, 4f), size = Size(12f * s, 12f * s), cornerRadius = androidx.compose.ui.geometry.CornerRadius(3f * s), style = Stroke(width = w))
+            drawLine(color, p(7f, 10f), p(13f, 10f), strokeWidth = w, cap = StrokeCap.Round)
+            drawLine(color, p(10f, 7f), p(10f, 13f), strokeWidth = w, cap = StrokeCap.Round)
         } else {
             val w = 1.8f * s
             // chevron ">"
@@ -86,8 +103,8 @@ fun AgentTag(agent: AgentKind, small: Boolean = true) {
 /** Header / list-row badge: shows the tag ONLY for the non-default Codex (Claude stays unmarked), with a leading [gap]. */
 @Composable
 fun AgentBadge(agent: AgentKind?, gap: Dp = 6.dp) {
-    if (agent == AgentKind.CODEX) {
+    if (agent != null && agent != AgentKind.CLAUDE) {
         Spacer(Modifier.width(gap))
-        AgentTag(AgentKind.CODEX)
+        AgentTag(agent)
     }
 }

@@ -991,6 +991,7 @@ internal fun SessionsScreen(repo: PocketRepository) { // internal: driven end-to
                 when (af) {
                     "claude" -> (it.agent ?: AgentKind.CLAUDE) == AgentKind.CLAUDE
                     "codex" -> it.agent == AgentKind.CODEX
+                    "cursor" -> it.agent == AgentKind.CURSOR
                     else -> true
                 }
             }

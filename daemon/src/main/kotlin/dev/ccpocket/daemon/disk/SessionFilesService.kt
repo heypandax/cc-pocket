@@ -186,6 +186,7 @@ object SessionFilesService {
         when (agent) {
             AgentKind.CLAUDE -> claudeScan(file, ::touch, ::record)
             AgentKind.CODEX -> codexScan(file, ::touch, ::record)
+            AgentKind.CURSOR -> Unit // Cursor stores tool history in SQLite; live tool events still render in chat.
         }
         return seen
     }
@@ -198,6 +199,7 @@ object SessionFilesService {
         val file = when (agent) {
             AgentKind.CLAUDE -> ProjectPaths.dirFor(workdir).resolve("$sessionId.jsonl")
             AgentKind.CODEX -> CodexPaths.findSession(sessionId)
+            AgentKind.CURSOR -> null
         }
         return file?.takeIf { it.exists() }
     }

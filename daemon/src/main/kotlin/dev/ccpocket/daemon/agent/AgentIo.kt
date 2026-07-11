@@ -10,4 +10,6 @@ import dev.ccpocket.protocol.Frame
 class AgentIo(
     val writeLine: suspend (String) -> Unit,
     val emit: suspend (Frame) -> Unit,
+    val closeInput: suspend () -> Unit = {},
+    val stopProcess: suspend () -> Unit = {},
 )

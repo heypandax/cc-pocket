@@ -170,7 +170,7 @@ fun InlinePermCard(ask: PermissionAsk, agent: AgentKind, workdir: String, branch
                         if (isDiff) "${agentName(agent)} wants to edit files" else "${agentName(agent)} needs permission",
                         color = Tok.tx2, fontFamily = Dk.ui, fontSize = 12.sp,
                     )
-                    if (agent == AgentKind.CODEX) AgentTag(AgentKind.CODEX)
+                    if (agent != AgentKind.CLAUDE) AgentTag(agent)
                 }
                 if (isDiff) {
                     val diff = ask.diff!!

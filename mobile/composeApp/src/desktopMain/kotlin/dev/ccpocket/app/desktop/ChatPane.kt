@@ -278,7 +278,7 @@ private fun ChatSubHeader(model: DesktopModel) {
                 model.chatTitle, color = Tok.tx, fontFamily = Dk.ui, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
             )
-            if (model.chatAgent == AgentKind.CODEX) AgentTag(AgentKind.CODEX)
+            if (model.chatAgent != AgentKind.CLAUDE) AgentTag(model.chatAgent)
             // quick terminal at the session's cwd — only when that directory exists on THIS machine, so a
             // remote machine's session never shows it (same locality contract as DesktopPathOpener). #44
             // canOpen() stats the filesystem — key it on the workdir so it isn't re-run every recomposition.
@@ -618,7 +618,7 @@ private fun Composer(model: DesktopModel, suppressAutoFocus: Boolean = false) {
                         // BasicTextField renders the raw style — the two never sat on the same baseline
                         val fieldStyle = TextStyle(color = Tok.tx, fontFamily = Dk.ui, fontSize = 14.sp, lineHeight = 20.sp)
                         if (model.composer.isEmpty()) {
-                            Text("Message ${if (model.chatAgent == AgentKind.CODEX) "Codex" else "Claude"}…", style = fieldStyle.copy(color = Tok.muted))
+                            Text("Message ${dev.ccpocket.app.ui.agentName(model.chatAgent)}…", style = fieldStyle.copy(color = Tok.muted))
                         }
                         // `field` is hoisted above (the @-file menu reads its caret); onValueChange keeps it +
                         // model.composer in sync, and the reconcile up there absorbs external writes.

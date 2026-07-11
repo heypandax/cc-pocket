@@ -435,7 +435,12 @@ class Conversation(
         intentionalStop = false
         pendingRelaunch = false // this launch bakes the current model/mode/effort — no switch is pending anymore (issue #84)
         val p = AgentProcess.start(backend.processBuilder(spec), scope)
-        val io = AgentIo(writeLine = p::writeLine, emit = { sink.emit(it) }) // read sink dynamically (reattach)
+        val io = AgentIo(
+            writeLine = p::writeLine,
+            closeInput = p::closeInput,
+            stopProcess = p::shutdown,
+            emit = { sink.emit(it) },
+        ) // read sink dynamically (reattach)
         val b = PermissionBridge(convoId, mode, scope, { sink.emit(it) }, allowRules, respond = backend::respondPermission)
         proc = p
         bridge = b
@@ -590,6 +595,22 @@ class Conversation(
             }
         }
         log.info("$convoId pump ended (intentionalStop=$intentionalStop)")
+        if (!intentionalStop && backend.exitsAfterTurn) p.awaitExit()
+        if (!intentionalStop && backend.exitsAfterTurn && (p.exitCode() == 0 || interruptRequested)) {
+            // Cursor's structured mode is deliberately one process per turn. Keep the logical
+            // conversation alive; the next prompt launches `--resume <sessionId>`.
+            if (interruptRequested) {
+                interruptRequested = false
+                executing = false
+                lastPrompt = null
+                sink.emit(TurnDone(convoId, null, null))
+            }
+            proc = null
+            bridge?.cancelAll()
+            bridge = null
+            backend.onProcessEnded(sessionId)
+            return
+        }
         if (!intentionalStop) {
             // unexpected death: stdout EOF precedes the last transcript flush, so wait for the
             // real process exit before touching the file (intentional stops settle in stopProcess)
@@ -704,7 +725,8 @@ class Conversation(
         // it can't propagate out and wedge the inbound pump; proc stays null, so the next prompt simply retries.
         if (proc == null) {
             val launched = runCatching {
-                launchProcess(AgentSpec(workdir, openedResumeId, model, mode, effort = effort, forkSession = openedWithFork))
+                val anchor = if (backend.exitsAfterTurn) sessionId ?: openedResumeId else openedResumeId
+                launchProcess(AgentSpec(workdir, anchor, model, mode, effort = effort, forkSession = openedWithFork))
             }
             if (launched.isFailure) {
                 // no ack: the prompt did NOT reach an agent — forget the id so the client's retry can run

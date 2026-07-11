@@ -65,6 +65,17 @@ internal val CODEX_MODEL_OPTIONS = listOf(
     "gpt-5.4",
     "gpt-5.4-mini",
 ) // shared with the desktop ⋯ popover
+internal val CURSOR_MODEL_OPTIONS = listOf(
+    "auto",
+    "composer-2.5",
+    "gpt-5.6-sol-medium",
+    "gpt-5.6-terra-medium",
+    "gpt-5.6-luna-medium",
+    "gpt-5.3-codex",
+    "claude-opus-4-8-high",
+    "claude-sonnet-5-high",
+    "gemini-3.1-pro",
+) // verified against cursor-agent --list-models; custom id supports every account-specific variant
 internal val CLAUDE_MODEL_OPTIONS = listOf("Fable" to "fable", "Opus" to "opus", "Sonnet" to "sonnet", "Haiku" to "haiku") // display name → alias; shared by both shells' pickers
 internal val EFFORT_OPTIONS = listOf("low", "medium", "high", "xhigh", "max") // shared: live /effort picker + Settings default
 
@@ -258,19 +269,24 @@ private fun CtxPill(ctx: String, big: Boolean) {
  */
 @Composable
 private fun ModelPicker(repo: PocketRepository, onBack: () -> Unit, onDone: () -> Unit) {
-    val codex = repo.sessionAgent.value == AgentKind.CODEX
-    val choices = if (codex) CODEX_MODEL_OPTIONS.map { ModelChoice(it, it, it, "", false) }
+    val agent = repo.sessionAgent.value ?: AgentKind.CLAUDE
+    val rawIds = when (agent) {
+        AgentKind.CLAUDE -> null
+        AgentKind.CODEX -> CODEX_MODEL_OPTIONS
+        AgentKind.CURSOR -> CURSOR_MODEL_OPTIONS
+    }
+    val choices = if (rawIds != null) rawIds.map { ModelChoice(it, it, it, "", false) }
     // window pill derives from the protocol table, so registering a new alias THERE is the only edit
     else CLAUDE_MODEL_OPTIONS.map { (name, alias) ->
         val big = contextWindowFor(alias) == LARGE_CONTEXT_WINDOW
         ModelChoice(name, alias, alias, if (big) "1M" else "200K", big)
     }
-    val selected = if (codex) repo.model.value else modelAlias(repo.model.value)
+    val selected = if (agent != AgentKind.CLAUDE) repo.model.value else modelAlias(repo.model.value)
     var switchingTo by remember { mutableStateOf<String?>(null) }
     // close once the daemon confirms the switch (model re-announced through SessionLive)…
     LaunchedEffect(switchingTo, repo.model.value) {
         val target = switchingTo ?: return@LaunchedEffect
-        val now = if (codex) repo.model.value else modelAlias(repo.model.value)
+        val now = if (agent != AgentKind.CLAUDE) repo.model.value else modelAlias(repo.model.value)
         // raw compare too: a custom id ("kimi-k2…") never alias-matches, but the daemon echoes it verbatim
         if (now.equals(target, ignoreCase = true) || repo.model.value?.equals(target, ignoreCase = true) == true) onDone()
     }
