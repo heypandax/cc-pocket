@@ -52,6 +52,40 @@ cc-pocket-daemon pair                      # 打出二维码 + 6 位配对码
 | Autonomous | 更放手：大部分自己来，少数情况才询问 |
 | Full auto | 全自动：一律不问，沙箱最宽（信任度最高，谨慎使用） |
 
+### 配置 Codex 与选择模型
+
+CC Pocket 不自己调用 OpenAI API；它在电脑上启动你已登录的 Codex CLI，所以模型是否可用仍由 Codex 账户、工作区策略和 CLI 版本决定。
+
+1. 在 daemon 所在电脑安装并登录 Codex：
+
+   ```bash
+   codex --version
+   codex login
+   codex
+   ```
+
+   首次运行的 Codex 会话能正常回复后，再从 CC Pocket 连接。daemon 默认自动寻找 `codex`；找不到时可用 `cc-pocket-daemon run --codex-bin /path/to/codex`，或设置 `CC_POCKET_CODEX_BIN`。
+
+2. 打开 CC Pocket，进入一台已配对的电脑，选择项目目录，点「新建会话」，把后端切换为 **Codex**，选择权限预设后启动会话。
+
+3. 进入 Codex 会话后，点右上角 **⋯ → 模型**，选择内置模型：
+
+   | 模型 ID | 适合场景 |
+   |---|---|
+   | `gpt-5.6-sol` | 复杂、开放式或高价值任务，默认首选 |
+   | `gpt-5.6-terra` | 日常开发的均衡选择 |
+   | `gpt-5.6-luna` | 明确、重复、更注重速度的任务 |
+   | `gpt-5.5` | 上一代复杂编码与推理模型 |
+   | `gpt-5.3-codex-spark` | 低延迟代码迭代（需 ChatGPT Pro 权限） |
+   | `gpt-5.4` | 通用编码、推理和工具使用 |
+   | `gpt-5.4-mini` | 更快、更节省的日常任务 |
+
+4. 在同一个 **⋯** 菜单的「推理强度」中选 `low`、`medium`、`high`、`xhigh` 或 `max`。复杂任务再提高；强度越高，通常耗时和用量也越高。
+
+5. 需要新上线模型或 cc-switch 等第三方网关时，在模型列表底部的 **自定义** 输入完整模型 ID 并确认。CC Pocket 会原样传给 Codex，但不能为账户开通未授权的模型。
+
+如果选择后报「model is not supported」或类似错误，先在电脑终端运行 `codex -m <模型-id>` 验证；终端也不可用时，说明该模型尚未对当前账户或工作区开放，请改用可用的模型。
+
 ### 对话
 
 - 输出、工具调用、结果实时流式呈现，效果和终端一致；代码块按语言**语法高亮**（`sql`、`py`、`kt`、`js` 等常用语言，其余保持等宽原样）；
