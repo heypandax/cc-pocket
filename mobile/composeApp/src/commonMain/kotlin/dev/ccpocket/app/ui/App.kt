@@ -747,7 +747,11 @@ private fun ProjectCell(repo: PocketRepository, e: DirectoryEntry, showPath: Boo
         // the 历史 badge lists this project's sessions (issue #49) — the row itself keeps auto-resuming
         LiveProjectCell(e, pinned, onLongPress, onBrowse = { repo.listSessions(e.path) }) { repo.openProject(e) }
     }
-    else DirCell(e.name.ifBlank { e.path }, if (showPath) tilde(e.path) else null, indent = false, pinned = pinned, onLongPress = onLongPress) { repo.listSessions(e.path) }
+    else DirCell(
+        e.latestSessionTitle?.takeIf { it.isNotBlank() } ?: e.name.ifBlank { e.path },
+        if (showPath) tilde(e.path) else null,
+        indent = false, pinned = pinned, onLongPress = onLongPress,
+    ) { repo.listSessions(e.path) }
 }
 
 /** Long-press a project → pin it to the top, or unpin it. Small sheet, mirrors the app's other actions. */

@@ -143,6 +143,8 @@ data class DirectoryEntry(
     val recent: Boolean = false,
     /** newest transcript mtime under this dir — used to sort projects newest-first. */
     val lastModified: Long = 0,
+    /** Title of the newest session across all agent backends; project cards use it above the path. */
+    val latestSessionTitle: String? = null,
     /** a claude process is alive in this dir (open session — may be idle, waiting for input). */
     val open: Boolean = false,
     /** actively executing right now: a process here that wrote output very recently. */

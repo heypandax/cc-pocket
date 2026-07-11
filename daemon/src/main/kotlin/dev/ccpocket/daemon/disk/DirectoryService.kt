@@ -53,6 +53,17 @@ class DirectoryService {
         val codex = runCatching { dev.ccpocket.daemon.codex.CodexTranscriptScanner.cwdsByNewest() }.getOrDefault(emptyMap())
         val cursor = runCatching { dev.ccpocket.daemon.cursor.CursorSessionScanner.cwdsByNewest() }.getOrDefault(emptyMap())
         val other = (codex.keys + cursor.keys).associateWith { cwd -> maxOf(codex[cwd] ?: 0L, cursor[cwd] ?: 0L) }
+        fun otherTitle(cwd: String): String? {
+            val codexNewest = codex.entries.filter { ProjectPaths.normCwd(it.key) == ProjectPaths.normCwd(cwd) }.maxOfOrNull { it.value } ?: 0L
+            val cursorNewest = cursor.entries.filter { ProjectPaths.normCwd(it.key) == ProjectPaths.normCwd(cwd) }.maxOfOrNull { it.value } ?: 0L
+            return if (cursorNewest >= codexNewest) {
+                runCatching { dev.ccpocket.daemon.cursor.CursorSessionScanner.scan(cwd).firstOrNull()?.title }.getOrNull()
+                    ?: runCatching { dev.ccpocket.daemon.codex.CodexTranscriptScanner.scan(cwd).firstOrNull()?.title }.getOrNull()
+            } else {
+                runCatching { dev.ccpocket.daemon.codex.CodexTranscriptScanner.scan(cwd).firstOrNull()?.title }.getOrNull()
+                    ?: runCatching { dev.ccpocket.daemon.cursor.CursorSessionScanner.scan(cwd).firstOrNull()?.title }.getOrNull()
+            }
+        }
         if (other.isEmpty()) return claude
         val known = claude.mapTo(HashSet()) { ProjectPaths.normCwd(it.path) }
         val otherByNorm = other.entries.groupBy({ ProjectPaths.normCwd(it.key) }, { it.value })
@@ -69,6 +80,7 @@ class DirectoryService {
                     hasSessions = true,
                     recent = cwd in recents,
                     lastModified = mtime,
+                    latestSessionTitle = otherTitle(cwd),
                     open = live.isNotEmpty(),
                     executing = live.any { it.executing },
                     busy = cwd in busyCwds,
@@ -81,7 +93,7 @@ class DirectoryService {
         // a dir with both histories sorts by whichever agent wrote last
         val merged = claude.map { e ->
             val otherM = otherByNorm[ProjectPaths.normCwd(e.path)]?.max() ?: 0L
-            if (otherM > e.lastModified) e.copy(lastModified = otherM) else e
+            if (otherM > e.lastModified) e.copy(lastModified = otherM, latestSessionTitle = otherTitle(e.path)) else e
         }
         return (merged + otherOnly).sortedByDescending { it.lastModified }
     }
@@ -121,6 +133,7 @@ class DirectoryService {
                 } else null
                 val active = (daemonLive + listOfNotNull(external)).sortedByDescending { it.executing }
                 val first = active.firstOrNull()
+                val newestSummary = runCatching { TranscriptScanner.summarize(newest) }.getOrNull()
                 DirectoryEntry(
                     path = cwd,
                     name = Path.of(cwd).fileName?.toString() ?: cwd,
@@ -128,6 +141,7 @@ class DirectoryService {
                     hasSessions = true,
                     recent = cwd in recents,
                     lastModified = mtime,
+                    latestSessionTitle = newestSummary?.title,
                     open = osOpen || daemonLive.isNotEmpty(),
                     executing = active.any { it.executing },
                     busy = cwd in busyCwds,

@@ -128,6 +128,7 @@ fun buildDirRows(
     val filtered = if (q.isEmpty()) dirs else dirs.filter {
         it.path.contains(q, ignoreCase = true) ||
             it.name.contains(q, ignoreCase = true) ||
+            it.latestSessionTitle?.contains(q, ignoreCase = true) == true ||
             it.activeSessionTitle?.contains(q, ignoreCase = true) == true
     }
     // a session with running background work stays "open" in the list even if its claude process check lags;
