@@ -1,0 +1,127 @@
+name: ios-trollstore
+
+# Build an unsigned IPA for TrollStore side-loading. No App Store Connect, no signing
+# certificates — just compile and package. The IPA lands as a workflow artifact.
+
+on:
+  workflow_dispatch:
+    inputs:
+      marketing_version:
+        description: "版本号（留空则用仓库里的 CFBundleShortVersionString）"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  trollstore:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Unpin dev-box JDK from gradle.properties
+        run: sed -i '' '/^org\.gradle\.java\.home=/d' gradle.properties
+
+      - name: Restore GoogleService-Info.plist from template
+        # Firebase is linked at compile-time but the template has placeholder values.
+        # Firebase.configure() may crash at runtime; patch the Swift entry point
+        # if you need a fully functional app without a real Firebase project.
+        run: |
+          cp iosApp/iosApp/GoogleService-Info.plist.template \
+             iosApp/iosApp/GoogleService-Info.plist
+
+      - name: Generate Xcode project from project.yml
+        run: cd iosApp && xcodegen generate
+
+      - name: Stamp version & build number
+        id: stamp
+        env:
+          MARKETING_VERSION: ${{ inputs.marketing_version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          PLIST=iosApp/iosApp/Info.plist
+          REPO_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST")
+          VERSION="${MARKETING_VERSION:-$REPO_VERSION}"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$PLIST"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "building $VERSION ($BUILD_NUMBER)"
+
+      - name: Archive (Release, unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/CCPocket.xcarchive" \
+            DEVELOPMENT_TEAM="" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            archive | tee "$RUNNER_TEMP/archive.log"
+          grep -q "ARCHIVE SUCCEEDED" "$RUNNER_TEMP/archive.log"
+
+      - name: Export unsigned IPA
+        run: |
+          set -o pipefail
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/CCPocket.xcarchive" \
+            -exportOptionsPlist iosApp/ExportOptions-trollstore.plist \
+            -exportPath "$RUNNER_TEMP/export" \
+            CODE_SIGNING_ALLOWED=NO | tee "$RUNNER_TEMP/export.log"
+          grep -q "EXPORT SUCCEEDED" "$RUNNER_TEMP/export.log"
+
+      - name: Package IPA for TrollStore
+        id: package
+        env:
+          VERSION: ${{ steps.stamp.outputs.version }}
+          BUILD: ${{ github.run_number }}
+        run: |
+          # xcodebuild exportArchive may produce a .ipa or an .app bundle
+          IPA_DIR="$RUNNER_TEMP/export"
+          IPA_OUT="cc-pocket-${VERSION}-build${BUILD}-trollstore.ipa"
+
+          # If export produced an .app, manually package it into .ipa
+          if [ -d "$IPA_DIR" ] && [ ! -f "$IPA_DIR"/*.ipa 2>/dev/null ]; then
+            # Create Payload structure (the classic unsigned IPA format)
+            mkdir -p Payload
+            APP=$(find "$IPA_DIR" -name "*.app" -maxdepth 1 | head -1)
+            if [ -z "$APP" ]; then
+              # maybe it's nested
+              APP=$(find "$IPA_DIR" -name "*.app" | head -1)
+            fi
+            if [ -n "$APP" ]; then
+              cp -R "$APP" Payload/
+              zip -r "$IPA_OUT" Payload
+              rm -rf Payload
+            else
+              echo "::error::No .app bundle found in export output"
+              ls -la "$IPA_DIR"
+              exit 1
+            fi
+          elif ls "$IPA_DIR"/*.ipa 1>/dev/null 2>&1; then
+            cp "$IPA_DIR"/*.ipa "$IPA_OUT"
+          else
+            echo "::error::No IPA or .app found in export path"
+            ls -laR "$IPA_DIR"
+            exit 1
+          fi
+
+          echo "ipa_path=$IPA_OUT" >> "$GITHUB_OUTPUT"
+          echo "IPA: $IPA_OUT ($(du -h "$IPA_OUT" | cut -f1))"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cc-pocket-${{ steps.stamp.outputs.version }}-build${{ github.run_number }}-trollstore
+          path: ${{ steps.package.outputs.ipa_path }}
+          retention-days: 90
