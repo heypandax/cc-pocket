@@ -72,6 +72,8 @@ internal val CURSOR_MODEL_OPTIONS = listOf(
     "gpt-5.6-terra-medium",
     "gpt-5.6-luna-medium",
     "gpt-5.3-codex",
+    "claude-fable-5-high",
+    "claude-fable-5-thinking-high",
     "claude-opus-4-8-high",
     "claude-sonnet-5-high",
     "gemini-3.1-pro",

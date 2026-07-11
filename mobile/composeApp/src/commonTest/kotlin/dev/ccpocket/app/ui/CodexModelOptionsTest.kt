@@ -28,6 +28,8 @@ class CodexModelOptionsTest {
         assertEquals("auto", CURSOR_MODEL_OPTIONS.first())
         assertTrue("composer-2.5" in CURSOR_MODEL_OPTIONS)
         assertTrue("gpt-5.6-sol-medium" in CURSOR_MODEL_OPTIONS)
+        assertTrue("claude-fable-5-high" in CURSOR_MODEL_OPTIONS)
+        assertTrue("claude-fable-5-thinking-high" in CURSOR_MODEL_OPTIONS)
         assertTrue("claude-opus-4-8-high" in CURSOR_MODEL_OPTIONS)
     }
 }
