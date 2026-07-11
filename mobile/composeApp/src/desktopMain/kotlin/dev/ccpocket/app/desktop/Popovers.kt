@@ -54,7 +54,7 @@ import dev.ccpocket.app.theme.Tok
 import dev.ccpocket.app.ui.AgentGlyph
 import dev.ccpocket.app.ui.CLAUDE_MODEL_OPTIONS
 import dev.ccpocket.app.ui.CODEX_MODEL_OPTIONS
-import dev.ccpocket.app.ui.CURSOR_MODEL_OPTIONS
+import dev.ccpocket.app.ui.mergedCursorModels
 import dev.ccpocket.app.ui.EFFORT_OPTIONS
 import dev.ccpocket.app.ui.agentColor
 import dev.ccpocket.app.ui.agentTintBorder
@@ -186,9 +186,7 @@ fun QuickActionsPopover(model: DesktopModel, onDismiss: () -> Unit) {
                 val options = when (model.chatAgent) {
                     AgentKind.CLAUDE -> CLAUDE_MODEL_OPTIONS
                     AgentKind.CODEX -> CODEX_MODEL_OPTIONS.map { it to it }
-                    AgentKind.CURSOR -> model.cursorModels.takeIf { it.isNotEmpty() }
-                        ?.map { it.name to it.id }
-                        ?: CURSOR_MODEL_OPTIONS.map { it to it }
+                    AgentKind.CURSOR -> mergedCursorModels(model.cursorModels)
                 }
                 fun isActive(pick: String) = model.chatModelId.equals(pick, true) || model.chatModel.equals(pick, true)
                 options.forEach { (label, pick) ->

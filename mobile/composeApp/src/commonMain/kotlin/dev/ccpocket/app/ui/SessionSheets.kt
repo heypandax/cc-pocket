@@ -47,6 +47,7 @@ import dev.ccpocket.protocol.DEFAULT_CONTEXT_WINDOW
 import dev.ccpocket.protocol.JobKind
 import dev.ccpocket.protocol.JobStatus
 import dev.ccpocket.protocol.AgentKind
+import dev.ccpocket.protocol.AgentModel
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.draw.alpha
 import kotlinx.coroutines.delay
@@ -78,6 +79,14 @@ internal val CURSOR_MODEL_OPTIONS = listOf(
     "claude-sonnet-5-high",
     "gemini-3.1-pro",
 ) // verified against cursor-agent --list-models; custom id supports every account-specific variant
+
+/** Keep bundled models visible when Cursor's account catalog only returns a partial rollout. */
+internal fun mergedCursorModels(live: List<AgentModel>): List<Pair<String, String>> {
+    val merged = LinkedHashMap<String, String>()
+    live.forEach { merged[it.id] = it.name }
+    CURSOR_MODEL_OPTIONS.forEach { id -> if (id !in merged) merged[id] = id }
+    return merged.map { (id, name) -> name to id }
+}
 internal val CLAUDE_MODEL_OPTIONS = listOf("Fable" to "fable", "Opus" to "opus", "Sonnet" to "sonnet", "Haiku" to "haiku") // display name → alias; shared by both shells' pickers
 internal val EFFORT_OPTIONS = listOf("low", "medium", "high", "xhigh", "max") // shared: live /effort picker + Settings default
 
@@ -278,9 +287,8 @@ private fun ModelPicker(repo: PocketRepository, onBack: () -> Unit, onDone: () -
     val choices = when (agent) {
         AgentKind.CODEX -> CODEX_MODEL_OPTIONS.map { ModelChoice(it, it, it, "", false) }
         AgentKind.CURSOR -> {
-            val live = repo.cursorModels.toList()
-            if (live.isNotEmpty()) live.map { ModelChoice(it.name, it.id, it.id, "", false) }
-            else CURSOR_MODEL_OPTIONS.map { ModelChoice(it, it, it, "", false) }
+            mergedCursorModels(repo.cursorModels.toList())
+                .map { (name, id) -> ModelChoice(name, id, id, "", false) }
         }
         AgentKind.CLAUDE -> CLAUDE_MODEL_OPTIONS.map { (name, alias) ->
             val big = contextWindowFor(alias) == LARGE_CONTEXT_WINDOW

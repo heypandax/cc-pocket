@@ -1,5 +1,6 @@
 package dev.ccpocket.app.ui
 
+import dev.ccpocket.protocol.AgentModel
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -31,5 +32,17 @@ class CodexModelOptionsTest {
         assertTrue("claude-fable-5-high" in CURSOR_MODEL_OPTIONS)
         assertTrue("claude-fable-5-thinking-high" in CURSOR_MODEL_OPTIONS)
         assertTrue("claude-opus-4-8-high" in CURSOR_MODEL_OPTIONS)
+    }
+
+    @Test
+    fun cursor_live_catalog_is_merged_with_bundled_fable_models() {
+        val merged = mergedCursorModels(
+            listOf(AgentModel("auto", "Auto (current, default)"), AgentModel("gpt-5.3-codex", "Codex 5.3")),
+        )
+
+        assertEquals("Auto (current, default)", merged.first().first)
+        assertEquals(1, merged.count { it.second == "auto" })
+        assertTrue(merged.any { it.second == "claude-fable-5-high" })
+        assertTrue(merged.any { it.second == "claude-fable-5-thinking-high" })
     }
 }
