@@ -126,6 +126,7 @@ import dev.ccpocket.app.ui.fleet.fleetAttention
 import dev.ccpocket.app.resources.*
 import dev.ccpocket.app.theme.LocalFontScale
 import dev.ccpocket.app.theme.PocketTheme
+import dev.ccpocket.app.theme.ThemeMode
 import dev.ccpocket.app.theme.Tok
 import dev.ccpocket.app.voice.openAppSettings
 import dev.ccpocket.protocol.AgentKind
@@ -175,9 +176,8 @@ fun App(scope: CoroutineScope) {
     dev.ccpocket.app.SystemBackHandler(enabled = fleetOpen || inboxOpen) {
         if (inboxOpen) inboxOpen = false else fleetOpen = false
     }
-    // appearance (issue #63): PocketTheme resolves the persisted mode against the OS, so a SYSTEM pick tracks a
-    // live system flip while the app is foregrounded and LIGHT/DARK force it.
-    PocketTheme(mode = repo.themeMode.value, fontScale = repo.fontScale.value) {
+    // Mobile always follows the phone's current light/dark appearance. Desktop keeps its own override.
+    PocketTheme(mode = ThemeMode.SYSTEM, fontScale = repo.fontScale.value) {
         Surface(Modifier.fillMaxSize(), color = Tok.base) {
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars).imePadding()) {
                 // pushes content down instead of overlaying the header; steady while retrying (no flicker)
