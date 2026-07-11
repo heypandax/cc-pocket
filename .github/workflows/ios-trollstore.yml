@@ -70,51 +70,34 @@ jobs:
             archive | tee "$RUNNER_TEMP/archive.log"
           grep -q "ARCHIVE SUCCEEDED" "$RUNNER_TEMP/archive.log"
 
-      - name: Export unsigned IPA
-        run: |
-          set -o pipefail
-          xcodebuild -exportArchive \
-            -archivePath "$RUNNER_TEMP/CCPocket.xcarchive" \
-            -exportOptionsPlist iosApp/ExportOptions-trollstore.plist \
-            -exportPath "$RUNNER_TEMP/export" \
-            CODE_SIGNING_ALLOWED=NO | tee "$RUNNER_TEMP/export.log"
-          grep -q "EXPORT SUCCEEDED" "$RUNNER_TEMP/export.log"
-
-      - name: Package IPA for TrollStore
+      - name: Package unsigned IPA from archive (no exportArchive)
         id: package
         env:
           VERSION: ${{ steps.stamp.outputs.version }}
           BUILD: ${{ github.run_number }}
         run: |
-          # xcodebuild exportArchive may produce a .ipa or an .app bundle
-          IPA_DIR="$RUNNER_TEMP/export"
-          IPA_OUT="cc-pocket-${VERSION}-build${BUILD}-trollstore.ipa"
+          # Skip xcodebuild -exportArchive entirely — it requires a Team ID even for
+          # ad-hoc manual signing. Instead, pull the unsigned .app straight out of the
+          # .xcarchive and hand-pack it into a classic Payload IPA.
+          ARCHIVE="$RUNNER_TEMP/CCPocket.xcarchive"
+          APP="$ARCHIVE/Products/Applications/cc-pocket.app"
 
-          # If export produced an .app, manually package it into .ipa
-          if [ -d "$IPA_DIR" ] && [ ! -f "$IPA_DIR"/*.ipa 2>/dev/null ]; then
-            # Create Payload structure (the classic unsigned IPA format)
-            mkdir -p Payload
-            APP=$(find "$IPA_DIR" -name "*.app" -maxdepth 1 | head -1)
-            if [ -z "$APP" ]; then
-              # maybe it's nested
-              APP=$(find "$IPA_DIR" -name "*.app" | head -1)
-            fi
-            if [ -n "$APP" ]; then
-              cp -R "$APP" Payload/
-              zip -r "$IPA_OUT" Payload
-              rm -rf Payload
-            else
-              echo "::error::No .app bundle found in export output"
-              ls -la "$IPA_DIR"
-              exit 1
-            fi
-          elif ls "$IPA_DIR"/*.ipa 1>/dev/null 2>&1; then
-            cp "$IPA_DIR"/*.ipa "$IPA_OUT"
-          else
-            echo "::error::No IPA or .app found in export path"
-            ls -laR "$IPA_DIR"
+          if [ ! -d "$APP" ]; then
+            echo "::error::No .app in archive at $APP"
+            ls -laR "$ARCHIVE/Products/"
             exit 1
           fi
+
+          # Strip any leftover code signatures so TrollStore can inject its own.
+          find "$APP" -type d -name "_CodeSignature" -exec rm -rf {} + 2>/dev/null || true
+          rm -f "$APP/embedded.mobileprovision" 2>/dev/null || true
+
+          # Classic unsigned IPA: Payload/<AppName>.app + zip
+          IPA_OUT="cc-pocket-${VERSION}-build${BUILD}-trollstore.ipa"
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -r "$IPA_OUT" Payload
+          rm -rf Payload
 
           echo "ipa_path=$IPA_OUT" >> "$GITHUB_OUTPUT"
           echo "IPA: $IPA_OUT ($(du -h "$IPA_OUT" | cut -f1))"
