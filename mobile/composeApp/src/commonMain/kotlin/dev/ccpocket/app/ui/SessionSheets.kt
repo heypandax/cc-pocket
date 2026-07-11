@@ -4,12 +4,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -204,8 +207,15 @@ private enum class QaSub { MAIN, MODEL, EFFORT }
 fun QuickActionsSheet(repo: PocketRepository, onTerminal: () -> Unit, onMode: () -> Unit, onFiles: () -> Unit, onDismiss: () -> Unit) {
     var sub by remember { mutableStateOf(QaSub.MAIN) }
     var clearArmed by remember { mutableStateOf(false) }
+    val modelScroll = rememberScrollState()
     PocketSheet(onDismiss) {
-        Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 14.dp, top = 4.dp)) {
+        Column(
+            Modifier.padding(horizontal = 16.dp).padding(bottom = 14.dp, top = 4.dp)
+                .then(
+                    if (sub == QaSub.MODEL) Modifier.fillMaxHeight(0.88f).verticalScroll(modelScroll)
+                    else Modifier,
+                ),
+        ) {
             when (sub) {
                 QaSub.MAIN -> {
                     Text(stringResource(Res.string.quick_actions_title), color = Tok.tx, fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -333,8 +343,19 @@ private fun ModelPicker(repo: PocketRepository, onBack: () -> Unit, onDone: () -
     val visibleChoices = choices.filter {
         query.isBlank() || it.name.contains(query.trim(), true) || it.id.contains(query.trim(), true)
     }
-    val sections = visibleChoices.groupBy { if (it.pick.equals(selected, true)) "Current" else modelFamily(it.id) }
-        .toList().sortedBy { (name, _) -> modelFamilyRank(name) }
+    val sections = if (agent == AgentKind.CURSOR) {
+        // Cursor already returns a deliberate account-specific order. Preserve it exactly; only lift the active
+        // row into a small Current section so it remains obvious, then show every other row in provider order.
+        val current = visibleChoices.filter { it.pick.equals(selected, true) }
+        buildList {
+            if (current.isNotEmpty()) add("Current" to current)
+            val rest = visibleChoices.filterNot { it.pick.equals(selected, true) }
+            if (rest.isNotEmpty()) add("Cursor models" to rest)
+        }
+    } else {
+        visibleChoices.groupBy { if (it.pick.equals(selected, true)) "Current" else modelFamily(it.id) }
+            .toList().sortedBy { (name, _) -> modelFamilyRank(name) }
+    }
     // close once the daemon confirms the switch (model re-announced through SessionLive)…
     LaunchedEffect(switchingTo, repo.model.value) {
         val target = switchingTo ?: return@LaunchedEffect
