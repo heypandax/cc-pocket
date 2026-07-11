@@ -278,6 +278,10 @@ class Conversation(
         // first turn. So announce the session as live now (we own convoId + workdir), and replay the resumed
         // transcript up front; once the first prompt spawns the agent, the pump re-emits SessionLive with the real
         // sessionId.
+        // Acknowledge the open synchronously. Background model discovery/transcript scans can be delayed by a
+        // slow provider CLI (notably Cursor --list-models); the phone must still receive its convoId before its
+        // open watchdog expires, otherwise it cannot send the first prompt that starts this lazy conversation.
+        sink.emit(live(resumeId))
         scope.launch {
             // Seed model + usage from the resumed transcript so the header shows the real model/window and the
             // usage statusline on open — before the first new turn's init lands (a headless claude is silent
@@ -300,6 +304,7 @@ class Conversation(
             if (resumeId != null) {
                 failedTurnStreak = runCatching { backend.resumeFailedTurnStreak(workdir.toString(), resumeId) }.getOrDefault(0)
             }
+            // Re-announce after enrichment so model/context badges pick up transcript/config values.
             sink.emit(live(resumeId))
             if (resumeId != null) {
                 val history = backend.replayHistory(workdir.toString(), resumeId)
