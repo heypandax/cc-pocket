@@ -27,6 +27,7 @@ import dev.ccpocket.protocol.Decision
 import dev.ccpocket.protocol.DirectoryEntry
 import dev.ccpocket.protocol.PermissionAsk
 import dev.ccpocket.protocol.PermissionMode
+import dev.ccpocket.protocol.isQuestion
 import dev.ccpocket.protocol.update.ReleaseClient
 import dev.ccpocket.protocol.update.ReleaseVersions
 import kotlinx.coroutines.CoroutineScope
@@ -253,6 +254,7 @@ class RepoDesktopModel(
                     id = ask.askId, accountId = d.accountId, machine = d.displayName(), os = d.dkOs(),
                     tool = ask.tool, preview = ask.diff ?: ask.inputPreview,
                     seconds = null, live = true, // no invented deadline — the inline card carries the real one
+                    question = ask.isQuestion, // tray hides Deny/Allow for these (bare ALLOW = "did not answer")
                 )
             }
         }
