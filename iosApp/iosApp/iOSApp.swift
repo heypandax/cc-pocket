@@ -58,15 +58,27 @@ struct iOSApp: App {
     init() {
         // Firebase stays in Swift (the only place that imports it); the shared Kotlin Telemetry
         // calls back through the sink registered below — mirroring cc-dashboard's single seam.
-        FirebaseApp.configure()
-        Analytics.setAnalyticsCollectionEnabled(true) // plist ships IS_ANALYTICS_ENABLED=false; opt in here
+        //
+        // TrollStore / unsigned builds ship with the placeholder GoogleService-Info.plist
+        // (API_KEY=AIzaPlaceholderKey…). FirebaseApp.configure() throws NSException on that.
+        // Skip Firebase (no push / analytics / crashlytics) when the config is a placeholder
+        // so the app stays usable.
+        let firebaseAvailable = iOSApp.firebaseIsConfigured()
+        if firebaseAvailable {
+            FirebaseApp.configure()
+            Analytics.setAnalyticsCollectionEnabled(true)
+        } else {
+            print("[cc-pocket] Firebase skipped — placeholder GoogleService-Info.plist detected")
+        }
         MainViewControllerKt.setTelemetrySink(
             onEvent: { event, params in
-                Analytics.logEvent(event, parameters: params)
+                if firebaseAvailable { Analytics.logEvent(event, parameters: params) }
             },
             onError: { message, phase in
-                let info: [String: Any] = [NSLocalizedDescriptionKey: message, "phase": phase ?? ""]
-                Crashlytics.crashlytics().record(error: NSError(domain: "ccpocket", code: 0, userInfo: info))
+                if firebaseAvailable {
+                    let info: [String: Any] = [NSLocalizedDescriptionKey: message, "phase": phase ?? ""]
+                    Crashlytics.crashlytics().record(error: NSError(domain: "ccpocket", code: 0, userInfo: info))
+                }
             }
         )
         // Push registration lives in Swift (UIKit symbols aren't uniform across Kotlin/Native targets).
@@ -78,6 +90,21 @@ struct iOSApp: App {
                 DispatchQueue.main.async { UIApplication.shared.registerForRemoteNotifications() }
             }
         }
+    }
+
+    /// Returns true when GoogleService-Info.plist contains a real API key (not the template placeholder).
+    private static func firebaseIsConfigured() -> Bool {
+        guard let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+              let plist = NSDictionary(contentsOfFile: path) else {
+            return false
+        }
+        guard let apiKey = plist["API_KEY"] as? String,
+              !apiKey.isEmpty,
+              !apiKey.contains("Placeholder"),
+              apiKey != "AIzaPlaceholderKeyForLocalDevBuildsOnly0000" else {
+            return false
+        }
+        return true
     }
 
     var body: some Scene {
