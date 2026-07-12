@@ -153,6 +153,8 @@ data class DirectoryEntry(
     val lastModified: Long = 0,
     /** Title of the newest session across all agent backends; project cards use it above the path. */
     val latestSessionTitle: String? = null,
+    /** Newest conversations shown inline on the project card (bounded by the daemon). */
+    val recentSessions: List<SessionSummary> = emptyList(),
     /** a claude process is alive in this dir (open session — may be idle, waiting for input). */
     val open: Boolean = false,
     /** actively executing right now: a process here that wrote output very recently. */

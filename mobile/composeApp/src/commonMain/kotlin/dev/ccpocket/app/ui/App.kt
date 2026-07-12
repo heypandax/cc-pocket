@@ -93,6 +93,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.focus.FocusRequester
@@ -747,11 +748,91 @@ private fun ProjectCell(repo: PocketRepository, e: DirectoryEntry, showPath: Boo
         // the 历史 badge lists this project's sessions (issue #49) — the row itself keeps auto-resuming
         LiveProjectCell(e, pinned, onLongPress, onBrowse = { repo.listSessions(e.path) }) { repo.openProject(e) }
     }
+    else if (e.recentSessions.isNotEmpty()) ProjectConversationCard(repo, e, pinned, onLongPress)
     else DirCell(
         e.latestSessionTitle?.takeIf { it.isNotBlank() } ?: e.name.ifBlank { e.path },
-        if (showPath) tilde(e.path) else null,
-        indent = false, pinned = pinned, onLongPress = onLongPress,
+        if (showPath) tilde(e.path) else null, indent = false, pinned = pinned, onLongPress = onLongPress,
     ) { repo.listSessions(e.path) }
+}
+
+/** Happy-inspired project group: deterministic avatar + directory header, with recent conversations inside
+ * one clipped bordered card. Implemented in Compose and cc-pocket tokens rather than copying RN styling. */
+@Composable
+private fun ProjectConversationCard(
+    repo: PocketRepository,
+    e: DirectoryEntry,
+    pinned: Boolean,
+    onLongPress: (() -> Unit)?,
+) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+        Row(
+            Modifier.fillMaxWidth().combinedClickable(onClick = { repo.listSessions(e.path) }, onLongClick = onLongPress)
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ProjectAvatar(e.path, e.recentSessions.firstOrNull()?.agent)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(e.name.ifBlank { folderName(e.path) }, color = Tok.tx, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                TailPathText(e.path, color = Tok.muted, fontSize = 10.5.sp, modifier = Modifier.padding(top = 1.dp))
+            }
+            if (pinned) { PinGlyph(); Spacer(Modifier.width(5.dp)) }
+            IconButton({ repo.openSession(e.path) }, modifier = Modifier.size(34.dp)) {
+                Icon(Icons.Rounded.Add, "New session", tint = Tok.tx2, modifier = Modifier.size(18.dp))
+            }
+        }
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Tok.surface)
+                .border(1.dp, Tok.hair, RoundedCornerShape(12.dp)),
+        ) {
+            e.recentSessions.forEachIndexed { index, session ->
+                Row(
+                    Modifier.fillMaxWidth().clickable {
+                        repo.openSession(e.path, session.sessionId, title = session.title, agent = session.agent ?: AgentKind.CLAUDE)
+                    }.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val active = session.live || session.busy
+                    Box(Modifier.width(15.dp), contentAlignment = Alignment.CenterStart) {
+                        if (active) PulseDot(if (session.busy) Tok.warn else Tok.ok, 7.dp)
+                        else Box(Modifier.size(6.dp).clip(CircleShape).background(Tok.muted.copy(alpha = 0.55f)))
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(session.title, color = if (active) Tok.tx else Tok.tx2, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            if (active) stringResource(Res.string.running) else relativeTime(session.lastModified),
+                            color = if (active) Tok.ok else Tok.muted, fontSize = 10.5.sp,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                    AgentBadge(session.agent, gap = 6.dp)
+                    Icon(Icons.Rounded.KeyboardArrowRight, null, tint = Tok.muted, modifier = Modifier.size(16.dp))
+                }
+                if (index < e.recentSessions.lastIndex) Box(Modifier.fillMaxWidth().padding(start = 29.dp).height(1.dp).background(Tok.hair))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProjectAvatar(seed: String, agent: AgentKind?) {
+    val colors = listOf(Tok.accent, Tok.codex, Tok.info, Tok.ok, Tok.warn)
+    val index = (seed.hashCode().toLong().let { if (it < 0) -it else it } % colors.size).toInt()
+    val a = colors[index]
+    val b = colors[(index + 2) % colors.size]
+    Box(
+        Modifier.size(34.dp).clip(CircleShape).background(Brush.linearGradient(listOf(a, b))),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(folderName(seed).take(1).uppercase(), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Box(
+            Modifier.align(Alignment.BottomEnd).size(12.dp).clip(CircleShape).background(Tok.surface)
+                .border(1.dp, Tok.hair, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(when (agent) { AgentKind.CODEX -> "O"; AgentKind.CURSOR -> "C"; else -> "A" }, color = Tok.tx2, fontSize = 7.sp, fontWeight = FontWeight.Bold)
+        }
+    }
 }
 
 /** Long-press a project → pin it to the top, or unpin it. Small sheet, mirrors the app's other actions. */

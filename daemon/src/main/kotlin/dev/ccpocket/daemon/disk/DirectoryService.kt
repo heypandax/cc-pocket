@@ -4,6 +4,7 @@ import dev.ccpocket.protocol.ActiveSession
 import dev.ccpocket.protocol.AgentKind
 import dev.ccpocket.protocol.DirectoryEntry
 import dev.ccpocket.protocol.PathEntry
+import dev.ccpocket.protocol.SessionSummary
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -64,7 +65,7 @@ class DirectoryService {
                     ?: runCatching { dev.ccpocket.daemon.cursor.CursorSessionScanner.scan(cwd).firstOrNull()?.title }.getOrNull()
             }
         }
-        if (other.isEmpty()) return claude
+        if (other.isEmpty()) return withRecentSessions(claude, liveNorm)
         val known = claude.mapTo(HashSet()) { ProjectPaths.normCwd(it.path) }
         val otherByNorm = other.entries.groupBy({ ProjectPaths.normCwd(it.key) }, { it.value })
         val otherOnly = other.entries
@@ -95,7 +96,30 @@ class DirectoryService {
             val otherM = otherByNorm[ProjectPaths.normCwd(e.path)]?.max() ?: 0L
             if (otherM > e.lastModified) e.copy(lastModified = otherM, latestSessionTitle = otherTitle(e.path)) else e
         }
-        return (merged + otherOnly).sortedByDescending { it.lastModified }
+        return withRecentSessions((merged + otherOnly).sortedByDescending { it.lastModified }, liveNorm)
+    }
+
+    /** Happy-style project cards need a few conversations inline. Build them once with the directory response
+     * instead of making the phone issue one ListSessions request per project (an N+1 refresh storm). */
+    private fun withRecentSessions(
+        entries: List<DirectoryEntry>,
+        liveNorm: Map<String, List<ActiveSession>>,
+    ): List<DirectoryEntry> = entries.map { entry ->
+        val cwd = entry.path
+        val all = buildList {
+            addAll(runCatching { TranscriptScanner.scan(ProjectPaths.dirFor(cwd)) }.getOrDefault(emptyList()))
+            addAll(runCatching { dev.ccpocket.daemon.codex.CodexTranscriptScanner.scan(cwd) }.getOrDefault(emptyList()))
+            addAll(runCatching { dev.ccpocket.daemon.cursor.CursorSessionScanner.scan(cwd) }.getOrDefault(emptyList()))
+        }
+        val active = liveNorm[ProjectPaths.normCwd(cwd)].orEmpty()
+        val recent = all.distinctBy { (it.agent ?: AgentKind.CLAUDE) to it.sessionId }
+            .sortedByDescending { it.lastModified }
+            .take(4)
+            .map { summary ->
+                val live = active.firstOrNull { it.sessionId == summary.sessionId && it.agent == (summary.agent ?: AgentKind.CLAUDE) }
+                if (live == null) summary else summary.copy(live = true, busy = live.busy)
+            }
+        entry.copy(recentSessions = recent)
     }
 
     /** Directories with Claude history, newest-first, deduped per cwd. [liveNorm] = daemon conversations
