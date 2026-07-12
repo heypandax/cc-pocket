@@ -323,6 +323,8 @@ data class CursorModels(val models: List<AgentModel> = emptyList(), val error: S
  * breakdown (desc by tokens). Cost comes from the transcript's own costUSD (null when none is recorded).
  * [hours] is the 24 hourly buckets (00:00→23:00) of TODAY, filled only for the Today range by a newer daemon;
  * null from an older daemon (the phone then hides the Today trend area) and null for the 7d/30d ranges.
+ * [codexLimits] is the newest Codex `rate_limits` snapshot from local rollouts (independent of [days]); null
+ * when Codex has never reported limits on this machine or the daemon predates the field.
  */
 @Serializable
 @SerialName("pocket/usage")
@@ -334,6 +336,7 @@ data class Usage(
     val cacheHitPct: Int? = null,
     val costUsdToday: Double? = null,
     val hours: List<UsageDay>? = null,
+    val codexLimits: CodexLimits? = null,
 ) : ToPhone
 
 /**

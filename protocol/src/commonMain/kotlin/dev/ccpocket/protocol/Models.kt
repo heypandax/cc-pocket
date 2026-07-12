@@ -210,6 +210,36 @@ data class UsageDay(val label: String, val tokens: Long, val date: String? = nul
 @Serializable
 data class UsageModel(val model: String, val tokens: Long, val agent: AgentKind = AgentKind.CLAUDE)
 
+/** One Codex allowance window (5-hour primary or weekly secondary) from a rollout `token_count` snapshot. */
+@Serializable
+data class CodexLimitWindow(
+    val usedPercent: Double,
+    val windowMinutes: Int,
+    val resetsAt: Long, // unix epoch seconds
+)
+
+/** Optional ChatGPT credits balance bundled with Codex rate limits. */
+@Serializable
+data class CodexCredits(
+    val hasCredits: Boolean = false,
+    val unlimited: Boolean = false,
+    val balance: String? = null,
+)
+
+/**
+ * Latest Codex plan limits scraped from `~/.codex/sessions` rollouts — mirrors the official usage dashboard
+ * (5-hour + weekly windows, plan badge, credits). Null when no Codex session has reported limits yet.
+ */
+@Serializable
+data class CodexLimits(
+    val planType: String? = null,
+    val primary: CodexLimitWindow? = null,
+    val secondary: CodexLimitWindow? = null,
+    val credits: CodexCredits? = null,
+    val rateLimitReached: Boolean = false,
+    val capturedAt: Long? = null, // millis when this snapshot was read from disk
+)
+
 /** What kind of background work a [BackgroundJob] is. */
 @Serializable
 enum class JobKind {

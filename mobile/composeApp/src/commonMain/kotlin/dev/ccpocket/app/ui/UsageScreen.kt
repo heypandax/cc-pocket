@@ -46,6 +46,16 @@ import dev.ccpocket.app.data.PocketRepository
 import dev.ccpocket.app.resources.Res
 import dev.ccpocket.app.resources.usage_by_model
 import dev.ccpocket.app.resources.usage_cache
+import dev.ccpocket.app.resources.usage_codex_credits
+import dev.ccpocket.app.resources.usage_codex_credits_unlimited
+import dev.ccpocket.app.resources.usage_codex_limits
+import dev.ccpocket.app.resources.usage_codex_plan
+import dev.ccpocket.app.resources.usage_codex_primary
+import dev.ccpocket.app.resources.usage_codex_rate_limited
+import dev.ccpocket.app.resources.usage_codex_resets_in
+import dev.ccpocket.app.resources.usage_codex_secondary
+import dev.ccpocket.app.resources.usage_codex_snapshot
+import dev.ccpocket.app.resources.usage_codex_used
 import dev.ccpocket.app.resources.usage_cost
 import dev.ccpocket.app.resources.usage_empty
 import dev.ccpocket.app.resources.usage_empty_hint
@@ -66,6 +76,8 @@ import dev.ccpocket.app.resources.usage_trend
 import dev.ccpocket.app.resources.usage_vs_yesterday
 import dev.ccpocket.app.theme.Tok
 import dev.ccpocket.protocol.AgentKind
+import dev.ccpocket.protocol.CodexLimitWindow
+import dev.ccpocket.protocol.CodexLimits
 import dev.ccpocket.protocol.Usage
 import dev.ccpocket.protocol.UsageDay
 import dev.ccpocket.protocol.UsageModel
@@ -124,7 +136,7 @@ fun UsageScreen(repo: PocketRepository, onBack: () -> Unit) {
         }
 
         when {
-            u != null && (u.tokensToday > 0 || u.models.isNotEmpty() || u.days.any { it.tokens > 0 }) -> Populated(u)
+            u != null && (u.tokensToday > 0 || u.models.isNotEmpty() || u.days.any { it.tokens > 0 } || u.codexLimits != null) -> Populated(u)
             u != null -> Empty(u.days.size)
             !connected || timedOut -> Offline()
             else -> Loading()
@@ -156,7 +168,12 @@ private fun Populated(u: Usage) {
 
         HeroCard(windowTokens, scope, periodCaption(u), deltaPct, zeroToday)
 
-        // The three metrics the daemon only knows for TODAY. Kept, but each carries "· today" so its baseline
+        u.codexLimits?.let { limits ->
+            Spacer(Modifier.height(10.dp))
+            CodexLimitsCard(limits)
+        }
+
+        // The three metrics the daemon only knows for TODAY.
         // is unmistakable even while the hero above reads a wider window. A missing sub-metric shows a labeled
         // "not available yet" placeholder — never a bare "—".
         Spacer(Modifier.height(10.dp))
@@ -189,6 +206,79 @@ private fun Populated(u: Usage) {
         Spacer(Modifier.height(20.dp))
     }
 }
+
+@Composable
+private fun CodexLimitsCard(limits: CodexLimits) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(14.dp))
+            .padding(horizontal = 16.dp, vertical = 15.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(Res.string.usage_codex_limits), color = Tok.tx, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            limits.planType?.takeIf { it.isNotBlank() }?.let { plan ->
+                Text(
+                    stringResource(Res.string.usage_codex_plan, plan.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }),
+                    color = Tok.codex,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(Tok.codex.copy(alpha = 0.12f)).padding(horizontal = 8.dp, vertical = 3.dp),
+                )
+            }
+        }
+        limits.primary?.let { CodexLimitRow(stringResource(Res.string.usage_codex_primary), it) }
+        limits.secondary?.let { CodexLimitRow(stringResource(Res.string.usage_codex_secondary), it) }
+        limits.credits?.takeIf { it.hasCredits || it.unlimited || !it.balance.isNullOrBlank() && it.balance != "0" }?.let { c ->
+            val text = when {
+                c.unlimited -> stringResource(Res.string.usage_codex_credits_unlimited)
+                c.hasCredits && !c.balance.isNullOrBlank() -> stringResource(Res.string.usage_codex_credits, c.balance!!)
+                else -> null
+            }
+            text?.let { Text(it, color = Tok.tx2, fontSize = 12.sp) }
+        }
+        if (limits.rateLimitReached) {
+            Text(stringResource(Res.string.usage_codex_rate_limited), color = Tok.warn, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        }
+        limits.capturedAt?.let { at ->
+            Text(stringResource(Res.string.usage_codex_snapshot, relativeTime(at)), color = Tok.muted, fontSize = 11.sp)
+        }
+    }
+}
+
+@Composable
+private fun CodexLimitRow(label: String, window: CodexLimitWindow) {
+    val used = window.usedPercent.coerceIn(0.0, 100.0)
+    val pct = used.roundToInt()
+    val barColor = when {
+        used >= 100.0 -> Tok.danger
+        used >= 80.0 -> Tok.warn
+        else -> Tok.codex
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, color = Tok.tx2, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            Text(stringResource(Res.string.usage_codex_used, pct), color = Tok.tx, fontFamily = FontFamily.Monospace, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        }
+        Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(999.dp)).background(Tok.raised)) {
+            Box(Modifier.fillMaxWidth((used / 100.0).toFloat().coerceIn(0.03f, 1f)).height(6.dp).clip(RoundedCornerShape(999.dp)).background(barColor))
+        }
+        Text(stringResource(Res.string.usage_codex_resets_in, resetsInCaption(window.resetsAt)), color = Tok.muted, fontSize = 11.sp)
+    }
+}
+
+/** Future reset time from a unix-seconds epoch — "2h 15m", "45m", or "soon". */
+private fun resetsInCaption(resetsAtSec: Long): String {
+    val remain = (resetsAtSec - dev.ccpocket.app.epochMillis() / 1000).coerceAtLeast(0)
+    val hours = remain / 3600
+    val mins = (remain % 3600) / 60
+    return when {
+        hours > 0 -> "${hours}h ${mins}m"
+        mins > 0 -> "${mins}m"
+        else -> "soon"
+    }
+}
+
+private fun Double.roundToInt(): Int = kotlin.math.round(this).toInt()
 
 /**
  * The primary card: the selected range's total tokens, big and mono. The [scope] tag ("today"/"7d"/"30d")
