@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -95,8 +97,10 @@ fun QuestionCard(
     val allAnswered = questions.indices.all { answerOf(it) != null }
     val multiQ = questions.size > 1
     val shape = RoundedCornerShape(16.dp)
-    Box(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val cardMaxHeight = maxHeight * 0.62f
+        Box(
+        Modifier.fillMaxWidth().heightIn(max = cardMaxHeight).padding(horizontal = 12.dp, vertical = 6.dp)
             .shadow(14.dp, shape).clip(shape).background(Tok.raised).border(1.dp, Tok.hair, shape),
     ) {
         // the quiet arrival cue: a centered terracotta top-hairline that fades at both ends
@@ -129,6 +133,7 @@ fun QuestionCard(
                     }
                 }
             }
+            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
             if (freeform) {
                 var focused by remember { mutableStateOf(false) }
                 val ffShape = RoundedCornerShape(12.dp)
@@ -180,6 +185,7 @@ fun QuestionCard(
                 }
                 ReplyLink(back = false) { freeform = true }
             }
+            }
             Row(Modifier.padding(top = 16.dp).fillMaxWidth().heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     stringResource(Res.string.question_skip), color = Tok.muted, fontSize = 14.5.sp, fontWeight = FontWeight.Medium,
@@ -206,6 +212,7 @@ fun QuestionCard(
                 }
             }
         }
+    }
     }
 }
 

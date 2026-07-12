@@ -27,11 +27,11 @@ class PermissionBridge(
     private val emit: suspend (Frame) -> Unit,
     private val allowRules: MutableSet<String>, // session "Always allow" scopes, owned by the Conversation
     private val respond: suspend (askId: String, allow: Boolean, remember: Boolean, originalInput: JsonObject?, updatedInput: String?, denyMessage: String?) -> Unit,
-    private val verdictTimeoutMs: Long = 30_000,
+    private val verdictTimeoutMs: Long = ApprovalTimeout.ms,
     // AskUserQuestion asks wait much longer: claude itself waits indefinitely for answers, and a person
     // reading 1–4 questions needs more than the 30s tool-approval window. Withdrawals still clean up
     // via onCancel (control_cancel_request), and closing the session cancels everything.
-    private val questionTimeoutMs: Long = 600_000,
+    private val questionTimeoutMs: Long = ApprovalTimeout.ms,
 ) {
     // [ask] is the exact PermissionAsk frame we emitted for this request — kept so a phone that reattaches
     // after missing the live frame (backgrounded during plan mode's long post-`result` phase, issue #55)
@@ -59,7 +59,13 @@ class PermissionBridge(
         val askId = ev.requestId
         val timeout = scope.launch {
             delay(if (isQuestion) questionTimeoutMs else verdictTimeoutMs)
-            if (pending.remove(askId) != null) respond(askId, false, false, null, null, "timed out")
+            if (pending.remove(askId) != null) {
+                emit(AskWithdrawn(convoId, askId))
+                respond(
+                    askId, false, false, null, null,
+                    "Approval timed out because the user did not respond; this was not a user rejection.",
+                )
+            }
         }
         val ask = PermissionAsk(
             convoId, askId, ev.toolName, meta.preview, mode, meta.title, meta.rule, meta.danger, meta.dangerNote, ev.diff,
