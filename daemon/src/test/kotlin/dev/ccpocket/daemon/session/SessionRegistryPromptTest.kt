@@ -9,6 +9,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.FileTime
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -21,6 +22,66 @@ class SessionRegistryPromptTest {
     fun prompt_for_unknown_convo_reports_miss() = runBlocking {
         val registry = SessionRegistry(CoroutineScope(Dispatchers.Default), backends = emptyMap())
         assertFalse(registry.sendPrompt(SendPrompt(convoId = "reaped-long-ago", text = "hello?")))
+    }
+}
+
+class SessionRegistryDeleteTest {
+
+    /** Delete dispatches to the session's backend and reports success as null. */
+    @Test
+    fun delete_reaches_the_backend_and_reports_null_on_success() = runBlocking {
+        var deleted: Pair<String, String>? = null
+        val backend = object : dev.ccpocket.daemon.agent.AgentBackend by FakeBackend() {
+            override fun deleteSession(workdir: String, sessionId: String): Boolean {
+                deleted = workdir to sessionId
+                return true
+            }
+        }
+        val registry = SessionRegistry(
+            CoroutineScope(Dispatchers.Default),
+            backends = mapOf(dev.ccpocket.protocol.AgentKind.CLAUDE to dev.ccpocket.daemon.agent.AgentBackendFactory { backend }),
+        )
+        assertEquals(null, registry.deleteSession(dev.ccpocket.protocol.AgentKind.CLAUDE, "/w/api", "sid-1"))
+        assertEquals("/w/api" to "sid-1", deleted)
+    }
+
+    @Test
+    fun delete_for_missing_history_reports_not_found() = runBlocking {
+        val registry = SessionRegistry(
+            CoroutineScope(Dispatchers.Default),
+            backends = mapOf(dev.ccpocket.protocol.AgentKind.CLAUDE to dev.ccpocket.daemon.agent.AgentBackendFactory { FakeBackend() }),
+        )
+        assertEquals("not_found", registry.deleteSession(dev.ccpocket.protocol.AgentKind.CLAUDE, "/w/api", "sid-1"))
+    }
+
+    @Test
+    fun delete_for_unregistered_agent_reports_unavailable() = runBlocking {
+        val registry = SessionRegistry(CoroutineScope(Dispatchers.Default), backends = emptyMap())
+        assertEquals("agent_unavailable", registry.deleteSession(dev.ccpocket.protocol.AgentKind.CURSOR, "/w/api", "sid-1"))
+    }
+
+    /** Minimal inert backend: only the members delete-path tests touch are real. */
+    private open class FakeBackend : dev.ccpocket.daemon.agent.AgentBackend {
+        override val kind = dev.ccpocket.protocol.AgentKind.CLAUDE
+        override fun processBuilder(spec: dev.ccpocket.daemon.agent.AgentSpec) = ProcessBuilder("true")
+        override suspend fun attach(io: dev.ccpocket.daemon.agent.AgentIo, spec: dev.ccpocket.daemon.agent.AgentSpec) {}
+        override suspend fun parse(line: String): List<dev.ccpocket.daemon.agent.AgentEvent> = emptyList()
+        override suspend fun sendPrompt(text: String, images: List<dev.ccpocket.protocol.ImageData>) {}
+        override suspend fun interrupt() {}
+        override suspend fun respondPermission(
+            askId: String,
+            allow: Boolean,
+            remember: Boolean,
+            originalInput: kotlinx.serialization.json.JsonObject?,
+            updatedInput: String?,
+            denyMessage: String?,
+        ) {}
+        override fun applySettings(mode: dev.ccpocket.protocol.PermissionMode?, model: String?, effort: String?) = false
+        override suspend fun onProcessEnded(sessionId: String?) {}
+        override fun transcriptDir(workdir: String): Path = Path.of(".")
+        override fun listSessions(workdir: String): List<dev.ccpocket.protocol.SessionSummary> = emptyList()
+        override fun replayHistory(workdir: String, sessionId: String): List<dev.ccpocket.protocol.HistoryMessage> = emptyList()
+        override fun resumeContextTokens(workdir: String, sessionId: String): Long? = null
     }
 }
 

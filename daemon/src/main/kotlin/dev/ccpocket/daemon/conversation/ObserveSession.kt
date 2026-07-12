@@ -32,6 +32,9 @@ class ObserveSession(
 ) {
     private val scope = CoroutineScope(parentScope.coroutineContext + SupervisorJob() + CoroutineName("observe-$convoId"))
 
+    /** Whether this observer is tailing [sid]'s transcript — deletion must not pull the file out from under it. */
+    fun isFor(sid: String): Boolean = sessionId == sid
+
     fun start() {
         scope.launch {
             runCatching {

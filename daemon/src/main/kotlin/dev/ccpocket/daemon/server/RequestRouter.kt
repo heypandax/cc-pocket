@@ -18,6 +18,7 @@ import dev.ccpocket.protocol.AuthLogout
 import dev.ccpocket.protocol.CancelTurn
 import dev.ccpocket.protocol.ClearAllowRule
 import dev.ccpocket.protocol.CloseSession
+import dev.ccpocket.protocol.DeleteSession
 import dev.ccpocket.protocol.Directories
 import dev.ccpocket.protocol.FetchAuthStatus
 import dev.ccpocket.protocol.FetchUsage
@@ -147,6 +148,27 @@ class RequestRouter(
 
             // fan-out: only a REAL close (last attached client) drops the quick-terminal state with it
             is CloseSession -> { if (registry.close(frame.convoId, sink, frame.force)) shell.forget(frame.convoId) }
+
+            // history deletion: refuse ids with path separators BEFORE any backend touches the filesystem,
+            // then reply with the refreshed list so the phone reconciles in one round-trip
+            is DeleteSession -> scope.launch {
+                val sid = frame.sessionId
+                val err = when {
+                    sid.isBlank() || sid.contains('/') || sid.contains('\\') || sid.contains("..") -> "bad_session_id"
+                    else -> registry.deleteSession(frame.agent, frame.workdir, sid)
+                }
+                if (err != null) {
+                    val message = when (err) {
+                        "session_live" -> "session is running — close it before deleting"
+                        "not_found" -> "no on-disk history found for this session"
+                        else -> "cannot delete session ($err)"
+                    }
+                    sink.emit(PocketError(err, message))
+                }
+                val busy = registry.busySessionIds()
+                val items = registry.listSessions(frame.workdir).map { if (it.sessionId in busy) it.copy(busy = true) else it }
+                sink.emit(Sessions(frame.workdir, items))
+            }
             is CancelTurn -> registry.cancelTurn(frame)
             // task panel "stop" (issue #80): interrupt the agent's work for this job + settle its row killed
             is StopBackgroundJob -> registry.stopBackgroundJob(frame)

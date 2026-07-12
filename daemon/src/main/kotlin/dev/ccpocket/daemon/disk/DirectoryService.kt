@@ -51,65 +51,62 @@ class DirectoryService {
         // normCwd-keyed so a tilde/absolute mismatch between OpenSession's workdir and a transcript's cwd still matches
         val liveNorm = liveByCwd.entries.groupBy({ ProjectPaths.normCwd(it.key) }, { it.value }).mapValues { (_, v) -> v.flatten() }
         val claude = claudeDirectories(busyCwds, liveNorm)
-        val codex = runCatching { dev.ccpocket.daemon.codex.CodexTranscriptScanner.cwdsByNewest() }.getOrDefault(emptyMap())
-        val cursor = runCatching { dev.ccpocket.daemon.cursor.CursorSessionScanner.cwdsByNewest() }.getOrDefault(emptyMap())
-        val other = (codex.keys + cursor.keys).associateWith { cwd -> maxOf(codex[cwd] ?: 0L, cursor[cwd] ?: 0L) }
-        fun otherTitle(cwd: String): String? {
-            val codexNewest = codex.entries.filter { ProjectPaths.normCwd(it.key) == ProjectPaths.normCwd(cwd) }.maxOfOrNull { it.value } ?: 0L
-            val cursorNewest = cursor.entries.filter { ProjectPaths.normCwd(it.key) == ProjectPaths.normCwd(cwd) }.maxOfOrNull { it.value } ?: 0L
-            return if (cursorNewest >= codexNewest) {
-                runCatching { dev.ccpocket.daemon.cursor.CursorSessionScanner.scan(cwd).firstOrNull()?.title }.getOrNull()
-                    ?: runCatching { dev.ccpocket.daemon.codex.CodexTranscriptScanner.scan(cwd).firstOrNull()?.title }.getOrNull()
-            } else {
-                runCatching { dev.ccpocket.daemon.codex.CodexTranscriptScanner.scan(cwd).firstOrNull()?.title }.getOrNull()
-                    ?: runCatching { dev.ccpocket.daemon.cursor.CursorSessionScanner.scan(cwd).firstOrNull()?.title }.getOrNull()
-            }
+        // ONE pass over each non-Claude store, grouped by cwd — the previous per-project re-scans made the
+        // directory list O(projects × store size) in file reads (the "refresh got slow" report)
+        val codexByNorm = runCatching { dev.ccpocket.daemon.codex.CodexTranscriptScanner.scanAll() }.getOrDefault(emptyList())
+            .groupBy { ProjectPaths.normCwd(it.cwd) }
+        val cursorByNorm = runCatching { dev.ccpocket.daemon.cursor.CursorSessionScanner.scanAll() }.getOrDefault(emptyList())
+            .groupBy { ProjectPaths.normCwd(it.cwd) }
+        val otherByNorm = (codexByNorm.keys + cursorByNorm.keys).associateWith { norm ->
+            (codexByNorm[norm].orEmpty() + cursorByNorm[norm].orEmpty()).sortedByDescending { it.lastModified }
         }
-        if (other.isEmpty()) return withRecentSessions(claude, liveNorm)
-        val known = claude.mapTo(HashSet()) { ProjectPaths.normCwd(it.path) }
-        val otherByNorm = other.entries.groupBy({ ProjectPaths.normCwd(it.key) }, { it.value })
-        val otherOnly = other.entries
-            .filter { (cwd, _) -> ProjectPaths.normCwd(cwd) !in known }
-            .map { (cwd, mtime) ->
-                // daemon-driven sessions here (usually Codex ones) — before this, a running Codex session
-                // in a codex-only dir never surfaced in the live section at all
-                val live = liveNorm[ProjectPaths.normCwd(cwd)].orEmpty().sortedByDescending { it.executing }
-                DirectoryEntry(
-                    path = cwd,
-                    name = Path.of(cwd).fileName?.toString() ?: cwd,
-                    isDir = true,
-                    hasSessions = true,
-                    recent = cwd in recents,
-                    lastModified = mtime,
-                    latestSessionTitle = otherTitle(cwd),
-                    open = live.isNotEmpty(),
-                    executing = live.any { it.executing },
-                    busy = cwd in busyCwds,
-                    activeSessionId = live.firstOrNull()?.sessionId,
-                    activeSessionTitle = live.firstOrNull()?.title,
-                    activeSessions = live,
-                )
-            }
-            .distinctBy { ProjectPaths.normCwd(it.path) }
+        fun otherTitle(cwd: String): String? = otherByNorm[ProjectPaths.normCwd(cwd)]?.firstOrNull()?.title
+        val otherOnly = if (otherByNorm.isEmpty()) emptyList() else {
+            val known = claude.mapTo(HashSet()) { ProjectPaths.normCwd(it.path) }
+            otherByNorm.entries
+                .filter { (norm, _) -> norm !in known }
+                .map { (norm, sessions) ->
+                    val cwd = sessions.first().cwd // the recorded cwd (norm is the dedupe key, not a path)
+                    // daemon-driven sessions here (usually Codex ones) — before this, a running Codex session
+                    // in a codex-only dir never surfaced in the live section at all
+                    val live = liveNorm[norm].orEmpty().sortedByDescending { it.executing }
+                    DirectoryEntry(
+                        path = cwd,
+                        name = Path.of(cwd).fileName?.toString() ?: cwd,
+                        isDir = true,
+                        hasSessions = true,
+                        recent = cwd in recents,
+                        lastModified = sessions.first().lastModified,
+                        latestSessionTitle = sessions.first().title,
+                        open = live.isNotEmpty(),
+                        executing = live.any { it.executing },
+                        busy = cwd in busyCwds,
+                        activeSessionId = live.firstOrNull()?.sessionId,
+                        activeSessionTitle = live.firstOrNull()?.title,
+                        activeSessions = live,
+                    )
+                }
+        }
         // a dir with both histories sorts by whichever agent wrote last
         val merged = claude.map { e ->
-            val otherM = otherByNorm[ProjectPaths.normCwd(e.path)]?.max() ?: 0L
+            val otherM = otherByNorm[ProjectPaths.normCwd(e.path)]?.firstOrNull()?.lastModified ?: 0L
             if (otherM > e.lastModified) e.copy(lastModified = otherM, latestSessionTitle = otherTitle(e.path)) else e
         }
-        return withRecentSessions((merged + otherOnly).sortedByDescending { it.lastModified }, liveNorm)
+        return withRecentSessions((merged + otherOnly).sortedByDescending { it.lastModified }, liveNorm, otherByNorm)
     }
 
     /** Happy-style project cards need a few conversations inline. Build them once with the directory response
-     * instead of making the phone issue one ListSessions request per project (an N+1 refresh storm). */
+     * instead of making the phone issue one ListSessions request per project (an N+1 refresh storm).
+     * [otherByNorm] carries the already-scanned Codex+Cursor summaries so this adds no store re-reads. */
     private fun withRecentSessions(
         entries: List<DirectoryEntry>,
         liveNorm: Map<String, List<ActiveSession>>,
+        otherByNorm: Map<String, List<SessionSummary>>,
     ): List<DirectoryEntry> = entries.map { entry ->
         val cwd = entry.path
         val all = buildList {
             addAll(runCatching { TranscriptScanner.scan(ProjectPaths.dirFor(cwd)) }.getOrDefault(emptyList()))
-            addAll(runCatching { dev.ccpocket.daemon.codex.CodexTranscriptScanner.scan(cwd) }.getOrDefault(emptyList()))
-            addAll(runCatching { dev.ccpocket.daemon.cursor.CursorSessionScanner.scan(cwd) }.getOrDefault(emptyList()))
+            addAll(otherByNorm[ProjectPaths.normCwd(cwd)].orEmpty())
         }
         val active = liveNorm[ProjectPaths.normCwd(cwd)].orEmpty()
         val distinct = all.distinctBy { (it.agent ?: AgentKind.CLAUDE) to it.sessionId }

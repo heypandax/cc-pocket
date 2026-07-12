@@ -138,6 +138,7 @@ import dev.ccpocket.protocol.DirectoryEntry
 import dev.ccpocket.protocol.isQuestion
 import dev.ccpocket.protocol.isSubagentTool
 import dev.ccpocket.protocol.PermissionMode
+import dev.ccpocket.protocol.SessionSummary
 import dev.ccpocket.protocol.SlashCommand
 import kotlinx.coroutines.CoroutineScope
 import org.jetbrains.compose.resources.stringResource
@@ -753,6 +754,7 @@ private fun ProjectConversationCard(
     pinned: Boolean,
     onLongPress: (() -> Unit)?,
 ) {
+    var confirmDelete by remember(e.path) { mutableStateOf<SessionSummary?>(null) } // long-pressed conversation row
     Column(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
         Row(
             Modifier.fillMaxWidth().combinedClickable(onClick = { repo.listSessions(e.path) }, onLongClick = onLongPress)
@@ -777,9 +779,10 @@ private fun ProjectConversationCard(
             e.recentSessions.forEachIndexed { index, session ->
                 val current = repo.workdir.value == e.path && repo.sessionKey.value == session.sessionId
                 Row(
-                    Modifier.fillMaxWidth().background(if (current) Tok.accent.copy(alpha = 0.09f) else Color.Transparent).clickable {
-                        repo.openSession(e.path, session.sessionId, title = session.title, agent = session.agent ?: AgentKind.CLAUDE)
-                    }.padding(horizontal = 14.dp, vertical = 12.dp),
+                    Modifier.fillMaxWidth().background(if (current) Tok.accent.copy(alpha = 0.09f) else Color.Transparent).combinedClickable(
+                        onClick = { repo.openSession(e.path, session.sessionId, title = session.title, agent = session.agent ?: AgentKind.CLAUDE) },
+                        onLongClick = { confirmDelete = session },
+                    ).padding(horizontal = 14.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     val active = session.live || session.busy || session.waitingPermission || session.executing
@@ -834,6 +837,22 @@ private fun ProjectConversationCard(
             }
         }
     }
+    confirmDelete?.let { s ->
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            containerColor = Tok.raised,
+            titleContentColor = Tok.tx,
+            textContentColor = Tok.tx2,
+            title = { Text(stringResource(Res.string.session_delete_title)) },
+            text = { Text(stringResource(Res.string.session_delete_confirm, s.title), color = Tok.tx2, fontSize = 14.sp, lineHeight = 21.sp) },
+            confirmButton = {
+                TextButton({ confirmDelete = null; repo.deleteSessionFromProject(e.path, s) }) {
+                    Text(stringResource(Res.string.session_delete_action), color = Tok.danger)
+                }
+            },
+            dismissButton = { TextButton({ confirmDelete = null }) { Text(stringResource(Res.string.cancel), color = Tok.muted) } },
+        )
+    }
 }
 
 @Composable
@@ -842,17 +861,21 @@ private fun ProjectAvatar(seed: String, agent: AgentKind?) {
     val index = (seed.hashCode().toLong().let { if (it < 0) -it else it } % colors.size).toInt()
     val a = colors[index]
     val b = colors[(index + 2) % colors.size]
-    Box(
-        Modifier.size(34.dp).clip(CircleShape).background(Brush.linearGradient(listOf(a, b))),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(folderName(seed).take(1).uppercase(), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+    // the badge lives OUTSIDE the clipped avatar circle: drawn inside it, the parent's CircleShape
+    // clip sliced the badge's outer half off (it sits at the circle's edge by construction)
+    Box(Modifier.size(38.dp)) {
         Box(
-            Modifier.align(Alignment.BottomEnd).size(12.dp).clip(CircleShape).background(Tok.surface)
+            Modifier.size(34.dp).clip(CircleShape).background(Brush.linearGradient(listOf(a, b))),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(folderName(seed).take(1).uppercase(), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        }
+        Box(
+            Modifier.align(Alignment.BottomEnd).size(15.dp).clip(CircleShape).background(Tok.surface)
                 .border(1.dp, Tok.hair, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            AgentGlyph(agent ?: AgentKind.CLAUDE, color = agentColor(agent ?: AgentKind.CLAUDE), size = 8)
+            AgentGlyph(agent ?: AgentKind.CLAUDE, color = agentColor(agent ?: AgentKind.CLAUDE), size = 11)
         }
     }
 }
@@ -1050,8 +1073,10 @@ private fun LiveProjectCell(e: DirectoryEntry, pinned: Boolean, onLongPress: (()
 /** Removable filter chip pinned atop the Sessions list when a single agent is selected (issue #31). */
 @Composable
 private fun AgentFilterChip(filter: String, onClear: () -> Unit) {
-    val color = if (filter == "codex") Tok.codex else Tok.accent
-    val label = stringResource(if (filter == "codex") Res.string.af_codex_only else Res.string.af_claude_only)
+    val color = when (filter) { "codex" -> Tok.codex; "cursor" -> Tok.info; else -> Tok.accent }
+    val label = stringResource(
+        when (filter) { "codex" -> Res.string.af_codex_only; "cursor" -> Res.string.af_cursor_only; else -> Res.string.af_claude_only },
+    )
     Row(
         Modifier.clip(RoundedCornerShape(999.dp)).background(color.copy(alpha = 0.12f))
             .border(1.dp, color.copy(alpha = 0.4f), RoundedCornerShape(999.dp))
@@ -1071,6 +1096,7 @@ private fun AgentFilterChip(filter: String, onClear: () -> Unit) {
 internal fun SessionsScreen(repo: PocketRepository) { // internal: driven end-to-end by MobileNewSessionUiTest (demo mode)
     val dir = repo.sessionsDir.value ?: return
     var pickMode by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf<SessionSummary?>(null) } // long-pressed row awaiting the delete confirm
     // an open is in flight (the screen only switches once the daemon answers with the live convo).
     // Repo-owned so every entry point is guarded: entries disable — a double-tap can't open two fresh
     // sessions — and the repo clears it on SessionLive/PocketError (8s safety net).
@@ -1131,10 +1157,14 @@ internal fun SessionsScreen(repo: PocketRepository) { // internal: driven end-to
                         SessionDefaultsChip(repo.defaultAgent.value, repo.defaultMode.value, enabled = !starting) { pickMode = true }
                     }
                 }
-                items(filtered) { s ->
+                items(filtered, key = { it.sessionId }) { s ->
                     Column(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Tok.surface)
-                            .clickable { repo.openSession(dir, s.sessionId, title = s.title, agent = s.agent ?: AgentKind.CLAUDE) }.padding(14.dp),
+                            // delete rides a long-press (kept off the tap path); running sessions refuse daemon-side
+                            .combinedClickable(
+                                onClick = { repo.openSession(dir, s.sessionId, title = s.title, agent = s.agent ?: AgentKind.CLAUDE) },
+                                onLongClick = { confirmDelete = s },
+                            ).padding(14.dp),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(s.title, color = Tok.tx, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -1159,6 +1189,22 @@ internal fun SessionsScreen(repo: PocketRepository) { // internal: driven end-to
                 }
             }
             }
+        }
+        confirmDelete?.let { s ->
+            AlertDialog(
+                onDismissRequest = { confirmDelete = null },
+                containerColor = Tok.raised,
+                titleContentColor = Tok.tx,
+                textContentColor = Tok.tx2,
+                title = { Text(stringResource(Res.string.session_delete_title)) },
+                text = { Text(stringResource(Res.string.session_delete_confirm, s.title), color = Tok.tx2, fontSize = 14.sp, lineHeight = 21.sp) },
+                confirmButton = {
+                    TextButton({ confirmDelete = null; repo.deleteSession(dir, s) }) {
+                        Text(stringResource(Res.string.session_delete_action), color = Tok.danger)
+                    }
+                },
+                dismissButton = { TextButton({ confirmDelete = null }) { Text(stringResource(Res.string.cancel), color = Tok.muted) } },
+            )
         }
         if (pickMode) {
             StartSessionModeSheet(

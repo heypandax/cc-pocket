@@ -27,6 +27,17 @@ object CodexTranscriptScanner {
             .sortedByDescending { it.lastModified }
     }
 
+    /** EVERY Codex session (no cwd filter), newest-first — one pass over the rollout store for callers
+     *  that need per-cwd groups (the directory listing previously re-scanned the whole store once PER
+     *  project dir: an N×800-file I/O storm). Sessions without a recorded cwd are dropped: they can't
+     *  be grouped under a directory. */
+    fun scanAll(): List<SessionSummary> {
+        val titles = threadNames()
+        return CodexPaths.sessionFiles().mapNotNull { runCatching { summarize(it, null, titles) }.getOrNull() }
+            .filter { it.cwd.isNotBlank() }
+            .sortedByDescending { it.lastModified }
+    }
+
     // Codex's session_index.jsonl (id → thread title) — memoized by the index's mtime so a directory list
     // that summarizes dozens of rollouts reads and parses it once, not per file. Append-style, last wins.
     private val titleCache = java.util.concurrent.atomic.AtomicReference<Pair<Long, Map<String, String>>?>(null)

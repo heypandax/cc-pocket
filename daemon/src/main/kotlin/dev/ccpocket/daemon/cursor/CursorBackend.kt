@@ -210,6 +210,11 @@ class CursorBackend(private val cursorBin: String?) : AgentBackend {
     override fun listSessions(workdir: String): List<SessionSummary> = CursorSessionScanner.scan(workdir)
     override fun replayHistory(workdir: String, sessionId: String): List<HistoryMessage> =
         CursorPaths.transcript(sessionId)?.let(CursorTranscriptReplay::read).orEmpty()
+
+    // a Cursor session's record spans three stores (acp-sessions dir, chats/<hash>/<id> dir, public
+    // agent-transcript dir) — remove whichever exist. Deleting the SESSION DIRECTORY (not a lone file)
+    // in each store matches how cursor-agent itself lays them out.
+    override fun deleteSession(workdir: String, sessionId: String): Boolean = CursorPaths.deleteSession(sessionId)
     override fun resumeContextTokens(workdir: String, sessionId: String): Long? = null
     override fun defaultModel(workdir: String): String = "auto"
 

@@ -112,6 +112,19 @@ data class StopBackgroundJob(val convoId: String, val jobId: String) : ToDaemon
 @SerialName("pocket/session.close")
 data class CloseSession(val convoId: String, val force: Boolean = false) : ToDaemon
 
+/** Delete a session's on-disk history (Claude transcript / Codex rollout / Cursor chat stores).
+ *  Refused while the daemon is driving that session (reply: [PocketError] code "session_live").
+ *  On success the daemon replies with a refreshed [Sessions] for [workdir] so the list reconciles.
+ *  An old daemon drops the unknown frame — the client's optimistic removal is then undone by the
+ *  next refresh, never destructive. */
+@Serializable
+@SerialName("pocket/session.delete")
+data class DeleteSession(
+    val workdir: String,
+    val sessionId: String,
+    val agent: AgentKind = AgentKind.CLAUDE,
+) : ToDaemon
+
 /** One chunk of a voice capture. Chunks of a recording share [captureId]; daemon reassembles by [idx]. */
 @Serializable
 @SerialName("pocket/audio.chunk")

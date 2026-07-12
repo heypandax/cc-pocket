@@ -102,6 +102,11 @@ interface AgentBackend {
     /** How many consecutive turns at the transcript's TAIL were API-failure placeholders — seeds the
      *  degraded-session warning on resume (issue #65). 0 = healthy/unknown (default; e.g. Codex). */
     fun resumeFailedTurnStreak(workdir: String, sessionId: String): Int = 0
+
+    /** Delete [sessionId]'s on-disk history under [workdir] (transcript / rollout / chat store).
+     *  Only called for sessions the daemon is NOT currently driving. True = something was removed.
+     *  Default false = backend doesn't support deletion. */
+    fun deleteSession(workdir: String, sessionId: String): Boolean = false
 }
 
 /** Builds a fresh [AgentBackend] per conversation. One factory per [AgentKind], registered in the daemon core. */

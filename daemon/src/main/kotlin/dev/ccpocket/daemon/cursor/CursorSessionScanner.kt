@@ -27,6 +27,15 @@ object CursorSessionScanner {
         acpRoot: Path = CursorPaths.sessionsRoot(),
         chatsRoot: Path = CursorPaths.chatsRoot(),
         projectsRoot: Path = CursorPaths.projectsRoot(),
+    ): List<SessionSummary> = scanAll(workdir, acpRoot, chatsRoot, projectsRoot)
+
+    /** EVERY Cursor session across both stores; [workdir] null = no cwd filter (one pass for the
+     *  directory listing, which previously re-walked both stores once per project dir). */
+    fun scanAll(
+        workdir: String? = null,
+        acpRoot: Path = CursorPaths.sessionsRoot(),
+        chatsRoot: Path = CursorPaths.chatsRoot(),
+        projectsRoot: Path = CursorPaths.projectsRoot(),
     ): List<SessionSummary> {
         val rows = scanAcp(workdir, acpRoot) + scanChats(workdir, chatsRoot, projectsRoot)
         // one session can exist in both stores (new CLIs journal ACP runs as chats too): keep the freshest
@@ -38,7 +47,7 @@ object CursorSessionScanner {
         }.sortedByDescending { it.lastModified }
     }
 
-    private fun scanAcp(workdir: String, root: Path): List<SessionSummary> {
+    private fun scanAcp(workdir: String?, root: Path): List<SessionSummary> {
         if (!Files.isDirectory(root)) return emptyList()
         return Files.list(root).use { dirs ->
             dirs.filter(Files::isDirectory).map { dir ->
@@ -46,7 +55,7 @@ object CursorSessionScanner {
                     val metaFile = dir.resolve("meta.json")
                     val meta = json.parseToJsonElement(Files.readString(metaFile)) as JsonObject
                     val cwd = meta.str("cwd") ?: return@runCatching null
-                    if (normalize(cwd) != normalize(workdir)) return@runCatching null
+                    if (workdir != null && normalize(cwd) != normalize(workdir)) return@runCatching null
                     val title = meta.str("title")?.takeIf { it.isNotBlank() } ?: FALLBACK_TITLE
                     SessionSummary(
                         sessionId = dir.fileName.toString(), title = title, firstPrompt = title,
@@ -58,10 +67,10 @@ object CursorSessionScanner {
         }
     }
 
-    private fun scanChats(workdir: String, chatsRoot: Path, projectsRoot: Path): List<SessionSummary> =
+    private fun scanChats(workdir: String?, chatsRoot: Path, projectsRoot: Path): List<SessionSummary> =
         chatMetas(chatsRoot).mapNotNull { (id, meta, metaFile) ->
             val cwd = meta.str("cwd") ?: return@mapNotNull null
-            if (normalize(cwd) != normalize(workdir)) return@mapNotNull null
+            if (workdir != null && normalize(cwd) != normalize(workdir)) return@mapNotNull null
             // the chat meta usually has no title; the public transcript's first user prompt is the
             // same source Claude/Codex summaries fall back to
             val metaTitle = meta.str("title")?.takeIf { it.isNotBlank() }

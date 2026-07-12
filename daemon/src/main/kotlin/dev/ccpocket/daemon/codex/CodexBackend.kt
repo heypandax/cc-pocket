@@ -365,6 +365,11 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
     // Codex session's header shows the real model before the first turn instead of a blank segment.
     override fun defaultModel(workdir: String): String? = CodexDefaultModel.resolve()
 
+    // findSession anchors on the exact `-<threadId>.jsonl` suffix inside the sessions tree, so an
+    // arbitrary path can't be named. The rollout file is the thread's whole on-disk record.
+    override fun deleteSession(workdir: String, sessionId: String): Boolean =
+        CodexPaths.findSession(sessionId)?.let { runCatching { java.nio.file.Files.deleteIfExists(it) }.getOrDefault(false) } ?: false
+
     // ---- mode mapping (Claude's single mode → Codex's approvalPolicy × sandbox axes) ----
 
     // The 4 PermissionMode values are the phone's Codex presets (Cautious/Balanced/Autonomous/Full auto).

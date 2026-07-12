@@ -444,6 +444,18 @@ class SerializationRoundTripTest {
     }
 
     @Test
+    fun deleteSession_roundtrip_and_agent_defaults_claude() {
+        val del = Envelope(id = "d1", ts = 0, body = DeleteSession("/w/api", "sid-1", agent = AgentKind.CURSOR))
+        val json = PocketJson.encodeToString(del)
+        assertTrue("\"t\":\"pocket/session.delete\"" in json, json)
+        assertTrue("\"agent\":\"cursor\"" in json, json)
+        assertEquals(del, PocketJson.decodeFromString<Envelope>(json))
+        // a frame without agent (hand-rolled / future older client) decodes to the Claude default
+        val bare = """{"id":"d2","ts":0,"to":"PEER","body":{"t":"pocket/session.delete","workdir":"/w/api","sessionId":"sid-1"}}"""
+        assertEquals(DeleteSession("/w/api", "sid-1"), PocketJson.decodeFromString<Envelope>(bare).body)
+    }
+
+    @Test
     fun authState_blockers_roundtrip_old_frames_default_and_future_reason_degrades() {
         // new daemon → new app: the structured blocker list rides along and round-trips
         val state = Envelope(

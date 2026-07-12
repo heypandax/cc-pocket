@@ -51,7 +51,9 @@ fun agentTagline(agent: AgentKind): String = when (agent) {
 internal fun Color.agentTintFill(): Color = copy(alpha = 0.12f)
 internal fun Color.agentTintBorder(): Color = copy(alpha = 0.42f)
 
-/** A 1.5pt line glyph per agent: Claude = shell-prompt chevron; Codex = orbit/concentric mark. Drawn in a 20×20 grid. */
+/** A line glyph per agent, drawn in a 20×20 grid — shaped after each product's real mark so the
+ *  identity is recognizable even at badge sizes: Claude = Anthropic's radiant starburst ✻;
+ *  Codex = the in-app orbit mark; Cursor = the isometric cube from Cursor's logo. */
 @Composable
 fun AgentGlyph(agent: AgentKind, color: Color = agentColor(agent), size: Int = 18) {
     Canvas(Modifier.size(size.dp)) {
@@ -67,17 +69,36 @@ fun AgentGlyph(agent: AgentKind, color: Color = agentColor(agent), size: Int = 1
             drawArc(color, startAngle = -90f, sweepAngle = 90f, useCenter = false, topLeft = box, size = d, style = Stroke(width = w, cap = StrokeCap.Round))
             drawArc(color, startAngle = 90f, sweepAngle = 90f, useCenter = false, topLeft = box, size = d, style = Stroke(width = w, cap = StrokeCap.Round))
         } else if (agent == AgentKind.CURSOR) {
-            val w = 1.7f * s
-            drawRoundRect(color, topLeft = p(4f, 4f), size = Size(12f * s, 12f * s), cornerRadius = androidx.compose.ui.geometry.CornerRadius(3f * s), style = Stroke(width = w))
-            drawLine(color, p(7f, 10f), p(13f, 10f), strokeWidth = w, cap = StrokeCap.Round)
-            drawLine(color, p(10f, 7f), p(10f, 13f), strokeWidth = w, cap = StrokeCap.Round)
+            // isometric cube: pointy-top hexagon outline + the three inner edges that make the top face pop
+            val w = 1.5f * s
+            val cx = 10f
+            val cy = 10f
+            val r = 7f
+            fun vertex(deg: Int): Offset {
+                val rad = deg * (kotlin.math.PI / 180.0)
+                return p(cx + r * kotlin.math.cos(rad).toFloat(), cy - r * kotlin.math.sin(rad).toFloat())
+            }
+            val hex = listOf(90, 150, 210, 270, 330, 30).map(::vertex)
+            for (i in hex.indices) drawLine(color, hex[i], hex[(i + 1) % hex.size], strokeWidth = w, cap = StrokeCap.Round)
+            val center = p(cx, cy)
+            intArrayOf(150, 270, 30).forEach { drawLine(color, center, vertex(it), strokeWidth = w, cap = StrokeCap.Round) }
         } else {
-            val w = 1.8f * s
-            // chevron ">"
-            drawLine(color, p(5f, 5f), p(9.2f, 9.2f), strokeWidth = w, cap = StrokeCap.Round)
-            drawLine(color, p(9.2f, 9.2f), p(5f, 13.4f), strokeWidth = w, cap = StrokeCap.Round)
-            // prompt underline
-            drawLine(color, p(11f, 14f), p(15f, 14f), strokeWidth = w, cap = StrokeCap.Round)
+            // Claude: Anthropic's radiant starburst — 8 rays with a slightly longer horizontal pair
+            val w = 1.9f * s
+            val center = p(10f, 10f)
+            for (i in 0 until 8) {
+                val rad = i * (kotlin.math.PI / 4.0)
+                val reach = (if (i % 4 == 0) 7.4f else 6.2f) * s
+                val inner = 1.1f * s
+                val dx = kotlin.math.cos(rad).toFloat()
+                val dy = kotlin.math.sin(rad).toFloat()
+                drawLine(
+                    color,
+                    Offset(center.x + dx * inner, center.y + dy * inner),
+                    Offset(center.x + dx * reach, center.y + dy * reach),
+                    strokeWidth = w, cap = StrokeCap.Round,
+                )
+            }
         }
     }
 }

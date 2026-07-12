@@ -100,4 +100,18 @@ class CursorSessionScannerTest {
         assertEquals(456L, map["/chat-only"])
         assertTrue(map.containsKey("/acp-only"))
     }
+
+    @Test
+    fun scanAll_without_workdir_returns_every_cwd() {
+        val base = Files.createTempDirectory("cursor-scan")
+        val acp = base.resolve("acp-sessions")
+        val chats = base.resolve("chats")
+        val projects = base.resolve("projects")
+
+        acpSession(acp, "a1", "/repo-a", title = "A")
+        chat(chats, "h1", "c1", """{"cwd":"/repo-b","hasConversation":true,"updatedAtMs":10}""")
+
+        val rows = CursorSessionScanner.scanAll(null, acp, chats, projects)
+        assertEquals(setOf("/repo-a", "/repo-b"), rows.map { it.cwd }.toSet())
+    }
 }

@@ -23,6 +23,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
+import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicLong
 
@@ -168,4 +169,9 @@ class ClaudeBackend(private val exe: Path, private val configDir: Path? = null) 
 
     override fun resumeFailedTurnStreak(workdir: String, sessionId: String): Int =
         TranscriptScanner.syntheticTailStreak(ProjectPaths.dirFor(workdir).resolve("$sessionId.jsonl"))
+
+    // the transcript file IS the session's entire on-disk record; the resolve stays inside the
+    // project dir because session ids are validated wire-side (see RequestRouter's delete handler)
+    override fun deleteSession(workdir: String, sessionId: String): Boolean =
+        runCatching { Files.deleteIfExists(ProjectPaths.dirFor(workdir).resolve("$sessionId.jsonl")) }.getOrDefault(false)
 }

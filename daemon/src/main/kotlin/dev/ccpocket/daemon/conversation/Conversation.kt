@@ -581,6 +581,11 @@ class Conversation(
                             else -> null
                         }
                         sink.emit(TurnDone(convoId, ev.finalText, usage, error = error))
+                        // Cursor's CLI journals no usage on disk (unlike Claude transcripts / Codex rollouts),
+                        // so the Settings usage screen never saw its turns — journal them daemon-side instead.
+                        if (backend.kind == dev.ccpocket.protocol.AgentKind.CURSOR && usage != null && error == null) {
+                            runCatching { dev.ccpocket.daemon.disk.UsageJournal.note(backend.kind, displayModel(), usage) }
+                        }
                         // degraded tracking: consecutive placeholder-only turns mark the session as likely
                         // context-dead; announce transitions so clients warn + gate the next send (issue #65)
                         val wasDegraded = degraded()

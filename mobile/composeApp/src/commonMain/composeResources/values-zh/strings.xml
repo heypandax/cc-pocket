@@ -226,7 +226,8 @@
     <string name="af_both">全部</string>
     <string name="af_claude_only">仅 Claude</string>
     <string name="af_codex_only">仅 Codex</string>
-    <string name="af_hint">选择列表里显示哪个 agent 的会话。Claude 与 Codex 仍以各自颜色标注。</string>
+    <string name="af_cursor_only">仅 Cursor</string>
+    <string name="af_hint">选择列表里显示哪个 agent 的会话。各 agent 仍以各自颜色标注。</string>
     <string name="settings_usage">Token 用量</string>
     <string name="usage_title">用量</string>
     <string name="usage_tokens_today">今日 tokens</string>
@@ -344,6 +345,11 @@
     <string name="job_stop_title">停止任务？</string>
     <string name="job_stop_confirm">这会在电脑上中断“%1$s”。真实构建或长耗时任务不会自动恢复。</string>
     <string name="job_stop_action">停止任务</string>
+
+    <!-- ── 会话删除（长按会话行） ───────────── -->
+    <string name="session_delete_title">删除对话？</string>
+    <string name="session_delete_confirm">将删除“%1$s”及其在电脑上的历史记录，此操作无法撤销。</string>
+    <string name="session_delete_action">删除</string>
 
     <!-- ── 多智能体（Claude / Codex） ────────────────────────────── -->
     <string name="label_agent">智能体</string>

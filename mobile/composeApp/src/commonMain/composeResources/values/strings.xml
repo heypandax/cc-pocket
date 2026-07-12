@@ -226,7 +226,8 @@
     <string name="af_both">Both</string>
     <string name="af_claude_only">Claude only</string>
     <string name="af_codex_only">Codex only</string>
-    <string name="af_hint">Choose which agents\' sessions appear. Claude and Codex stay tagged in their own colors.</string>
+    <string name="af_cursor_only">Cursor only</string>
+    <string name="af_hint">Choose which agents\' sessions appear. Each agent stays tagged in its own color.</string>
     <string name="settings_usage">Token usage</string>
     <string name="usage_title">Usage</string>
     <string name="usage_tokens_today">Tokens today</string>
@@ -344,6 +345,11 @@
     <string name="job_stop_title">Stop task?</string>
     <string name="job_stop_confirm">This interrupts “%1$s” on the computer. A real build or long-running job won\'t resume on its own.</string>
     <string name="job_stop_action">Stop task</string>
+
+    <!-- ── session deletion (long-press a session row) ───────────── -->
+    <string name="session_delete_title">Delete conversation?</string>
+    <string name="session_delete_confirm">“%1$s” and its history on the computer will be deleted. This cannot be undone.</string>
+    <string name="session_delete_action">Delete</string>
 
     <!-- ── multi-agent (Claude / Codex) ──────────────────────────── -->
     <string name="label_agent">Agent</string>

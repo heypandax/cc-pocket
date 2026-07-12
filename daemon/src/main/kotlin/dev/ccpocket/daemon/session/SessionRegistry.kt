@@ -186,6 +186,20 @@ class SessionRegistry(
         backends.values.flatMap { runCatching { it.create().listSessions(workdir) }.getOrDefault(emptyList()) }
             .sortedByDescending { it.lastModified }
 
+    /** Delete [sessionId]'s on-disk history via its backend. Refused ("session_live") while THIS daemon
+     *  is driving that session — closing it first is the client's job. Returns null on success, else a
+     *  short error code the router turns into a PocketError. */
+    suspend fun deleteSession(agent: AgentKind, workdir: String, sessionId: String): String? {
+        val live = mutex.withLock {
+            convos.values.any { it.sessionId == sessionId || it.resumeAnchor == sessionId } ||
+                observes.values.any { it.isFor(sessionId) }
+        }
+        if (live) return "session_live"
+        val backend = backends[agent] ?: return "agent_unavailable"
+        val deleted = runCatching { backend.create().deleteSession(workdir, sessionId) }.getOrDefault(false)
+        return if (deleted) null else "not_found"
+    }
+
     /**
      * Close conversations with no agent activity for longer than [idleMs]. Returns the reap count.
      * A conversation with running background work is NEVER reaped — killing it would take its still-running

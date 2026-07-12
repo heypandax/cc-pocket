@@ -21,7 +21,7 @@ import kotlin.io.path.bufferedReader
 import kotlin.io.path.isDirectory
 
 /**
- * Aggregates token usage from BOTH agents' on-disk records (issue #26):
+ * Aggregates token usage from every agent's records (issue #26):
  *  - Claude transcripts under ~/.claude/projects — the same files ccusage reads. Per assistant turn it sums
  *    `message.usage` (input + output + cache) and reads the transcript's OWN `costUSD` (no fragile price
  *    table). Turns are deduped by `message.id` + `requestId` so a turn duplicated across resumed/forked
@@ -29,16 +29,18 @@ import kotlin.io.path.isDirectory
  *  - Codex rollouts under ~/.codex/sessions — `event_msg`/`token_count` records carry the turn's delta
  *    (`last_token_usage`) with a timestamp, and `turn_context` carries the model. Codex stamps no cost, so
  *    `costUsdToday` remains Claude-only.
+ *  - The daemon's own [UsageJournal] — turns of backends whose CLIs write no usage to disk (Cursor).
  */
 object UsageService {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
     private val zone: ZoneId = ZoneId.systemDefault()
 
-    /** [projectsRoot]/[codexFiles] default to the real on-disk roots; tests inject temp ones. */
+    /** [projectsRoot]/[codexFiles]/[journal] default to the real on-disk roots; tests inject temp ones. */
     fun aggregate(
         days: Int,
         projectsRoot: Path = ProjectPaths.projectsRoot(),
         codexFiles: List<Path> = runCatching { dev.ccpocket.daemon.codex.CodexPaths.sessionFiles() }.getOrDefault(emptyList()),
+        journal: List<UsageJournal.Entry> = runCatching { UsageJournal.read() }.getOrDefault(emptyList()),
     ): Usage {
         val span = days.coerceIn(1, 90)
         val today = LocalDate.now(zone)
@@ -136,6 +138,27 @@ object UsageService {
             }
         }
 
+        // ── the daemon's own journal: turns with no CLI-side disk record (Cursor). Its models get
+        // tagged with the journaled agent below via this id set (a cursor model id like "auto" or
+        // "claude-fable-5" must not be mis-bucketed by the name heuristic).
+        val journaledAgents = HashMap<String, AgentKind>()
+        for (e in journal) {
+            val when_ = Instant.ofEpochMilli(e.ts).atZone(zone)
+            val date = when_.toLocalDate()
+            if (date.isBefore(start) || e.total <= 0) continue
+            val model = e.model?.takeIf { it.isNotBlank() } ?: e.agent.name.lowercase()
+            perDay[date] = (perDay[date] ?: 0) + e.total
+            perModel[model] = (perModel[model] ?: 0) + e.total
+            journaledAgents[model] = e.agent
+            if (date == today) {
+                perHour[when_.hour] += e.total
+                tokensToday += e.total
+                requestsToday++
+                inputToday += e.input
+                cacheReadToday += e.cacheRead
+            }
+        }
+
         val trend = (0 until span).map { i ->
             val d = start.plusDays(i.toLong())
             UsageDay(d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ENGLISH), perDay[d] ?: 0, date = d.toString())
@@ -146,7 +169,7 @@ object UsageService {
         // drop zero-token models so a `<synthetic> 0` placeholder turn never shows a bar
         val models = perModel.entries.filter { it.value > 0 }.sortedByDescending { it.value }.take(6).map {
             val codex = "codex" in it.key.lowercase() || "gpt" in it.key.lowercase()
-            UsageModel(it.key, it.value, if (codex) AgentKind.CODEX else AgentKind.CLAUDE)
+            UsageModel(it.key, it.value, journaledAgents[it.key] ?: if (codex) AgentKind.CODEX else AgentKind.CLAUDE)
         }
         val cacheHit = (inputToday + cacheReadToday).takeIf { it > 0 }?.let { ((cacheReadToday * 100) / it).toInt() }
 

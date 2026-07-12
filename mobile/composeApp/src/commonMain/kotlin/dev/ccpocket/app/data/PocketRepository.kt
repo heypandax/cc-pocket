@@ -31,6 +31,7 @@ import dev.ccpocket.protocol.ChatRole
 import dev.ccpocket.protocol.ClearAllowRule
 import dev.ccpocket.protocol.CloseSession
 import dev.ccpocket.protocol.CommandList
+import dev.ccpocket.protocol.DeleteSession
 import dev.ccpocket.protocol.CursorModels
 import dev.ccpocket.protocol.AgentModel
 import dev.ccpocket.protocol.SlashCommand
@@ -1202,7 +1203,14 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 }
                 recomputePhase()
             }
-            is Sessions -> { sessionsDir.value = f.workdir; replace(sessions, f.items); sessionsRefreshing.value = false }
+            // Adopt the list only when it's the screen we're on (sessionsDir match: refresh/reconnect/delete
+            // reconcile) or one we asked to open (expectedSessionsDir: the project-tap navigation). An
+            // UNSOLICITED Sessions — e.g. the daemon's reply to a project-card DeleteSession — must not
+            // yank the phone onto that project's sessions screen.
+            is Sessions -> if (f.workdir == sessionsDir.value || f.workdir == expectedSessionsDir) {
+                expectedSessionsDir = null
+                sessionsDir.value = f.workdir; replace(sessions, f.items); sessionsRefreshing.value = false
+            }
             is Usage -> { usage.value = f; usageLoading.value = false }
             is AuthState -> authState.value = f
             is PushPrefs -> pushPrefs.value = f.enabled
@@ -1516,14 +1524,38 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         scope.launch { send(FetchUsage(days)) }
     }
 
-    fun listSessions(wd: String) = scope.launch { send(ListSessions(wd)) }
+    /** The dir whose Sessions reply should open the sessions screen — set by [listSessions] navigation,
+     *  consumed on arrival. Keeps unsolicited Sessions frames (delete reconciles for other dirs) from
+     *  hijacking the screen. */
+    private var expectedSessionsDir: String? = null
+
+    fun listSessions(wd: String) = scope.launch { expectedSessionsDir = wd; send(ListSessions(wd)) }
+
+    /** Delete a session's on-disk history. Optimistic removal — the daemon answers with the refreshed
+     *  [Sessions] list for [wd] (or a [PocketError] naming why, e.g. it's still running), which reconciles
+     *  the view either way. */
+    fun deleteSession(wd: String, s: SessionSummary) = scope.launch {
+        sessions.removeAll { it.sessionId == s.sessionId }
+        runCatching { send(DeleteSession(wd, s.sessionId, s.agent ?: AgentKind.CLAUDE)) }
+    }
+
+    /** Delete from a PROJECT CARD row (directory screen): same request, but the visible list to reconcile
+     *  is the project list — refresh it once the daemon has processed the delete (its Sessions reply for a
+     *  dir nobody is viewing is ignored by handle()). */
+    fun deleteSessionFromProject(wd: String, s: SessionSummary) = scope.launch {
+        runCatching { send(DeleteSession(wd, s.sessionId, s.agent ?: AgentKind.CLAUDE)) }
+        delay(350) // let the daemon finish the disk removal before re-listing
+        runCatching { send(ListDirectories()) }
+    }
 
     /** Pull-to-refresh spinner for the sessions list (mirrors [refreshing] for the project list). */
     val sessionsRefreshing = mutableStateOf(false)
 
-    /** Re-scan a project's sessions with the pull-to-refresh spinner ([wd] defaults to the open list's dir). */
+    /** Re-scan a project's sessions with the pull-to-refresh spinner ([wd] defaults to the open list's dir).
+     *  An explicit [wd] is a deliberate repoint (desktop group refresh) — expected like a navigation. */
     fun refreshSessions(wd: String? = null) {
         val dir = wd ?: sessionsDir.value ?: return
+        expectedSessionsDir = dir
         refreshWithSpinner(sessionsRefreshing, ListSessions(dir))
     }
     // startMode defaults to the persisted default mode (mirrors effort), so tapping a session straight from
