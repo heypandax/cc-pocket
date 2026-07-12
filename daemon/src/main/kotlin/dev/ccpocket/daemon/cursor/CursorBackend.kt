@@ -32,6 +32,7 @@ class CursorBackend(private val cursorBin: String?) : AgentBackend {
     @Volatile private var mode = PermissionMode.DEFAULT
     @Volatile private var model: String? = null
     private val emittedAssistant = LinkedHashSet<String>()
+    private var lastAssistantSnapshot = ""
     private var finalText: String? = null
     private var workdir: Path = Path.of(".")
     private val temporaryImages = mutableListOf<Path>()
@@ -65,6 +66,7 @@ class CursorBackend(private val cursorBin: String?) : AgentBackend {
         model = spec.model
         workdir = spec.workdir
         emittedAssistant.clear()
+        lastAssistantSnapshot = ""
         finalText = null
         cursorError = null
         cleanupImages()
@@ -95,8 +97,20 @@ class CursorBackend(private val cursorBin: String?) : AgentBackend {
         }?.joinToString("").orEmpty()
         if (text.isBlank()) return emptyList()
         finalText = text
-        // Cursor currently emits the same completed assistant message twice; stream it once.
-        return if (emittedAssistant.add(text)) listOf(AgentEvent.AssistantText(text)) else emptyList()
+        // Cursor emits assistant snapshots, not reliably deltas: an answer may arrive as "hello" and then
+        // "hello world", and some versions repeat the final snapshot with whitespace-only differences. Sending
+        // every snapshot makes the phone render the whole answer twice. Reconcile cumulative snapshots into a
+        // delta while leaving genuinely separate assistant messages untouched.
+        if (!emittedAssistant.add(text) || text.trim() == lastAssistantSnapshot.trim()) return emptyList()
+        val previous = lastAssistantSnapshot
+        val delta = when {
+            previous.isEmpty() -> text
+            text.startsWith(previous) -> text.removePrefix(previous)
+            previous.startsWith(text) -> "" // stale/shorter snapshot arriving after the complete one
+            else -> text
+        }
+        lastAssistantSnapshot = text
+        return delta.takeIf { it.isNotEmpty() }?.let { listOf(AgentEvent.AssistantText(it)) }.orEmpty()
     }
 
     private fun toolCall(root: JsonObject): List<AgentEvent> {

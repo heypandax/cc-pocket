@@ -26,6 +26,10 @@ class CursorBackendTest {
         assertEquals(AgentEvent.AssistantText("hello"), text)
         assertTrue(backend.parse("""{"type":"assistant","message":{"content":[{"type":"text","text":"hello"}]}}""").isEmpty())
 
+        val extended = backend.parse("""{"type":"assistant","message":{"content":[{"type":"text","text":"hello world"}]}}""").single()
+        assertEquals(AgentEvent.AssistantText(" world"), extended)
+        assertTrue(backend.parse("""{"type":"assistant","message":{"content":[{"type":"text","text":"hello world\n"}]}}""").isEmpty())
+
         val tool = backend.parse("""{"type":"tool_call","subtype":"started","call_id":"c1","tool_call":{"readToolCall":{"args":{"path":"README.md"}}}}""").single()
         assertIs<AgentEvent.AssistantToolUse>(tool)
         assertEquals("Read", tool.name)
