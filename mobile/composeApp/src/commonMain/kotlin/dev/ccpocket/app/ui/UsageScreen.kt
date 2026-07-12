@@ -56,6 +56,7 @@ import dev.ccpocket.app.resources.usage_codex_plan
 import dev.ccpocket.app.resources.usage_codex_primary
 import dev.ccpocket.app.resources.usage_codex_rate_limited
 import dev.ccpocket.app.resources.usage_codex_resets_in
+import dev.ccpocket.app.resources.usage_codex_resets_on
 import dev.ccpocket.app.resources.usage_codex_secondary
 import dev.ccpocket.app.resources.usage_codex_snapshot
 import dev.ccpocket.app.resources.usage_codex_dashboard
@@ -311,7 +312,15 @@ private fun CodexLimitRow(label: String, window: CodexLimitWindow) {
         Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(999.dp)).background(Tok.raised)) {
             Box(Modifier.fillMaxWidth((used / 100.0).toFloat().coerceIn(0.03f, 1f)).height(6.dp).clip(RoundedCornerShape(999.dp)).background(barColor))
         }
-        Text(stringResource(Res.string.usage_codex_resets_in, resetsInCaption(window.resetsAt)), color = Tok.muted, fontSize = 11.sp)
+        Text(
+            if (window.windowMinutes >= 24 * 60) {
+                stringResource(Res.string.usage_codex_resets_on, dev.ccpocket.app.localWeekdayTime(window.resetsAt))
+            } else {
+                stringResource(Res.string.usage_codex_resets_in, resetsInCaption(window.resetsAt))
+            },
+            color = Tok.muted,
+            fontSize = 11.sp,
+        )
     }
 }
 

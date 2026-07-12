@@ -1,6 +1,7 @@
 package dev.ccpocket.app
 
 import platform.Foundation.NSDate
+import platform.Foundation.NSDateFormatter
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.timeIntervalSince1970
 
@@ -9,6 +10,11 @@ import platform.Foundation.timeIntervalSince1970
 actual fun defaultDaemonUrl(): String = "ws://127.0.0.1:8765/v1/ws"
 
 actual fun epochMillis(): Long = (NSDate().timeIntervalSince1970 * 1000).toLong()
+
+actual fun localWeekdayTime(epochSeconds: Long): String = NSDateFormatter().run {
+    dateFormat = "EEE HH:mm"
+    stringFromDate(NSDate(timeIntervalSince1970 = epochSeconds.toDouble()))
+}
 
 // Launch arg `-ccpPreview YES` lands in standardUserDefaults — see marketing/preview.
 actual fun isPreviewMode(): Boolean = NSUserDefaults.standardUserDefaults.boolForKey("ccpPreview")

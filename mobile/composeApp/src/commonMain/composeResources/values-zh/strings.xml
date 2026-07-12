@@ -258,6 +258,7 @@
     <string name="usage_codex_secondary">每周限额</string>
     <string name="usage_codex_used">已用 %1$d%%</string>
     <string name="usage_codex_resets_in">%1$s 后重置</string>
+    <string name="usage_codex_resets_on">于%1$s重置</string>
     <string name="usage_codex_credits">Credits 余额：%1$s</string>
     <string name="usage_codex_credits_unlimited">Credits 无上限</string>
     <string name="usage_codex_rate_limited">当前窗口的 Codex 限额已用尽</string>
