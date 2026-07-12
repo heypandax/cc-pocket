@@ -277,7 +277,10 @@ class SessionRegistry(
         mutex.withLock {
             convos.values.mapNotNull { c ->
                 val sid = c.sessionId ?: return@mapNotNull null
-                c.workdir.toString() to dev.ccpocket.protocol.ActiveSession(sid, executing = c.isExecuting(), busy = c.hasBackgroundWork(), agent = c.kind)
+                c.workdir.toString() to dev.ccpocket.protocol.ActiveSession(
+                    sid, executing = c.isExecuting(), busy = c.hasBackgroundWork(),
+                    waitingPermission = c.hasPendingAsk(), agent = c.kind,
+                )
             }
         }.groupBy({ it.first }, { it.second })
 

@@ -786,22 +786,41 @@ private fun ProjectConversationCard(
                 .border(1.dp, Tok.hair, RoundedCornerShape(12.dp)),
         ) {
             e.recentSessions.forEachIndexed { index, session ->
+                val current = repo.workdir.value == e.path && repo.sessionKey.value == session.sessionId
                 Row(
-                    Modifier.fillMaxWidth().clickable {
+                    Modifier.fillMaxWidth().background(if (current) Tok.accent.copy(alpha = 0.09f) else Color.Transparent).clickable {
                         repo.openSession(e.path, session.sessionId, title = session.title, agent = session.agent ?: AgentKind.CLAUDE)
                     }.padding(horizontal = 14.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    val active = session.live || session.busy
+                    val active = session.live || session.busy || session.waitingPermission || session.executing
+                    val statusColor = when {
+                        session.waitingPermission -> Tok.warn
+                        session.busy -> Tok.info
+                        session.executing -> Tok.accent
+                        session.live -> Tok.ok
+                        else -> Tok.muted
+                    }
                     Box(Modifier.width(15.dp), contentAlignment = Alignment.CenterStart) {
-                        if (active) PulseDot(if (session.busy) Tok.warn else Tok.ok, 7.dp)
+                        if (session.waitingPermission || session.busy || session.executing) PulseDot(statusColor, 7.dp)
+                        else if (session.live) Box(Modifier.size(7.dp).clip(CircleShape).background(statusColor))
                         else Box(Modifier.size(6.dp).clip(CircleShape).background(Tok.muted.copy(alpha = 0.55f)))
                     }
                     Column(Modifier.weight(1f)) {
-                        Text(session.title, color = if (active) Tok.tx else Tok.tx2, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
-                            if (active) stringResource(Res.string.running) else relativeTime(session.lastModified),
-                            color = if (active) Tok.ok else Tok.muted, fontSize = 10.5.sp,
+                            session.title, color = if (active || current) Tok.tx else Tok.tx2, fontSize = 13.5.sp,
+                            fontWeight = if (current) FontWeight.SemiBold else FontWeight.Medium,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            when {
+                                session.waitingPermission -> stringResource(Res.string.session_status_permission)
+                                session.busy -> stringResource(Res.string.session_status_background)
+                                session.executing -> stringResource(Res.string.session_status_thinking)
+                                session.live -> stringResource(Res.string.session_status_idle)
+                                else -> relativeTime(session.lastModified)
+                            },
+                            color = if (active) statusColor else Tok.muted, fontSize = 10.5.sp,
                             modifier = Modifier.padding(top = 2.dp),
                         )
                     }
@@ -809,6 +828,20 @@ private fun ProjectConversationCard(
                     Icon(Icons.Rounded.KeyboardArrowRight, null, tint = Tok.muted, modifier = Modifier.size(16.dp))
                 }
                 if (index < e.recentSessions.lastIndex) Box(Modifier.fillMaxWidth().padding(start = 29.dp).height(1.dp).background(Tok.hair))
+            }
+            if (e.recentSessionsTotal > e.recentSessions.size) {
+                Box(Modifier.fillMaxWidth().padding(start = 29.dp).height(1.dp).background(Tok.hair))
+                Row(
+                    Modifier.fillMaxWidth().clickable { repo.listSessions(e.path) }.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Spacer(Modifier.width(15.dp))
+                    Text(
+                        stringResource(Res.string.project_view_all, e.recentSessionsTotal), color = Tok.accent,
+                        fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f),
+                    )
+                    Icon(Icons.Rounded.KeyboardArrowRight, null, tint = Tok.accent, modifier = Modifier.size(15.dp))
+                }
             }
         }
     }
@@ -830,7 +863,7 @@ private fun ProjectAvatar(seed: String, agent: AgentKind?) {
                 .border(1.dp, Tok.hair, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Text(when (agent) { AgentKind.CODEX -> "O"; AgentKind.CURSOR -> "C"; else -> "A" }, color = Tok.tx2, fontSize = 7.sp, fontWeight = FontWeight.Bold)
+            AgentGlyph(agent ?: AgentKind.CLAUDE, color = agentColor(agent ?: AgentKind.CLAUDE), size = 8)
         }
     }
 }

@@ -378,4 +378,9 @@
     <string name="questions_answered_one">回答了 %1$d 个问题</string>
     <string name="questions_answered_many">回答了 %1$d 个问题</string>
     <string name="questions_withdrawn">Claude 已继续，无需再回答</string>
+    <string name="project_view_all">查看全部 %1$d 个对话</string>
+    <string name="session_status_thinking">思考中</string>
+    <string name="session_status_permission">等待审批</string>
+    <string name="session_status_background">后台任务</string>
+    <string name="session_status_idle">在线 · 空闲</string>
 </resources>

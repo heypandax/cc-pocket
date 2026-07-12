@@ -112,14 +112,17 @@ class DirectoryService {
             addAll(runCatching { dev.ccpocket.daemon.cursor.CursorSessionScanner.scan(cwd) }.getOrDefault(emptyList()))
         }
         val active = liveNorm[ProjectPaths.normCwd(cwd)].orEmpty()
-        val recent = all.distinctBy { (it.agent ?: AgentKind.CLAUDE) to it.sessionId }
-            .sortedByDescending { it.lastModified }
-            .take(4)
+        val distinct = all.distinctBy { (it.agent ?: AgentKind.CLAUDE) to it.sessionId }
+        val recent = distinct
+            .sortedWith(compareByDescending<SessionSummary> { summary -> active.any { it.sessionId == summary.sessionId } }.thenByDescending { it.lastModified })
+            .take(3)
             .map { summary ->
                 val live = active.firstOrNull { it.sessionId == summary.sessionId && it.agent == (summary.agent ?: AgentKind.CLAUDE) }
-                if (live == null) summary else summary.copy(live = true, busy = live.busy)
+                if (live == null) summary else summary.copy(
+                    live = true, busy = live.busy, waitingPermission = live.waitingPermission, executing = live.executing,
+                )
             }
-        entry.copy(recentSessions = recent)
+        entry.copy(recentSessions = recent, recentSessionsTotal = distinct.size)
     }
 
     /** Directories with Claude history, newest-first, deduped per cwd. [liveNorm] = daemon conversations

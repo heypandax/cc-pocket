@@ -378,4 +378,9 @@
     <string name="questions_answered_one">Answered %1$d question</string>
     <string name="questions_answered_many">Answered %1$d questions</string>
     <string name="questions_withdrawn">Claude moved on — answers no longer needed</string>
+    <string name="project_view_all">View all %1$d conversations</string>
+    <string name="session_status_thinking">Thinking</string>
+    <string name="session_status_permission">Needs approval</string>
+    <string name="session_status_background">Background work</string>
+    <string name="session_status_idle">Online · idle</string>
 </resources>

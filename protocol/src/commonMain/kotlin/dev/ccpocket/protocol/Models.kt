@@ -113,6 +113,8 @@ data class SessionSummary(
     val busy: Boolean = false, // has running background work (bg bash / subagent / monitor) — keep it "active" even when idle
     val agent: AgentKind? = null, // which backend owns this transcript (null = older daemon → phone assumes Claude)
     val model: String? = null, // the LAST assistant turn's model id (null = older daemon / no turn yet) — list rows show its alias
+    val waitingPermission: Boolean = false, // live turn is paused on a phone approval/question
+    val executing: Boolean = false, // authoritative live turn state when embedded in a project card
 )
 
 /**
@@ -155,6 +157,7 @@ data class DirectoryEntry(
     val latestSessionTitle: String? = null,
     /** Newest conversations shown inline on the project card (bounded by the daemon). */
     val recentSessions: List<SessionSummary> = emptyList(),
+    val recentSessionsTotal: Int = recentSessions.size,
     /** a claude process is alive in this dir (open session — may be idle, waiting for input). */
     val open: Boolean = false,
     /** actively executing right now: a process here that wrote output very recently. */
@@ -191,6 +194,7 @@ data class ActiveSession(
     val gitBranch: String? = null,
     /** which backend owns it — a tap must resume with the right CLI. */
     val agent: AgentKind = AgentKind.CLAUDE,
+    val waitingPermission: Boolean = false,
 )
 
 /**
