@@ -732,7 +732,6 @@ class Conversation(
             if (interruptRequested) {
                 interruptRequested = false
                 executing = false
-                lastPrompt = null
                 sink.emit(TurnDone(convoId, null, null))
             }
             proc = null
@@ -870,7 +869,7 @@ class Conversation(
         // (issue #104) snapshot the process state BEFORE the (re)launch below: a prompt acked during a fresh
         // spawn or a settings relaunch is exactly the window a client "delivered but no turn" (turnStalled) targets.
         val firstSpawn = proc == null
-        val relaunching = proc != null && !executing && pendingRelaunch && relaunchGraceElapsed() && !continuationExpected()
+        val relaunching = proc != null && !executing && pendingRelaunch && relaunchGraceElapsed()
         // `executing` must be armed with a happens-before edge to the new pump: a process that dies
         // instantly at startup runs its death-branch `executing = false` on the pump thread, and that
         // clear MUST win. Arming AFTER the launch (as before) lost the race under load — the late `true`
