@@ -308,7 +308,7 @@ private fun CodexLimitRow(label: String, window: CodexLimitWindow) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(label, color = Tok.tx2, fontSize = 12.sp, modifier = Modifier.weight(1f))
-            Text(stringResource(Res.string.usage_codex_remaining, pct), color = Tok.tx, fontFamily = FontFamily.Monospace, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.usage_codex_remaining, pct) + "%", color = Tok.tx, fontFamily = FontFamily.Monospace, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
         Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(999.dp)).background(Tok.raised)) {
             if (remaining > 0.0) Box(
