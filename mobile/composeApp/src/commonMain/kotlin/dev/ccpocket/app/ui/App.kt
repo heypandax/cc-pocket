@@ -1869,13 +1869,26 @@ private fun ComposerStatusBar(repo: PocketRepository, onModel: () -> Unit, onEff
         Canvas(Modifier.size(18.dp).semantics { contentDescription = contextDescription }) {
             val stroke = 3.dp.toPx()
             drawCircle(Tok.hair, style = Stroke(stroke))
-            if (fraction > 0f) drawArc(
-                contextColor(fraction, Tok.info),
-                startAngle = -90f,
-                sweepAngle = 360f * fraction,
-                useCenter = false,
-                style = Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round),
-            )
+            when {
+                fraction > 0f -> drawArc(
+                    contextColor(fraction, Tok.info),
+                    startAngle = -90f,
+                    // A truthful sub-1% value is sub-pixel at 18dp. Keep the semantic percentage exact,
+                    // but guarantee a visible 9° tick so non-zero context never looks like an empty ring.
+                    sweepAngle = 360f * fraction.coerceAtLeast(0.025f),
+                    useCenter = false,
+                    style = Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+                )
+                used > 0L -> {
+                    // Some Codex/Cursor models report occupancy but no context-window denominator. A quarter
+                    // arc + center dot means "active, capacity unknown" — deliberately not a fake percentage.
+                    drawArc(
+                        Tok.info, startAngle = -90f, sweepAngle = 90f, useCenter = false,
+                        style = Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+                    )
+                    drawCircle(Tok.info, radius = 1.5.dp.toPx())
+                }
+            }
         }
     }
 }
