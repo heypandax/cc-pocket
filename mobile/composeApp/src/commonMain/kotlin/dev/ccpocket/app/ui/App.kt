@@ -3,6 +3,8 @@
 package dev.ccpocket.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -21,6 +23,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
@@ -96,12 +99,15 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -1110,6 +1116,12 @@ internal fun SessionsScreen(repo: PocketRepository) { // internal: driven end-to
     val starting = repo.opening.value
     var showSettings by remember { mutableStateOf(false) }
     if (showSettings) { SettingsScreen(repo, onBack = { showSettings = false }); return } // full-screen, replaces this screen
+    val savedScroll = remember(dir) { repo.sessionScrollPosition(dir) }
+    val sessionListState = rememberLazyListState(savedScroll.first, savedScroll.second)
+    LaunchedEffect(dir, sessionListState) {
+        snapshotFlow { sessionListState.firstVisibleItemIndex to sessionListState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) -> repo.saveSessionScrollPosition(dir, index, offset) }
+    }
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().background(Tok.surface).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1136,7 +1148,11 @@ internal fun SessionsScreen(repo: PocketRepository) { // internal: driven end-to
                 }
             }
             PullToRefreshBox(isRefreshing = repo.sessionsRefreshing.value, onRefresh = { repo.refreshSessions() }, modifier = Modifier.fillMaxSize()) {
-            LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(
+                Modifier.fillMaxSize().padding(16.dp),
+                state = sessionListState,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 if (af != "both") item { AgentFilterChip(af) { repo.setAgentFilter("both") } }
                 item {
                     // one tap starts right away with the persisted defaults (openSession's own fallbacks);
@@ -1236,6 +1252,7 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
     var showModeSheet by remember { mutableStateOf(false) }
     var showSessionInfo by remember { mutableStateOf(false) }
     var showQuickActions by remember { mutableStateOf(false) }
+    var quickActionSection by remember { mutableStateOf(QuickActionSection.MAIN) }
     var showBgJobs by remember { mutableStateOf(false) }
     var showTerminal by remember { mutableStateOf(false) }
     var showChangedFiles by remember { mutableStateOf(false) }
@@ -1340,7 +1357,10 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                     // mode switching moved into the ⋯ quick-actions sheet — the persistent badge was one
                     // more thing crowding the header for a setting touched a few times per session
                     Box(
-                        Modifier.size(32.dp).clip(CircleShape).clickable { showQuickActions = true },
+                        Modifier.size(32.dp).clip(CircleShape).clickable {
+                            quickActionSection = QuickActionSection.MAIN
+                            showQuickActions = true
+                        },
                         contentAlignment = Alignment.Center,
                     ) { Text("⋯", color = Tok.tx2, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
                 }
@@ -1353,9 +1373,7 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                 // gutter doesn't, so a long reply's tail slid under the pill on larger text. Measuring
                 // keeps the pill floating (no layout footprint → never pushes the composer) yet always
                 // leaves the last line above it. Falls back to the old gutter until the pill measures.
-                val density = LocalDensity.current
-                var pillHeightPx by remember { mutableStateOf(0) }
-                val bottomGutter = (with(density) { pillHeightPx.toDp() } + 16.dp).coerceAtLeast(36.dp)
+                val bottomGutter = 16.dp
                 LazyColumn(
                     Modifier.fillMaxSize().padding(16.dp).graphicsLayer { alpha = if (landed) 1f else 0f }
                         .pointerInput(Unit) { detectTapGestures { focus.clearFocus() } },
@@ -1410,14 +1428,6 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                         }
                     }
                 }
-                // context usage floats over the message tail's bottom-right — no layout footprint (issue #15).
-                // Its measured height feeds the list's bottom gutter above (issue #81) so the pill never
-                // covers the last line; onSizeChanged only fires once it renders (skipped while hidden).
-                ContextStatusline(
-                    repo.contextUsed.value, repo.contextWindow.value,
-                    Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 12.dp)
-                        .onSizeChanged { pillHeightPx = it.height },
-                )
                 // approvals waiting on OTHER machines pull you over without reflowing this stream —
                 // floats under the connection bar; this machine's own ask keeps its sheet (Fleet ⑤)
                 dev.ccpocket.app.ui.fleet.CrossMachineBanner(
@@ -1483,6 +1493,18 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                 }
                 Column(Modifier.fillMaxWidth().background(Tok.surface)) {
                     BackgroundJobsStrip(repo.backgroundJobs) { showBgJobs = true } // ≥1 running bg task → tap to expand
+                    ComposerStatusBar(
+                        repo = repo,
+                        onModel = {
+                            quickActionSection = QuickActionSection.MODEL
+                            showQuickActions = true
+                        },
+                        onEffort = {
+                            quickActionSection = QuickActionSection.EFFORT
+                            showQuickActions = true
+                        },
+                        onMode = { showModeSheet = true },
+                    )
                     val capturing = voiceState is VoiceState.Recording || voiceState is VoiceState.Transcribing
                     if (suggestions.isNotEmpty() && !capturing) {
                         SlashCommandMenu(suggestions) { cmd -> input = cmd.completion() }
@@ -1598,6 +1620,7 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                 onTerminal = { showTerminal = true },
                 onMode = { showModeSheet = true },
                 onFiles = { repo.fetchChangedFiles(); showChangedFiles = true },
+                initialSection = quickActionSection,
             ) { showQuickActions = false }
         }
         if (showChangedFiles) ChangedFilesSheet(repo, onOpen = { repo.openChangedFile(it) }) { showChangedFiles = false }
@@ -1718,12 +1741,17 @@ private fun MessageItem(m: ChatItem, onOpenImages: (List<ByteArray>, Int) -> Uni
     when (m) {
         // accent-rail user turn (design: User Turn Styles.html, direction B) — the terracotta
         // rail + warm tint mark "what I said" as a quote; no label, assistant flow untouched
-        is ChatItem.User -> Row(
+        is ChatItem.User -> {
+            // Exact Happy "blue" palette: #E8F2FF light / #17324D dark, with its matching indicator.
+            val dark = isSystemInDarkTheme()
+            val bubbleBlue = if (dark) Color(0xFF17324D) else Color(0xFFE8F2FF)
+            val indicatorBlue = if (dark) Color(0xFF64B5FF) else Color(0xFF0A84FF)
+            Row(
             Modifier.fillMaxWidth().height(IntrinsicSize.Min)
                 .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 10.dp, bottomEnd = 10.dp, bottomStart = 4.dp))
-                .background(Tok.accent.copy(alpha = 0.05f)),
+                .background(bubbleBlue),
         ) {
-            Box(Modifier.fillMaxHeight().width(2.dp).clip(RoundedCornerShape(2.dp)).background(Tok.accent.copy(alpha = 0.6f)))
+            Box(Modifier.fillMaxHeight().width(2.dp).clip(RoundedCornerShape(2.dp)).background(indicatorBlue))
             Column(
                 Modifier.weight(1f).padding(start = 12.dp, end = 12.dp, top = 9.dp, bottom = 9.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -1736,6 +1764,7 @@ private fun MessageItem(m: ChatItem, onOpenImages: (List<ByteArray>, Int) -> Uni
                     }
                 }
             }
+        }
         }
         is ChatItem.Assistant -> Column {
             SelectionContainer { MarkdownText(m.text, Tok.tx) } // drag-select any span to copy
@@ -1810,33 +1839,60 @@ private fun WorkingRow() {
     }
 }
 
-/**
- * The usage indicator (issue #15): a light "Context NN%" that FLOATS over the bottom-right of the
- * message list, so it costs no layout height and never pushes the composer. How full the model's
- * window is after the last turn — seeded on resume from the daemon's transcript snapshot, refreshed
- * each turn from TurnDone; hidden until there's a number. A faint raised pill keeps it legible over
- * content; rests at muted, escalating at the ContextBar thresholds (warn ≥ 80%, danger ≥ 95%).
- */
 @Composable
-private fun ContextStatusline(used: Long?, window: Long?, modifier: Modifier = Modifier) {
-    used ?: return // no turn yet / older daemon — nothing to show
-    // no known denominator (Codex — gpt-* windows aren't in our table): show raw occupancy, not a fake %
-    val label = if (window == null) {
-        "${stringResource(Res.string.label_context)} ~${if (used >= 1000) "${used / 1000}k" else "$used"}"
+private fun ComposerStatusBar(repo: PocketRepository, onModel: () -> Unit, onEffort: () -> Unit, onMode: () -> Unit) {
+    val model = modelAlias(repo.model.value).ifBlank { stringResource(Res.string.value_model_default) }
+    val cursorVariant = if (repo.sessionAgent.value == AgentKind.CURSOR) {
+        cursorModelForVariant(repo.cursorModels, repo.model.value)?.variants?.firstOrNull { it.id == repo.model.value }
+    } else null
+    val effort = cursorVariant?.name ?: repo.effort.value ?: stringResource(Res.string.value_default)
+    val mode = stringResource(MODE_BY[repo.mode.value]?.short ?: MODES.first().short)
+    val used = repo.contextUsed.value ?: 0L
+    val window = repo.contextWindow.value
+    val fraction = if (window != null && window > 0) (used.toFloat() / window).coerceIn(0f, 1f) else 0f
+    val contextDescription = if (window != null && window > 0) {
+        "${stringResource(Res.string.label_context)} ${(fraction * 100).toInt()}%"
     } else {
-        "${stringResource(Res.string.label_context)} ${(used.toFloat() / window).coerceIn(0f, 1f).times(100).toInt()}%"
+        "${stringResource(Res.string.label_context)} ~${if (used >= 1000) "${used / 1000}k" else used}"
     }
-    val frac = if (window == null) 0f else (used.toFloat() / window).coerceIn(0f, 1f)
-    Text(
-        label,
-        color = contextColor(frac, Tok.muted),
-        fontFamily = FontFamily.Monospace,
-        fontSize = 11.sp,
-        modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(Tok.raised.copy(alpha = 0.85f))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
-    )
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.End,
+    ) {
+        StatusBarChip("▣", model, onModel)
+        Spacer(Modifier.width(12.dp))
+        StatusBarChip("ϟ", effort, onEffort)
+        Spacer(Modifier.width(12.dp))
+        StatusBarChip("◇", mode, onMode)
+        Spacer(Modifier.width(12.dp))
+        Canvas(Modifier.size(18.dp).semantics { contentDescription = contextDescription }) {
+            val stroke = 3.dp.toPx()
+            drawCircle(Tok.hair, style = Stroke(stroke))
+            if (fraction > 0f) drawArc(
+                contextColor(fraction, Tok.info),
+                startAngle = -90f,
+                sweepAngle = 360f * fraction,
+                useCenter = false,
+                style = Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusBarChip(icon: String, label: String, onClick: () -> Unit) {
+    Row(
+        Modifier.heightIn(min = 24.dp).clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick).padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(icon, color = Tok.muted, fontSize = 13.sp)
+        Text(
+            label, color = Tok.muted, fontSize = 12.sp, fontWeight = FontWeight.Medium,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 104.dp),
+        )
+    }
 }
 
 /** Extended reasoning, collapsed to one italic line; expands to the full text behind a hairline rule. */

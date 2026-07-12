@@ -202,26 +202,33 @@ private fun Hairline() = Box(Modifier.fillMaxWidth().height(1.dp).background(Tok
 // ════════════════════════════════════════════════════════════════════
 //  Quick actions: switch model / effort, compact, clear, simplify
 // ════════════════════════════════════════════════════════════════════
-private enum class QaSub { MAIN, MODEL, EFFORT }
+enum class QuickActionSection { MAIN, MODEL, EFFORT }
 
 @Composable
-fun QuickActionsSheet(repo: PocketRepository, onTerminal: () -> Unit, onMode: () -> Unit, onFiles: () -> Unit, onDismiss: () -> Unit) {
-    var sub by remember { mutableStateOf(QaSub.MAIN) }
+fun QuickActionsSheet(
+    repo: PocketRepository,
+    onTerminal: () -> Unit,
+    onMode: () -> Unit,
+    onFiles: () -> Unit,
+    initialSection: QuickActionSection = QuickActionSection.MAIN,
+    onDismiss: () -> Unit,
+) {
+    var sub by remember(initialSection) { mutableStateOf(initialSection) }
     var clearArmed by remember { mutableStateOf(false) }
     val modelScroll = rememberScrollState()
     PocketSheet(onDismiss) {
         Column(
             Modifier.padding(horizontal = 16.dp).padding(bottom = 14.dp, top = 4.dp)
                 .then(
-                    if (sub == QaSub.MODEL || sub == QaSub.EFFORT) Modifier.fillMaxHeight(0.88f).verticalScroll(modelScroll)
+                    if (sub == QuickActionSection.MODEL || sub == QuickActionSection.EFFORT) Modifier.fillMaxHeight(0.88f).verticalScroll(modelScroll)
                     else Modifier,
                 ),
         ) {
             when (sub) {
-                QaSub.MAIN -> {
+                QuickActionSection.MAIN -> {
                     Text(stringResource(Res.string.quick_actions_title), color = Tok.tx, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        ActionRow(stringResource(Res.string.qa_model), value = modelAlias(repo.model.value).ifBlank { stringResource(Res.string.value_default) }, chevron = true) { sub = QaSub.MODEL }
+                        ActionRow(stringResource(Res.string.qa_model), value = modelAlias(repo.model.value).ifBlank { stringResource(Res.string.value_default) }, chevron = true) { sub = QuickActionSection.MODEL }
                         val cursorVariant = if (repo.sessionAgent.value == AgentKind.CURSOR) {
                             cursorModelForVariant(repo.cursorModels, repo.model.value)?.variants?.firstOrNull { it.id == repo.model.value }
                         } else null
@@ -229,7 +236,7 @@ fun QuickActionsSheet(repo: PocketRepository, onTerminal: () -> Unit, onMode: ()
                             stringResource(Res.string.label_effort),
                             value = cursorVariant?.name ?: repo.effort.value ?: stringResource(Res.string.value_default),
                             chevron = true,
-                        ) { sub = QaSub.EFFORT }
+                        ) { sub = QuickActionSection.EFFORT }
                         // the permission-mode switch lives here now (was a persistent header badge — one
                         // more thing crowding the top bar for a setting touched a few times per session)
                         ActionRow(
@@ -250,15 +257,15 @@ fun QuickActionsSheet(repo: PocketRepository, onTerminal: () -> Unit, onMode: ()
                         }
                     }
                 }
-                QaSub.MODEL -> ModelPicker(repo, onBack = { sub = QaSub.MAIN }, onDone = onDismiss)
-                QaSub.EFFORT -> {
+                QuickActionSection.MODEL -> ModelPicker(repo, onBack = { sub = QuickActionSection.MAIN }, onDone = onDismiss)
+                QuickActionSection.EFFORT -> {
                     val cursorModel = cursorModelForVariant(repo.cursorModels, repo.model.value)
                     if (repo.sessionAgent.value == AgentKind.CURSOR && cursorModel != null && cursorModel.variants.isNotEmpty()) {
                         OptionPicker(
                             title = stringResource(Res.string.label_effort),
                             options = cursorModel.variants.map { it.name },
                             selected = cursorModel.variants.firstOrNull { it.id == repo.model.value }?.name,
-                            onBack = { sub = QaSub.MAIN },
+                            onBack = { sub = QuickActionSection.MAIN },
                         ) { label ->
                             cursorModel.variants.firstOrNull { it.name == label }?.let { repo.switchModel(it.id) }
                             onDismiss()
@@ -268,7 +275,7 @@ fun QuickActionsSheet(repo: PocketRepository, onTerminal: () -> Unit, onMode: ()
                             title = stringResource(Res.string.label_effort),
                             options = EFFORT_OPTIONS,
                             selected = repo.effort.value,
-                            onBack = { sub = QaSub.MAIN },
+                            onBack = { sub = QuickActionSection.MAIN },
                         ) { repo.switchEffort(it); onDismiss() }
                     }
                 }

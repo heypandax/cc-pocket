@@ -395,6 +395,11 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     val sessions = mutableStateListOf<SessionSummary>()
     var directoryScrollIndex = 0
     var directoryScrollOffset = 0
+    private val sessionScrollPositions = mutableMapOf<String, Pair<Int, Int>>()
+    fun sessionScrollPosition(workdir: String): Pair<Int, Int> = sessionScrollPositions[workdir] ?: (0 to 0)
+    fun saveSessionScrollPosition(workdir: String, index: Int, offset: Int) {
+        sessionScrollPositions[workdir] = index to offset
+    }
     val sessionsDir = mutableStateOf<String?>(null)
     val messages = mutableStateListOf<ChatItem>()
     val pendingImages = mutableStateListOf<PendingImage>() // photos staged in the composer (pre-send)
