@@ -257,6 +257,7 @@
     <string name="usage_codex_primary">5 小时限额</string>
     <string name="usage_codex_secondary">每周限额</string>
     <string name="usage_codex_used">已用 %1$d%%</string>
+    <string name="usage_codex_remaining">剩余 %1$d%%</string>
     <string name="usage_codex_resets_in">%1$s 后重置</string>
     <string name="usage_codex_resets_on">于%1$s重置</string>
     <string name="usage_codex_credits">Credits 余额：%1$s</string>

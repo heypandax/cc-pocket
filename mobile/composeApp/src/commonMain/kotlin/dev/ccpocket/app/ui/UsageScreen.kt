@@ -62,7 +62,7 @@ import dev.ccpocket.app.resources.usage_codex_snapshot
 import dev.ccpocket.app.resources.usage_codex_dashboard
 import dev.ccpocket.app.resources.usage_codex_dashboard_hint
 import dev.ccpocket.app.resources.usage_codex_no_snapshot
-import dev.ccpocket.app.resources.usage_codex_used
+import dev.ccpocket.app.resources.usage_codex_remaining
 import dev.ccpocket.app.resources.usage_cost
 import dev.ccpocket.app.resources.usage_empty
 import dev.ccpocket.app.resources.usage_empty_hint
@@ -298,19 +298,23 @@ private fun CodexLimitsCard(limits: CodexLimits) {
 @Composable
 private fun CodexLimitRow(label: String, window: CodexLimitWindow) {
     val used = window.usedPercent.coerceIn(0.0, 100.0)
-    val pct = used.roundToInt()
+    val remaining = (100.0 - used).coerceIn(0.0, 100.0)
+    val pct = remaining.roundToInt()
     val barColor = when {
-        used >= 100.0 -> Tok.danger
-        used >= 80.0 -> Tok.warn
+        remaining <= 0.0 -> Tok.danger
+        remaining <= 20.0 -> Tok.warn
         else -> Tok.codex
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(label, color = Tok.tx2, fontSize = 12.sp, modifier = Modifier.weight(1f))
-            Text(stringResource(Res.string.usage_codex_used, pct), color = Tok.tx, fontFamily = FontFamily.Monospace, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.usage_codex_remaining, pct), color = Tok.tx, fontFamily = FontFamily.Monospace, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
         Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(999.dp)).background(Tok.raised)) {
-            Box(Modifier.fillMaxWidth((used / 100.0).toFloat().coerceIn(0.03f, 1f)).height(6.dp).clip(RoundedCornerShape(999.dp)).background(barColor))
+            if (remaining > 0.0) Box(
+                Modifier.fillMaxWidth((remaining / 100.0).toFloat()).height(6.dp)
+                    .clip(RoundedCornerShape(999.dp)).background(barColor),
+            )
         }
         Text(
             if (window.windowMinutes >= 24 * 60) {
