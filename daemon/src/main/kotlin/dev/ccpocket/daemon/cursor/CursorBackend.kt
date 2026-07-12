@@ -205,6 +205,14 @@ class CursorBackend(private val cursorBin: String?) : AgentBackend {
         return true
     }
 
+    // cursor-agent --model wants ids (auto, claude-fable-5-max, gpt-5.2) — but its OWN init event echoes
+    // the model back as a DISPLAY name ("Fable 5 300K Max No Thinking"). The daemon stored that echo and,
+    // because Cursor is one process per turn, relaunched the SECOND turn with it — which can die with
+    // "Cannot use this model" (exit 1). Ids never contain whitespace; a spaced value is a display name →
+    // null (launch without --model, account default). A lone capitalized token ("Auto") lowercases to its id.
+    override fun sanitizeModel(model: String?): String? =
+        model?.trim()?.takeIf { it.isNotBlank() && it.none(Char::isWhitespace) }?.lowercase()
+
     override suspend fun onProcessEnded(sessionId: String?) { cleanupImages() }
     override fun transcriptDir(workdir: String): Path = CursorPaths.sessionsRoot()
     override fun listSessions(workdir: String): List<SessionSummary> = CursorSessionScanner.scan(workdir)

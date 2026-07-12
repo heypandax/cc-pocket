@@ -60,6 +60,11 @@ interface AgentBackend {
      *  means "unchanged". */
     fun applySettings(mode: PermissionMode?, model: String?, effort: String?): Boolean
 
+    /** Normalize a requested model before it's stored/launched; null = "use the default". Cursor drops
+     *  display names ("Fable 5 300K Max No Thinking") that its own init once echoed back and phones may
+     *  have persisted — `--model` only accepts ids, and launching with a display name exits 1. */
+    fun sanitizeModel(model: String?): String? = model
+
     /** Hook fired when the process is shutting down (intentional stop or unexpected exit), once its
      *  transcript is quiet. Claude rewrites the .jsonl so the desktop --resume picker shows it; Codex no-op. */
     suspend fun onProcessEnded(sessionId: String?)

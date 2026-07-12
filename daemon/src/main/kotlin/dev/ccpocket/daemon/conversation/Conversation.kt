@@ -251,7 +251,7 @@ class Conversation(
     val resumeAnchor: String? get() = openedResumeId
 
     suspend fun open(resumeId: String?, model: String?, effort: String? = null, fork: Boolean = false, takeOver: Boolean = false) {
-        this.model = model
+        this.model = backend.sanitizeModel(model)
         this.effort = effort // restore the session's last reasoning effort on a fresh resume (transcript doesn't carry it)
         this.openedResumeId = resumeId
         this.openedWithFork = fork
@@ -403,9 +403,10 @@ class Conversation(
     /** Switch the model — next-turn semantics (issue #84): the running turn is untouched; the change takes
      *  effect on the next turn (Claude relaunches then, Codex applies it in that turn's params). */
     suspend fun switchModel(newModel: String?) {
-        model = newModel
+        val sanitized = backend.sanitizeModel(newModel)
+        model = sanitized
         backfilledModel = null // an explicit choice replaces the transcript guess, even a choice of "default"
-        recordPendingSettings(mode = null, model = newModel, effort = null)
+        recordPendingSettings(mode = null, model = sanitized, effort = null)
     }
 
     /** Switch reasoning effort — next-turn semantics (issue #84), same deferral as switchModel. */
@@ -469,7 +470,9 @@ class Conversation(
                     is AgentEvent.SessionInit -> {
                         val firstTime = sessionId == null
                         ev.sessionId?.let { sessionId = it }
-                        ev.model?.let { model = it; backfilledModel = null } // the agent's resolved model beats the transcript guess
+                        ev.model?.let { reported ->
+                            backend.sanitizeModel(reported)?.let { model = it; backfilledModel = null }
+                        } // accept the agent's resolved model only when it is still a launchable id
                         if (firstTime && sessionId != null) {
                             reemitLive = false // this announce already carries the fresh sessionId + mode
                             log.info("$convoId session live: $sessionId")

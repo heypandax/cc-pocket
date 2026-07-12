@@ -110,4 +110,12 @@ class CursorBackendTest {
         assertTrue("model" in backend.processExitError(1, "invalid model").lowercase())
         assertTrue("permission" in backend.processExitError(1, "Permission denied").lowercase())
     }
+
+    @Test
+    fun cursor_model_sanitizer_rejects_display_names_but_keeps_ids() {
+        val backend = CursorBackend(null)
+        assertEquals("claude-fable-5-max", backend.sanitizeModel("claude-fable-5-max"))
+        assertEquals("auto", backend.sanitizeModel("Auto"))
+        assertEquals(null, backend.sanitizeModel("Fable 5 300K Max No Thinking"))
+    }
 }
