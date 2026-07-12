@@ -260,6 +260,11 @@ private fun CodexLimitsUnavailableCard() {
 @Composable
 private fun CodexLimitsCard(limits: CodexLimits) {
     val uri = LocalUriHandler.current
+    // Codex may return a weekly-only account as `primary` (not `secondary`). Classify by duration;
+    // primary/secondary describe ordering, not a permanent 5h/week meaning.
+    val weekly = listOfNotNull(limits.primary, limits.secondary)
+        .filter { it.windowMinutes >= 24 * 60 }
+        .maxByOrNull { it.windowMinutes }
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(14.dp))
             .padding(horizontal = 16.dp, vertical = 15.dp),
@@ -282,7 +287,7 @@ private fun CodexLimitsCard(limits: CodexLimits) {
         // files may also contain a `primary` 300-minute window, but that is a CLI-local rate-limit
         // snapshot and must not be presented as the account's official allowance: it can outlive a
         // reset, belong to an older login, or simply be omitted by the official account UI.
-        limits.secondary?.let {
+        weekly?.let {
             CodexLimitRow(stringResource(Res.string.usage_codex_secondary), it)
         } ?: Text(
             stringResource(Res.string.usage_codex_weekly_unavailable),
@@ -298,7 +303,7 @@ private fun CodexLimitsCard(limits: CodexLimits) {
             }
             text?.let { Text(it, color = Tok.tx2, fontSize = 12.sp) }
         }
-        if ((limits.secondary?.usedPercent ?: 0.0) >= 100.0) {
+        if ((weekly?.usedPercent ?: 0.0) >= 100.0) {
             Text(stringResource(Res.string.usage_codex_rate_limited), color = Tok.warn, fontSize = 12.sp, fontWeight = FontWeight.Medium)
         }
         limits.capturedAt?.let { at ->

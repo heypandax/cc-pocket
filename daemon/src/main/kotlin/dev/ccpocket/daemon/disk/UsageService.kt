@@ -44,6 +44,7 @@ object UsageService {
         projectsRoot: Path = ProjectPaths.projectsRoot(),
         codexFiles: List<Path> = runCatching { dev.ccpocket.daemon.codex.CodexPaths.sessionFiles() }.getOrDefault(emptyList()),
         journal: List<UsageJournal.Entry> = runCatching { UsageJournal.read() }.getOrDefault(emptyList()),
+        liveCodexLimits: CodexLimits? = null,
     ): Usage {
         val span = days.coerceIn(1, 90)
         val today = LocalDate.now(zone)
@@ -193,7 +194,7 @@ object UsageService {
             cacheHitPct = cacheHit,
             costUsdToday = if (costSeen) costToday else null,
             hours = hours,
-            codexLimits = latestCodexLimits?.copy(
+            codexLimits = liveCodexLimits ?: latestCodexLimits?.copy(
                 capturedAt = latestCodexLimitsAt?.toEpochMilli() ?: latestCodexLimits?.capturedAt,
             ),
         )
