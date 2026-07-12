@@ -43,7 +43,15 @@ enum class AgentKind {
 
 /** One model reported by an agent CLI for the signed-in account. */
 @Serializable
-data class AgentModel(val id: String, val name: String = id)
+data class AgentModelVariant(val id: String, val name: String = id)
+
+/** One logical model. Cursor fills [variants] with its effort/thinking/fast combinations. */
+@Serializable
+data class AgentModel(
+    val id: String,
+    val name: String = id,
+    val variants: List<AgentModelVariant> = emptyList(),
+)
 
 /** One assistant content piece (closed set for M0: text | thinking). tool_use is a [ToolEvent]. */
 @Serializable

@@ -55,6 +55,7 @@ import dev.ccpocket.app.ui.AgentGlyph
 import dev.ccpocket.app.ui.CLAUDE_MODEL_OPTIONS
 import dev.ccpocket.app.ui.CODEX_MODEL_OPTIONS
 import dev.ccpocket.app.ui.mergedCursorModels
+import dev.ccpocket.app.ui.cursorModelForVariant
 import dev.ccpocket.app.ui.modelFamily
 import dev.ccpocket.app.ui.modelFamilyRank
 import dev.ccpocket.app.ui.EFFORT_OPTIONS
@@ -167,7 +168,11 @@ fun QuickActionsPopover(model: DesktopModel, onDismiss: () -> Unit) {
             QaPage.MAIN -> {
                 PopoverLabel("Quick actions")
                 QaRow("Model", value = model.chatModel.ifBlank { "default" }, chevron = true) { page = QaPage.MODEL }
-                QaRow("Effort", value = model.chatEffort ?: "default", chevron = true) { page = QaPage.EFFORT }
+                val cursorVariant = if (model.chatAgent == AgentKind.CURSOR) {
+                    cursorModelForVariant(model.cursorModels, model.chatModelId.ifBlank { model.chatModel })
+                        ?.variants?.firstOrNull { it.id == model.chatModelId || it.id == model.chatModel }
+                } else null
+                QaRow("Effort", value = cursorVariant?.name ?: model.chatEffort ?: "default", chevron = true) { page = QaPage.EFFORT }
                 QaRow("Mode", value = CLAUDE_MODES.first { it.mode == model.chatMode }.token, chevron = true) { page = QaPage.MODE }
                 // canOpen() stats the filesystem — key it on the workdir so it isn't re-run every
                 // recomposition (this popover recomposes on every page/arm toggle); same as ChatSubHeader
@@ -250,7 +255,13 @@ fun QuickActionsPopover(model: DesktopModel, onDismiss: () -> Unit) {
             }
             QaPage.EFFORT -> {
                 QaBack("Effort") { page = QaPage.MAIN }
-                EFFORT_OPTIONS.forEach { opt ->
+                val currentId = model.chatModelId.ifBlank { model.chatModel }
+                val cursorModel = if (model.chatAgent == AgentKind.CURSOR) cursorModelForVariant(model.cursorModels, currentId) else null
+                if (cursorModel != null && cursorModel.variants.isNotEmpty()) {
+                    cursorModel.variants.forEach { variant ->
+                        QaOption(variant.name, variant.id.equals(currentId, true)) { model.switchModel(variant.id); onDismiss() }
+                    }
+                } else EFFORT_OPTIONS.forEach { opt ->
                     QaOption(opt, opt.equals(model.chatEffort, true)) { model.switchEffort(opt); onDismiss() }
                 }
             }

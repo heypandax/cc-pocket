@@ -1,6 +1,7 @@
 package dev.ccpocket.app.ui
 
 import dev.ccpocket.protocol.AgentModel
+import dev.ccpocket.protocol.AgentModelVariant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -35,15 +36,14 @@ class CodexModelOptionsTest {
     }
 
     @Test
-    fun cursor_live_catalog_is_merged_with_bundled_fable_models() {
+    fun cursor_live_catalog_replaces_bundled_fallback_without_extra_models() {
         val merged = mergedCursorModels(
             listOf(AgentModel("auto", "Auto (current, default)"), AgentModel("gpt-5.3-codex", "Codex 5.3")),
         )
 
         assertEquals("Auto (current, default)", merged.first().first)
         assertEquals(1, merged.count { it.second == "auto" })
-        assertTrue(merged.any { it.second == "claude-fable-5-high" })
-        assertTrue(merged.any { it.second == "claude-fable-5-thinking-high" })
+        assertEquals(listOf("auto", "gpt-5.3-codex"), merged.map { it.second })
     }
 
     @Test
@@ -54,5 +54,14 @@ class CodexModelOptionsTest {
         assertEquals("GPT", modelFamily("gpt-5.2"))
         assertEquals("Gemini", modelFamily("gemini-3.1-pro"))
         assertTrue(modelFamilyRank("Fable") < modelFamilyRank("Codex"))
+    }
+
+    @Test
+    fun cursor_variant_resolves_to_its_logical_model() {
+        val fable = AgentModel(
+            "claude-fable-5-medium", "Fable 5",
+            listOf(AgentModelVariant("claude-fable-5-medium", "Medium"), AgentModelVariant("claude-fable-5-thinking-high", "High Thinking")),
+        )
+        assertEquals(fable, cursorModelForVariant(listOf(fable), "claude-fable-5-thinking-high"))
     }
 }

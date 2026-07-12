@@ -85,11 +85,12 @@ internal val CURSOR_MODEL_OPTIONS = listOf(
 
 /** Keep bundled models visible when Cursor's account catalog only returns a partial rollout. */
 internal fun mergedCursorModels(live: List<AgentModel>): List<Pair<String, String>> {
-    val merged = LinkedHashMap<String, String>()
-    live.forEach { merged[it.id] = it.name }
-    CURSOR_MODEL_OPTIONS.forEach { id -> if (id !in merged) merged[id] = id }
-    return merged.map { (id, name) -> name to id }
+    if (live.isNotEmpty()) return live.map { it.name to it.id }
+    return CURSOR_MODEL_OPTIONS.map { it to it }
 }
+
+internal fun cursorModelForVariant(models: List<AgentModel>, modelId: String?): AgentModel? =
+    models.firstOrNull { model -> model.id == modelId || model.variants.any { it.id == modelId } }
 
 internal fun modelFamily(id: String): String = when {
     id.equals("auto", true) -> "Recommended"
@@ -212,7 +213,7 @@ fun QuickActionsSheet(repo: PocketRepository, onTerminal: () -> Unit, onMode: ()
         Column(
             Modifier.padding(horizontal = 16.dp).padding(bottom = 14.dp, top = 4.dp)
                 .then(
-                    if (sub == QaSub.MODEL) Modifier.fillMaxHeight(0.88f).verticalScroll(modelScroll)
+                    if (sub == QaSub.MODEL || sub == QaSub.EFFORT) Modifier.fillMaxHeight(0.88f).verticalScroll(modelScroll)
                     else Modifier,
                 ),
         ) {
@@ -221,7 +222,14 @@ fun QuickActionsSheet(repo: PocketRepository, onTerminal: () -> Unit, onMode: ()
                     Text(stringResource(Res.string.quick_actions_title), color = Tok.tx, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         ActionRow(stringResource(Res.string.qa_model), value = modelAlias(repo.model.value).ifBlank { stringResource(Res.string.value_default) }, chevron = true) { sub = QaSub.MODEL }
-                        ActionRow(stringResource(Res.string.label_effort), value = repo.effort.value ?: stringResource(Res.string.value_default), chevron = true) { sub = QaSub.EFFORT }
+                        val cursorVariant = if (repo.sessionAgent.value == AgentKind.CURSOR) {
+                            cursorModelForVariant(repo.cursorModels, repo.model.value)?.variants?.firstOrNull { it.id == repo.model.value }
+                        } else null
+                        ActionRow(
+                            stringResource(Res.string.label_effort),
+                            value = cursorVariant?.name ?: repo.effort.value ?: stringResource(Res.string.value_default),
+                            chevron = true,
+                        ) { sub = QaSub.EFFORT }
                         // the permission-mode switch lives here now (was a persistent header badge — one
                         // more thing crowding the top bar for a setting touched a few times per session)
                         ActionRow(
@@ -243,12 +251,27 @@ fun QuickActionsSheet(repo: PocketRepository, onTerminal: () -> Unit, onMode: ()
                     }
                 }
                 QaSub.MODEL -> ModelPicker(repo, onBack = { sub = QaSub.MAIN }, onDone = onDismiss)
-                QaSub.EFFORT -> OptionPicker(
-                    title = stringResource(Res.string.label_effort),
-                    options = EFFORT_OPTIONS,
-                    selected = repo.effort.value,
-                    onBack = { sub = QaSub.MAIN },
-                ) { repo.switchEffort(it); onDismiss() }
+                QaSub.EFFORT -> {
+                    val cursorModel = cursorModelForVariant(repo.cursorModels, repo.model.value)
+                    if (repo.sessionAgent.value == AgentKind.CURSOR && cursorModel != null && cursorModel.variants.isNotEmpty()) {
+                        OptionPicker(
+                            title = stringResource(Res.string.label_effort),
+                            options = cursorModel.variants.map { it.name },
+                            selected = cursorModel.variants.firstOrNull { it.id == repo.model.value }?.name,
+                            onBack = { sub = QaSub.MAIN },
+                        ) { label ->
+                            cursorModel.variants.firstOrNull { it.name == label }?.let { repo.switchModel(it.id) }
+                            onDismiss()
+                        }
+                    } else {
+                        OptionPicker(
+                            title = stringResource(Res.string.label_effort),
+                            options = EFFORT_OPTIONS,
+                            selected = repo.effort.value,
+                            onBack = { sub = QaSub.MAIN },
+                        ) { repo.switchEffort(it); onDismiss() }
+                    }
+                }
             }
         }
     }
@@ -317,7 +340,10 @@ private fun ModelPicker(repo: PocketRepository, onBack: () -> Unit, onDone: () -
     LaunchedEffect(agent) {
         if (agent == AgentKind.CURSOR) repo.refreshCursorModels()
     }
-    val selected = if (agent != AgentKind.CLAUDE) repo.model.value else modelAlias(repo.model.value)
+    val selectedRaw = if (agent != AgentKind.CLAUDE) repo.model.value else modelAlias(repo.model.value)
+    val selected = if (agent == AgentKind.CURSOR) {
+        cursorModelForVariant(repo.cursorModels, selectedRaw)?.id ?: selectedRaw
+    } else selectedRaw
     // On the first open, don't flash the small bundled catalog and replace it seconds later with Cursor's
     // account catalog. Keep only the optimistic current row until discovery completes; bundled models are
     // used only after an explicit discovery error.

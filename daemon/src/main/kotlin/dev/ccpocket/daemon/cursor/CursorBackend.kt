@@ -6,6 +6,7 @@ import dev.ccpocket.daemon.agent.AgentIo
 import dev.ccpocket.daemon.agent.AgentSpec
 import dev.ccpocket.protocol.AgentKind
 import dev.ccpocket.protocol.AgentModel
+import dev.ccpocket.protocol.AgentModelVariant
 import dev.ccpocket.protocol.HistoryMessage
 import dev.ccpocket.protocol.ImageData
 import dev.ccpocket.protocol.PermissionMode
@@ -52,10 +53,46 @@ class CursorBackend(private val cursorBin: String?) : AgentBackend {
         return parseModelLines(lines)
     }
 
-    internal fun parseModelLines(lines: List<String>): List<AgentModel> = lines.mapNotNull { line ->
+    internal fun parseModelLines(lines: List<String>): List<AgentModel> {
+        val raw = lines.mapNotNull { line ->
             val separator = line.indexOf(" - ")
             if (separator <= 0) null else AgentModel(line.substring(0, separator).trim(), line.substring(separator + 3).trim())
         }.distinctBy { it.id }
+        // cursor-agent exposes every effort/thinking/fast permutation as a separate --model id, while Cursor's
+        // own picker shows one logical model and a second parameter control. Preserve first-seen order: the CLI
+        // deliberately lists its recommended/default permutation for each family before the exhaustive matrix.
+        return raw.groupBy { modelFamilyId(it.id) }.values.map { family ->
+            val preferred = family.first()
+            preferred.copy(
+                name = logicalModelName(preferred.name),
+                variants = family.map { AgentModelVariant(it.id, variantName(it.name)) },
+            )
+        }
+    }
+
+    internal fun logicalModelName(display: String): String = display
+        .replace(" (current)", "")
+        .replace(Regex("\\s+(1M|300K|272K|200K)(\\s+.*)?$"), "")
+        .replace(Regex("\\s+(Low|Medium|High|Extra High)( Fast)?$"), "")
+        .replace(Regex("\\s+Thinking( Fast)?$"), "")
+        .replace(Regex("\\s+Fast$"), "")
+        .trim()
+
+    internal fun variantName(display: String): String = display
+        .replace(" (current)", "")
+        .replace(Regex("^.*?\\s+(1M|300K|272K|200K)\\s*"), "")
+        .trim()
+
+    internal fun modelFamilyId(id: String): String {
+        var base = id.removeSuffix("-fast")
+        val suffixes = listOf(
+            "-thinking-extra-high", "-thinking-xhigh", "-thinking-medium", "-thinking-high", "-thinking-low", "-thinking-max",
+            "-extra-high-thinking", "-xhigh-thinking", "-medium-thinking", "-high-thinking", "-low-thinking", "-max-thinking",
+            "-extra-high", "-xhigh", "-medium", "-high", "-low", "-none", "-thinking",
+        )
+        suffixes.firstOrNull { base.endsWith(it) }?.let { base = base.removeSuffix(it) }
+        return base
+    }
 
     private fun exe() = resolvedExe ?: CursorLauncher.resolveExecutable(cursorBin).also { resolvedExe = it }
     override fun processBuilder(spec: AgentSpec) = CursorLauncher.processBuilder(exe(), spec)

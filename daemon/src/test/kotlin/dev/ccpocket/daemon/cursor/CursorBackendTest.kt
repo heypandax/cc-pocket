@@ -80,10 +80,27 @@ class CursorBackendTest {
     @Test
     fun model_catalog_parser_keeps_ids_and_display_names() {
         val models = CursorBackend(null).parseModelLines(
-            listOf("Available models", "", "auto - Auto (default)", "claude-fable-5-high - Fable 5 1M (NO ZDR)", "Tip: use --model"),
+            listOf(
+                "Available models", "", "auto - Auto (default)",
+                "claude-fable-5-medium - Fable 5 Medium (NO ZDR)",
+                "claude-fable-5-high - Fable 5 High (NO ZDR)",
+                "claude-fable-5-thinking-high - Fable 5 High Thinking (NO ZDR)",
+                "Tip: use --model",
+            ),
         )
-        assertEquals(listOf("auto", "claude-fable-5-high"), models.map { it.id })
-        assertEquals("Fable 5 1M (NO ZDR)", models.last().name)
+        assertEquals(listOf("auto", "claude-fable-5-medium"), models.map { it.id })
+        assertEquals(3, models.last().variants.size)
+        assertEquals("claude-fable-5-thinking-high", models.last().variants.last().id)
+    }
+
+    @Test
+    fun model_family_parser_keeps_product_names_but_strips_parameters() {
+        val backend = CursorBackend(null)
+        assertEquals("gpt-5.3-codex", backend.modelFamilyId("gpt-5.3-codex-low-fast"))
+        assertEquals("gpt-5.1-codex-max", backend.modelFamilyId("gpt-5.1-codex-max-medium"))
+        assertEquals("claude-fable-5", backend.modelFamilyId("claude-fable-5-thinking-xhigh"))
+        assertEquals("claude-4.6-sonnet", backend.modelFamilyId("claude-4.6-sonnet-medium-thinking"))
+        assertEquals("gemini-3.1-pro", backend.modelFamilyId("gemini-3.1-pro"))
     }
 
     @Test
