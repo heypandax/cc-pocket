@@ -13,7 +13,8 @@ actual fun epochMillis(): Long = (NSDate().timeIntervalSince1970 * 1000).toLong(
 
 actual fun localWeekdayTime(epochSeconds: Long): String = NSDateFormatter().run {
     dateFormat = "EEE HH:mm"
-    stringFromDate(NSDate(timeIntervalSince1970 = epochSeconds.toDouble()))
+    // Foundation's Kotlin/Native constructor is reference-date based (2001-01-01), not Unix based.
+    stringFromDate(NSDate(timeIntervalSinceReferenceDate = epochSeconds.toDouble() - 978_307_200.0))
 }
 
 // Launch arg `-ccpPreview YES` lands in standardUserDefaults — see marketing/preview.
