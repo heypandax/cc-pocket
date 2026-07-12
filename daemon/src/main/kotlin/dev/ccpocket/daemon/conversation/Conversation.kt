@@ -200,6 +200,11 @@ class Conversation(
         var redeliveries: Int = 0,
     )
 
+    // the turn-starting prompt handed to a fresh (re)launch, so launchProcess can LEDGER it before it
+    // starts the pump — a fast agent echoes the user message within ms, and a record that lands after
+    // that replay orphans the entry → a spurious re-injection on the next relaunch (issue #122 race).
+    private class InitialSend(val promptId: String?, val text: String, val images: List<ImageData>)
+
     private val promptLedger = ArrayDeque<PendingPrompt>()
     private val localPromptSeq = AtomicLong(0)
 
@@ -461,11 +466,13 @@ class Conversation(
      * hasn't changed just because the phone flipped a setting; the old `resumeId != sessionId` heuristic
      * forked a duplicate session here. Post-init, fork only for a genuinely foreign id (never today's callers).
      */
-    private suspend fun relaunch(resumeId: String? = sessionId) {
-        stopProcess()
+    private suspend fun relaunch(resumeId: String? = sessionId, armExecuting: Boolean = false, initialSend: InitialSend? = null) {
+        stopProcess() // clears executing — the fresh launch re-arms it (armExecuting) with the right ordering
         val fork = if (sessionId == null) openedWithFork else resumeId != sessionId
         launchProcess(
             AgentSpec(workdir, resumeId = resumeId, model = model, mode = mode, effort = effort, forkSession = fork),
+            armExecuting = armExecuting,
+            initialSend = initialSend,
         )
     }
 
@@ -518,7 +525,7 @@ class Conversation(
         if (rule == null) allowRules.clear() else allowRules.remove(rule)
     }
 
-    private suspend fun launchProcess(spec: AgentSpec) {
+    private suspend fun launchProcess(spec: AgentSpec, armExecuting: Boolean = false, initialSend: InitialSend? = null) {
         intentionalStop = false
         pendingRelaunch = false // this launch bakes the current model/mode/effort — no switch is pending anymore (issue #84)
         processGeneration += 1 // ledger entries written from here on belong to THIS process (issue #122)
@@ -549,6 +556,18 @@ class Conversation(
             log.info("$convoId re-injecting ${redeliver.size} unconsumed prompt(s) into the fresh agent")
             redeliver.forEach { backend.sendPrompt(it.text, it.images) }
         }
+        // LEDGER the launch's own prompt HERE — after the generation bump (so its entry is stamped with
+        // THIS process, keeping releaseLostPrompt's generation check correct) but BEFORE the pump starts.
+        // The caller still writes it (backend.sendPrompt) after we return; only the RECORD must precede
+        // the pump, so the CLI's near-instant user-message echo settles the entry instead of orphaning it
+        // (issue #122 record-vs-replay race — a spurious re-injection on the next relaunch). NOT re-sent
+        // here: it is not in `redeliver` (recorded after that snapshot) — the caller owns its single write.
+        initialSend?.let { recordPromptWritten(it.promptId, it.text, it.images) }
+        // Arm `executing` for a turn-starting (re)launch BEFORE the pump can run (sendPrompt's lazy start /
+        // settings relaunch): the pump's death-branch `executing = false` is then guaranteed to happen-after
+        // this write, so an instant startup death always wins and can't be resurrected by a late arm on the
+        // caller thread (the reap-flake / stranded-■ race). Ordered last so it also covers re-injection.
+        if (armExecuting) executing = true
         scope.launch(CoroutineName("pump-$convoId")) {
             pump(p, b)
         }
@@ -852,9 +871,19 @@ class Conversation(
         // spawn or a settings relaunch is exactly the window a client "delivered but no turn" (turnStalled) targets.
         val firstSpawn = proc == null
         val relaunching = proc != null && !executing && pendingRelaunch && relaunchGraceElapsed() && !continuationExpected()
+        // `executing` must be armed with a happens-before edge to the new pump: a process that dies
+        // instantly at startup runs its death-branch `executing = false` on the pump thread, and that
+        // clear MUST win. Arming AFTER the launch (as before) lost the race under load — the late `true`
+        // stranded the conversation executing forever, never idle-reaped, a permanent ■ on the phone
+        // (surfaced as a SessionRegistryReapTest CI flake). So the (re)launch paths arm it INSIDE
+        // launchProcess right before `scope.launch(pump)` (armExecuting); only the already-live queued
+        // send arms it here, where no new pump can race it.
+        // the launch's own prompt, LEDGERED inside launchProcess before its pump starts (issue #122
+        // record-vs-replay race); the queued-send branch below records it inline instead (no new pump).
+        val initialSend = InitialSend(promptId, text, images)
         if (relaunching) {
             reemitLive = true // the post-relaunch init re-announces SessionLive with the fresh sessionId + model
-            val relaunched = runCatching { relaunch(sessionId ?: openedResumeId) }
+            val relaunched = runCatching { relaunch(sessionId ?: openedResumeId, armExecuting = true, initialSend = initialSend) }
             if (relaunched.isFailure) {
                 promptId?.let { synchronized(seenPromptIds) { seenPromptIds.remove(it) } }
                 sink.emit(PocketError("agent_unavailable", "agent failed to relaunch for the new settings (${relaunched.exceptionOrNull()?.message})", convoId))
@@ -875,7 +904,11 @@ class Conversation(
             val launched = runCatching {
                 val launchAnchor = if (backend.exitsAfterTurn) anchor else openedResumeId
                 val launchFork = if (backend.exitsAfterTurn) fork else openedWithFork
-                launchProcess(AgentSpec(workdir, launchAnchor, model, mode, effort = effort, forkSession = launchFork))
+                launchProcess(
+                    AgentSpec(workdir, launchAnchor, model, mode, effort = effort, forkSession = launchFork),
+                    armExecuting = true,
+                    initialSend = initialSend,
+                )
             }
             if (launched.isFailure) {
                 // no ack: the prompt did NOT reach an agent — forget the id so the client's retry can run
@@ -883,13 +916,16 @@ class Conversation(
                 sink.emit(PocketError("agent_unavailable", "agent failed to start (${launched.exceptionOrNull()?.message})", convoId))
                 return
             }
+        } else {
+            // queued send onto the already-live process (mid-turn queue, or a steady-state next turn):
+            // no new pump is starting, so there is no death-branch to race — arm executing directly, and
+            // ledger BEFORE the write (issue #122 ③): even a write that dies inside the backend leaves the
+            // prompt recorded, and only the CLI's consumption replay settles it (ack ≠ consumed).
+            executing = true // cleared by TurnResult (also covers cancelTurn — the agent still emits a result)
+            recordPromptWritten(promptId, text, images)
         }
-        executing = true // cleared by TurnResult (also covers cancelTurn — the agent still emits a result)
         lastActivityMs = System.currentTimeMillis()
         lockForkRetried = false // each user prompt re-arms one heal
-        // ledger BEFORE the write (issue #122 ③): even a write that dies inside the backend leaves the
-        // prompt recorded, and only the CLI's consumption replay settles it (ack ≠ consumed)
-        recordPromptWritten(promptId, text, images)
         backend.sendPrompt(text, images)
         promptId?.let {
             sink.emit(PromptAck(convoId, it)) // the turn is in the agent's hands — receipt (issue #66)
