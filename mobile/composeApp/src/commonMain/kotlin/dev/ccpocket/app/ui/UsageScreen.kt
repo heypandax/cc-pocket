@@ -58,6 +58,7 @@ import dev.ccpocket.app.resources.usage_codex_rate_limited
 import dev.ccpocket.app.resources.usage_codex_resets_in
 import dev.ccpocket.app.resources.usage_codex_resets_on
 import dev.ccpocket.app.resources.usage_codex_secondary
+import dev.ccpocket.app.resources.usage_codex_weekly_unavailable
 import dev.ccpocket.app.resources.usage_codex_snapshot
 import dev.ccpocket.app.resources.usage_codex_dashboard
 import dev.ccpocket.app.resources.usage_codex_dashboard_hint
