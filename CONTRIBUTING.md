@@ -38,7 +38,7 @@ Manual smoke of the daemon against a real `claude`: `./gradlew :daemon:run --arg
 ## Things that bite
 
 - **Wire compatibility**: the daemon and the apps ship and update on independent schedules. Anything serialized in `:protocol` (frames, models, routes) must stay backward-compatible — additive changes with defaults, no renames/retypes. Say in your PR how an old peer handles the change.
-- **Two READMEs**: `README.md` and `README.zh-CN.md` are maintained in lockstep. Touch one → touch both.
+- **Two READMEs**: Chinese `README.md` is the default landing page; English `README.en.md` is maintained in lockstep. Touch one → check both.
 - **claude CLI drift**: the daemon depends on three subtle stream-json behaviors (mid-turn message queueing/injection, `AskUserQuestion` answer shape). After bumping your local claude, `python3 scripts/probe-claude-wire.py` regression-checks them (uses real quota).
 - **xcodegen**: `iosApp/iosApp.xcodeproj` is generated from `iosApp/project.yml`. Persist project changes in the yml, not in Xcode.
 
@@ -51,7 +51,7 @@ Maintainer-only (need release credentials, signing identities, the production re
 ## Reporting
 
 - Bugs / features: use the issue templates — daemon version (`cc-pocket-daemon status`), computer OS, and client platform make most reports diagnosable in one round.
-- Security: **privately** via [GitHub security advisories](https://github.com/heypandax/cc-pocket/security/advisories/new) — see `docs/SECURITY.md` for the threat model and scope.
+- Security: **privately** via [GitHub security advisories](https://github.com/ac54u-mobile/cc-pocket/security/advisories/new) — see `docs/SECURITY.md` for the threat model and scope.
 
 ## License
 

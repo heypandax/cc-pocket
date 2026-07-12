@@ -262,6 +262,9 @@
     <string name="usage_codex_credits_unlimited">Unlimited credits</string>
     <string name="usage_codex_rate_limited">You\'ve reached your Codex limit for this window</string>
     <string name="usage_codex_snapshot">Updated %1$s</string>
+    <string name="usage_codex_dashboard">Open official usage dashboard</string>
+    <string name="usage_codex_dashboard_hint">Exact allowance data comes from Codex’s local rate-limit snapshot. Open the official dashboard for the account source of truth; no password is stored by CC Pocket.</string>
+    <string name="usage_codex_no_snapshot">No Codex limit snapshot yet. Start a Codex turn or use /status in Codex CLI, then refresh.</string>
     <string name="terminal_open">Terminal</string>
     <string name="terminal_title">Terminal</string>
     <string name="terminal_hint">git status</string>

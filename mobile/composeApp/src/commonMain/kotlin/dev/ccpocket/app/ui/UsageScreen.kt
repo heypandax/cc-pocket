@@ -37,6 +37,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -55,6 +56,9 @@ import dev.ccpocket.app.resources.usage_codex_rate_limited
 import dev.ccpocket.app.resources.usage_codex_resets_in
 import dev.ccpocket.app.resources.usage_codex_secondary
 import dev.ccpocket.app.resources.usage_codex_snapshot
+import dev.ccpocket.app.resources.usage_codex_dashboard
+import dev.ccpocket.app.resources.usage_codex_dashboard_hint
+import dev.ccpocket.app.resources.usage_codex_no_snapshot
 import dev.ccpocket.app.resources.usage_codex_used
 import dev.ccpocket.app.resources.usage_cost
 import dev.ccpocket.app.resources.usage_empty
@@ -168,10 +172,8 @@ private fun Populated(u: Usage) {
 
         HeroCard(windowTokens, scope, periodCaption(u), deltaPct, zeroToday)
 
-        u.codexLimits?.let { limits ->
-            Spacer(Modifier.height(10.dp))
-            CodexLimitsCard(limits)
-        }
+        Spacer(Modifier.height(10.dp))
+        u.codexLimits?.let { CodexLimitsCard(it) } ?: CodexLimitsUnavailableCard()
 
         // The three metrics the daemon only knows for TODAY.
         // is unmistakable even while the hero above reads a wider window. A missing sub-metric shows a labeled
@@ -208,7 +210,26 @@ private fun Populated(u: Usage) {
 }
 
 @Composable
+private fun CodexLimitsUnavailableCard() {
+    val uri = LocalUriHandler.current
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Tok.surface)
+            .border(1.dp, Tok.hair, RoundedCornerShape(14.dp)).padding(horizontal = 16.dp, vertical = 15.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(stringResource(Res.string.usage_codex_limits), color = Tok.tx, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(Res.string.usage_codex_no_snapshot), color = Tok.tx2, fontSize = 12.sp, lineHeight = 18.sp)
+        Text(stringResource(Res.string.usage_codex_dashboard_hint), color = Tok.muted, fontSize = 11.5.sp, lineHeight = 17.sp)
+        TextButton(
+            onClick = { runCatching { uri.openUri("https://chatgpt.com/codex/cloud/settings/usage") } },
+            modifier = Modifier.align(Alignment.End),
+        ) { Text(stringResource(Res.string.usage_codex_dashboard), color = Tok.codex, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+    }
+}
+
+@Composable
 private fun CodexLimitsCard(limits: CodexLimits) {
+    val uri = LocalUriHandler.current
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(14.dp))
             .padding(horizontal = 16.dp, vertical = 15.dp),
@@ -242,6 +263,12 @@ private fun CodexLimitsCard(limits: CodexLimits) {
         limits.capturedAt?.let { at ->
             Text(stringResource(Res.string.usage_codex_snapshot, relativeTime(at)), color = Tok.muted, fontSize = 11.sp)
         }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Tok.hair))
+        Text(stringResource(Res.string.usage_codex_dashboard_hint), color = Tok.muted, fontSize = 11.5.sp, lineHeight = 17.sp)
+        TextButton(
+            onClick = { runCatching { uri.openUri("https://chatgpt.com/codex/cloud/settings/usage") } },
+            modifier = Modifier.align(Alignment.End),
+        ) { Text(stringResource(Res.string.usage_codex_dashboard), color = Tok.codex, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
     }
 }
 

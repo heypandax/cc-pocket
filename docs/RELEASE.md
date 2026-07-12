@@ -100,7 +100,7 @@ security find-identity -v -p codesigning
 - **装**：`brew install --cask heypandax/tap/cc-pocket`
 - **跑 + 配对**：`cc-pocket-daemon service-install --apply` 然后 `cc-pocket-daemon pair`，手机 App 扫码。
 - **卸载服务**：`launchctl unload ~/Library/LaunchAgents/dev.ccpocket.daemon.plist`
-- **双语同步**：改 README 必须 README.md 与 README.zh-CN.md 一起改（功能列表 / 安装章节 / 支持平台）——历史上中文版漏过整段功能；发版前对照一遍两份文件的章节结构。
+- **双语同步**：中文默认页 `README.md` 与英文 `README.en.md` 必须一起检查（功能列表 / 安装章节 / 支持平台）；发版前对照两份文件的章节结构。
 
 ---
 
@@ -122,7 +122,7 @@ security find-identity -v -p codesigning
 - macOS：签名 + 公证的 `.dmg`（Apple Silicon）。
 - Windows：`.msi`。
 
-两者都用**无版本号的固定 asset 名**——`cc-pocket-desktop-macos-arm64.dmg` 和 `cc-pocket-desktop-windows-x86_64.msi`——这样 `https://github.com/heypandax/cc-pocket/releases/latest/download/<asset>` 就是永久有效的「最新版」直链，官网与 README 都引用它。
+两者都用**无版本号的固定 asset 名**——`cc-pocket-desktop-macos-arm64.dmg` 和 `cc-pocket-desktop-windows-x86_64.msi`——这样 `https://github.com/ac54u-mobile/cc-pocket/releases/latest/download/<asset>` 就是永久有效的「最新版」直链，官网与 README 都引用它。
 
 > 桌面 App **没有 Homebrew / Scoop 入口**，纯直链下载；只有 daemon 走 cask / scoop。别把它和 daemon 的安装（brew / scoop / curl）搞混。
 

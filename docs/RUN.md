@@ -53,7 +53,9 @@ quit
 授权弹窗：默认权限模式下，若你的 claude 配置会对某个工具询问，test-client 会显示 `[ASK] …`，输入 `allow` 或 `deny` 即可（你这台机器对常见工具是放行的，所以多数命令不弹窗——授权回环由单元测试 `PermissionBridgeTest` 确定性覆盖）。
 退出后 `pgrep -fl claude` 应看不到本 daemon 的子进程（干净杀树）。
 
-**Codex 后端**：daemon 除了 Claude Code，现在也能驱动 OpenAI Codex。它会自动探测 PATH 上的 `codex` CLI；要指定路径就在 `run` 上加 `--codex-bin <path>`（`service-install` 会把它透传进常驻配置）。后端由**客户端**（手机或桌面）在新建会话时选——Claude 或 Codex——两者的远程逐步命令 / 文件批准用法完全一样。一个会话始终绑定一个后端。
+**Codex 与 Cursor 后端**：daemon 除了 Claude Code，也能驱动 OpenAI Codex 和 Cursor Agent。它会自动探测 PATH 上的 `codex` 与 `cursor-agent`；自定义路径分别使用 `--codex-bin <path>`、`--cursor-bin <path>`。后端由客户端在新建会话时选择，一个会话始终绑定一个后端。Cursor 使用 daemon 主机上的登录态与账户额度，模型目录来自 `cursor-agent --list-models`。
+
+**Codex 限额**：设置 → Token 用量会读取 `~/.codex/sessions` 最近一次 `rate_limits` 快照，显示官方 5 小时/每周窗口、重置时间、套餐和 Credits。若尚无快照，先运行一次 Codex 或在 Codex CLI 输入 `/status`。账户最终数据可从 App 内按钮跳转到 <https://chatgpt.com/codex/cloud/settings/usage>；CC Pocket 不收集 ChatGPT 账号或密码。
 
 ---
 
@@ -118,8 +120,8 @@ $D test-client --relay ws://127.0.0.1:9000 --daemon-pub "<dpk>" --ticket "<ticke
 
 **桌面客户端（给用户的另一种选择）**：除了手机 App，cc-pocket 也能作为桌面 App 运行——从 GitHub Release 下载 DMG（macOS）/ MSI（Windows）：
 
-- macOS：<https://github.com/heypandax/cc-pocket/releases/latest/download/cc-pocket-desktop-macos-arm64.dmg>
-- Windows：<https://github.com/heypandax/cc-pocket/releases/latest/download/cc-pocket-desktop-windows-x86_64.msi>
+- macOS：<https://github.com/ac54u-mobile/cc-pocket/releases/latest/download/cc-pocket-desktop-macos-arm64.dmg>
+- Windows：<https://github.com/ac54u-mobile/cc-pocket/releases/latest/download/cc-pocket-desktop-windows-x86_64.msi>
 
 或像上面那样从源码 `./gradlew :mobile:composeApp:run`。它通过和手机端**同一套配对**连到**另一台**机器上的 daemon——桌面端没有摄像头，所以请输入 `cc-pocket-daemon pair` 打印的那 6 位配对码。
 
