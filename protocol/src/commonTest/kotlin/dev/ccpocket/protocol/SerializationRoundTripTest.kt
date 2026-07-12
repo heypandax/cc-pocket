@@ -154,6 +154,26 @@ class SerializationRoundTripTest {
         assertEquals(null, back.hours)
         assertEquals(null, back.days.single().date)
         assertEquals(100, back.days.single().tokens)
+        assertEquals(null, back.codexLimits)
+    }
+
+    @Test
+    fun usage_codex_limits_roundtrip_and_old_frames_default() {
+        val limits = dev.ccpocket.protocol.CodexLimits(
+            planType = "plus",
+            primary = dev.ccpocket.protocol.CodexLimitWindow(34.0, 300, 1783853218),
+            secondary = dev.ccpocket.protocol.CodexLimitWindow(12.0, 10080, 1784367236),
+            capturedAt = 1_700_000_000_000,
+        )
+        val u = Usage(days = listOf(UsageDay("Mon", 1)), codexLimits = limits)
+        val json = PocketJson.encodeToString(Envelope(id = "u4", ts = 0, body = u))
+        assertTrue("\"codexLimits\"" in json, json)
+        val back = (PocketJson.decodeFromString<Envelope>(json).body as Usage).codexLimits
+        assertEquals(limits, back)
+
+        val old = """{"id":"u5","ts":0,"to":"PEER","body":{"t":"pocket/usage","days":[{"label":"Mon","tokens":100}],
+            "models":[],"tokensToday":100,"requestsToday":2}}"""
+        assertEquals(null, (PocketJson.decodeFromString<Envelope>(old).body as Usage).codexLimits)
     }
 
     @Test

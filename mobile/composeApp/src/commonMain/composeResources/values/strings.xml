@@ -252,6 +252,16 @@
     <string name="usage_period_range">%1$s – %2$s · %3$d days</string>
     <string name="usage_vs_yesterday">vs yesterday</string>
     <string name="usage_na">not available yet</string>
+    <string name="usage_codex_limits">Codex limits</string>
+    <string name="usage_codex_plan">ChatGPT %1$s</string>
+    <string name="usage_codex_primary">5-hour limit</string>
+    <string name="usage_codex_secondary">Weekly limit</string>
+    <string name="usage_codex_used">%1$d%% used</string>
+    <string name="usage_codex_resets_in">Resets in %1$s</string>
+    <string name="usage_codex_credits">Credits balance: %1$s</string>
+    <string name="usage_codex_credits_unlimited">Unlimited credits</string>
+    <string name="usage_codex_rate_limited">You\'ve reached your Codex limit for this window</string>
+    <string name="usage_codex_snapshot">Updated %1$s</string>
     <string name="terminal_open">Terminal</string>
     <string name="terminal_title">Terminal</string>
     <string name="terminal_hint">git status</string>

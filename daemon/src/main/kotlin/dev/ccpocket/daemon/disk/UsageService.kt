@@ -1,6 +1,9 @@
 package dev.ccpocket.daemon.disk
 
 import dev.ccpocket.protocol.AgentKind
+import dev.ccpocket.protocol.CodexCredits
+import dev.ccpocket.protocol.CodexLimitWindow
+import dev.ccpocket.protocol.CodexLimits
 import dev.ccpocket.protocol.Usage
 import dev.ccpocket.protocol.UsageDay
 import dev.ccpocket.protocol.UsageModel
@@ -55,6 +58,8 @@ object UsageService {
         var cacheReadToday = 0L
         var costToday = 0.0
         var costSeen = false
+        var latestCodexLimits: CodexLimits? = null
+        var latestCodexLimitsAt: Instant? = null
 
         if (projectsRoot.isDirectory()) Files.newDirectoryStream(projectsRoot).use { dirs ->
             for (dir in dirs) {
@@ -115,19 +120,26 @@ object UsageService {
                     val obj = runCatching { json.parseToJsonElement(line) }.getOrNull() as? JsonObject ?: continue
                     val payload = obj["payload"] as? JsonObject ?: continue
                     if (payload.str("type") != "token_count") continue
+                    val when_ = obj.str("timestamp")?.let(::parseWhen)
+                    parseCodexRateLimits(payload, when_)?.let { snap ->
+                        if (latestCodexLimitsAt == null || (when_ != null && !when_.toInstant().isBefore(latestCodexLimitsAt))) {
+                            latestCodexLimits = snap
+                            latestCodexLimitsAt = when_?.toInstant()
+                        }
+                    }
                     val info = payload["info"] as? JsonObject ?: continue // null info = rate-limit-only event
                     val last = info["last_token_usage"] as? JsonObject ?: continue
                     val total = last.long("total_tokens").takeIf { it > 0 }
                         ?: (last.long("input_tokens") + last.long("output_tokens")).takeIf { it > 0 } ?: continue
                     val ts = obj.str("timestamp") ?: continue
-                    val when_ = parseWhen(ts) ?: continue
-                    val date = when_.toLocalDate()
+                    val turnWhen = parseWhen(ts) ?: continue
+                    val date = turnWhen.toLocalDate()
                     if (date.isBefore(start)) continue
                     if (!seen.add("cx:$ts:$total")) continue
                     perDay[date] = (perDay[date] ?: 0) + total
                     perModel[model] = (perModel[model] ?: 0) + total
                     if (date == today) {
-                        perHour[when_.hour] += total
+                        perHour[turnWhen.hour] += total
                         tokensToday += total
                         requestsToday++
                         val cached = last.long("cached_input_tokens")
@@ -181,11 +193,49 @@ object UsageService {
             cacheHitPct = cacheHit,
             costUsdToday = if (costSeen) costToday else null,
             hours = hours,
+            codexLimits = latestCodexLimits?.copy(
+                capturedAt = latestCodexLimitsAt?.toEpochMilli() ?: latestCodexLimits?.capturedAt,
+            ),
         )
+    }
+
+    /** Parse a rollout `token_count` payload's `rate_limits` block; prefers the main `codex` bucket. */
+    private fun parseCodexRateLimits(payload: JsonObject, when_: ZonedDateTime?): CodexLimits? {
+        val rl = payload["rate_limits"] as? JsonObject ?: return null
+        if (rl.str("limit_id") != null && rl.str("limit_id") != "codex") return null
+        val primary = rl.obj("primary")?.let(::parseLimitWindow) ?: return null
+        val secondary = rl.obj("secondary")?.let(::parseLimitWindow)
+        val credits = rl.obj("credits")?.let {
+            CodexCredits(
+                hasCredits = it.bool("has_credits"),
+                unlimited = it.bool("unlimited"),
+                balance = it.str("balance"),
+            )
+        }
+        val reached = rl.str("rate_limit_reached_type") != null || primary.usedPercent >= 100.0
+        return CodexLimits(
+            planType = rl.str("plan_type"),
+            primary = primary,
+            secondary = secondary,
+            credits = credits,
+            rateLimitReached = reached,
+            capturedAt = when_?.toInstant()?.toEpochMilli(),
+        )
+    }
+
+    private fun parseLimitWindow(obj: JsonObject): CodexLimitWindow? {
+        val used = obj.double("used_percent") ?: return null
+        val window = obj.int("window_minutes") ?: return null
+        val resets = obj.long("resets_at").takeIf { it > 0 } ?: return null
+        return CodexLimitWindow(used, window, resets)
     }
 
     private fun parseWhen(ts: String): ZonedDateTime? = runCatching { Instant.parse(ts).atZone(zone) }.getOrNull()
 
     private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
     private fun JsonObject?.long(key: String): Long = (this?.get(key) as? JsonPrimitive)?.contentOrNull?.toLongOrNull() ?: 0
+    private fun JsonObject?.int(key: String): Int? = (this?.get(key) as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
+    private fun JsonObject?.double(key: String): Double? = (this?.get(key) as? JsonPrimitive)?.doubleOrNull
+    private fun JsonObject?.bool(key: String): Boolean = (this?.get(key) as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull() ?: false
+    private fun JsonObject?.obj(key: String): JsonObject? = this?.get(key) as? JsonObject
 }

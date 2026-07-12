@@ -9,6 +9,7 @@ import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -91,6 +92,32 @@ class UsageServiceTest {
             assertEquals("claude-fable-5", m.model)
             // journaled agent wins over the name heuristic — "claude-fable-5" must NOT bucket as Claude
             assertEquals(AgentKind.CURSOR, m.agent)
+        }
+    }
+
+    @Test
+    fun codex_rollout_rate_limits_surface_in_aggregate() {
+        withProjects { root ->
+            val zone = ZoneId.systemDefault()
+            val today = LocalDate.now(zone)
+            val ts = today.atTime(10, 0).atZone(zone).toInstant().toString()
+            val rollout = Files.createTempFile("ccp-codex-rollout", ".jsonl")
+            try {
+                rollout.writeText(
+                    """{"timestamp":"$ts","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":100,"output_tokens":10,"total_tokens":110}},"rate_limits":{"limit_id":"codex","primary":{"used_percent":42.5,"window_minutes":300,"resets_at":2000000000},"secondary":{"used_percent":12.0,"window_minutes":10080,"resets_at":2000100000},"credits":{"has_credits":true,"unlimited":false,"balance":"5.00"},"plan_type":"plus","rate_limit_reached_type":null}}}""" + "\n",
+                )
+                val u = UsageService.aggregate(1, projectsRoot = root, codexFiles = listOf(rollout), journal = emptyList())
+                val limits = assertNotNull(u.codexLimits)
+                assertEquals("plus", limits.planType)
+                assertEquals(42.5, limits.primary?.usedPercent)
+                assertEquals(300, limits.primary?.windowMinutes)
+                assertEquals(12.0, limits.secondary?.usedPercent)
+                assertEquals(true, limits.credits?.hasCredits)
+                assertEquals("5.00", limits.credits?.balance)
+                assertFalse(limits.rateLimitReached)
+            } finally {
+                rollout.toFile().delete()
+            }
         }
     }
 
