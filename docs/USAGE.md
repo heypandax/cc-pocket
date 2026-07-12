@@ -102,7 +102,7 @@ CC Pocket 不自己调用 OpenAI API；它在电脑上启动你已登录的 Code
 
 ### Codex 用量与限额
 
-进入 **设置 → Token 用量** 可查看本机三种 Agent 的 Token 统计。Codex 区域额外读取 `~/.codex/sessions` 中官方 CLI 最近一次限额快照，显示 5 小时窗口、每周窗口、重置时间、套餐与 Credits。没有快照时，先运行一次 Codex 或在 Codex CLI 输入 `/status`，再回到 App 刷新。
+进入 **设置 → Token 用量** 可查看本机三种 Agent 的 Token 统计。页面打开后立即读取，并在停留期间每 10 秒自动刷新；右上角 ↻ 可手动立即刷新。Codex 区域额外读取 `~/.codex/sessions` 中官方 CLI 最近一次限额快照，显示 5 小时窗口、每周窗口、重置时间、套餐与 Credits。没有快照时，先运行一次 Codex 或在 Codex CLI 输入 `/status`，再回到 App 刷新。
 
 点击「打开官方用量面板」会在系统浏览器进入 <https://chatgpt.com/codex/cloud/settings/usage>。登录由 ChatGPT 官方页面处理，CC Pocket 不要求、接收或保存账号密码。官方说明指出，实际消耗会随模型、上下文、推理、工具和缓存变化，因此消息数量只能作为区间估计。
 

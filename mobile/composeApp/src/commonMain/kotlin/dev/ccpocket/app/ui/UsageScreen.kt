@@ -38,6 +38,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -74,6 +76,8 @@ import dev.ccpocket.app.resources.usage_per_hour
 import dev.ccpocket.app.resources.usage_period_range
 import dev.ccpocket.app.resources.usage_period_today
 import dev.ccpocket.app.resources.usage_requests
+import dev.ccpocket.app.resources.usage_live_refresh
+import dev.ccpocket.app.resources.usage_refresh
 import dev.ccpocket.app.resources.usage_title
 import dev.ccpocket.app.resources.usage_tokens
 import dev.ccpocket.app.resources.usage_trend
@@ -108,12 +112,18 @@ fun UsageScreen(repo: PocketRepository, onBack: () -> Unit) {
     dev.ccpocket.app.SystemBackHandler(enabled = true) { onBack() }
     var days by remember { mutableStateOf(1) } // default to "Today"
     var timedOut by remember { mutableStateOf(false) }
-    LaunchedEffect(days) {
+    var refreshGeneration by remember { mutableStateOf(0) }
+    LaunchedEffect(days, refreshGeneration) {
         timedOut = false
-        repo.fetchUsage(days)
-        kotlinx.coroutines.delay(10_000)
-        // no reply after the deadline → most likely an older daemon that can't aggregate usage yet (or a huge scan)
-        if (repo.usage.value == null) timedOut = true
+        var first = true
+        while (true) {
+            repo.fetchUsage(days)
+            kotlinx.coroutines.delay(10_000)
+            // Only the first request can turn the screen into the explicit timeout state. Once data has
+            // landed, a later slow refresh keeps the last honest snapshot instead of flashing Offline.
+            if (first && repo.usage.value == null) timedOut = true
+            first = false
+        }
     }
 
     val u = repo.usage.value
@@ -122,10 +132,21 @@ fun UsageScreen(repo: PocketRepository, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().background(Tok.base)) {
         // header
         Column(Modifier.fillMaxWidth().background(Tok.base)) {
+            val refreshLabel = stringResource(Res.string.usage_refresh)
             Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 14.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextButton({ onBack() }) { Text("←", color = Tok.tx2, fontSize = 18.sp) }
                 Text(stringResource(Res.string.usage_title), color = Tok.tx, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
+                Text(
+                    "↻",
+                    color = Tok.codex,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.semantics { contentDescription = refreshLabel }
+                        .clip(RoundedCornerShape(999.dp)).clickable {
+                        refreshGeneration++
+                    }.padding(horizontal = 8.dp, vertical = 4.dp),
+                )
                 Row(Modifier.clip(RoundedCornerShape(999.dp)).background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(999.dp)).padding(2.dp)) {
                     for ((label, d) in listOf("Today" to 1, "7d" to 7, "30d" to 30)) {
                         val on = d == days
@@ -247,6 +268,7 @@ private fun CodexLimitsCard(limits: CodexLimits) {
                 )
             }
         }
+        Text(stringResource(Res.string.usage_live_refresh), color = Tok.codex, fontSize = 11.sp, fontWeight = FontWeight.Medium)
         limits.primary?.let { CodexLimitRow(stringResource(Res.string.usage_codex_primary), it) }
         limits.secondary?.let { CodexLimitRow(stringResource(Res.string.usage_codex_secondary), it) }
         limits.credits?.takeIf { it.hasCredits || it.unlimited || !it.balance.isNullOrBlank() && it.balance != "0" }?.let { c ->
@@ -574,11 +596,19 @@ private fun Loading() {
  *  quiet 7d/30d reads as calmly explained, not broken — no bare dashes anywhere. */
 @Composable
 private fun Empty(span: Int) {
-    Column(Modifier.fillMaxSize().padding(horizontal = 44.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        val title = if (span <= 1) stringResource(Res.string.usage_empty) else stringResource(Res.string.usage_empty_range, span)
-        Text(title, color = Tok.tx2, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(12.dp))
-        Text(stringResource(Res.string.usage_empty_hint), color = Tok.muted, fontSize = 13.sp, lineHeight = 20.sp, modifier = Modifier.padding(top = 2.dp))
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Column(
+            Modifier.fillMaxWidth().height(220.dp).padding(horizontal = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            val title = if (span <= 1) stringResource(Res.string.usage_empty) else stringResource(Res.string.usage_empty_range, span)
+            Text(title, color = Tok.tx2, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(12.dp))
+            Text(stringResource(Res.string.usage_empty_hint), color = Tok.muted, fontSize = 13.sp, lineHeight = 20.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+        CodexLimitsUnavailableCard()
+        Spacer(Modifier.height(20.dp))
     }
 }
 

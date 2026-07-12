@@ -265,6 +265,8 @@
     <string name="usage_codex_dashboard">打开官方用量面板</string>
     <string name="usage_codex_dashboard_hint">精确额度来自 Codex 本机的限额快照；账户最终数据以官方面板为准。CC Pocket 不会保存你的账号或密码。</string>
     <string name="usage_codex_no_snapshot">暂时没有 Codex 限额快照。先运行一次 Codex，或在 Codex CLI 使用 /status，然后刷新。</string>
+    <string name="usage_live_refresh">实时 · 每 10 秒刷新</string>
+    <string name="usage_refresh">立即刷新</string>
     <string name="terminal_open">终端</string>
     <string name="terminal_title">终端</string>
     <string name="terminal_hint">git status</string>
