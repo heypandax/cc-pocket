@@ -2,6 +2,7 @@ package dev.ccpocket.app
 
 import platform.Foundation.NSDate
 import platform.Foundation.NSDateFormatter
+import platform.Foundation.NSTimeZone
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.timeIntervalSince1970
 
@@ -13,6 +14,7 @@ actual fun epochMillis(): Long = (NSDate().timeIntervalSince1970 * 1000).toLong(
 
 actual fun localWeekdayTime(epochSeconds: Long): String = NSDateFormatter().run {
     dateFormat = "EEE HH:mm"
+    timeZone = NSTimeZone.timeZoneWithName("Asia/Shanghai")
     // Foundation's Kotlin/Native constructor is reference-date based (2001-01-01), not Unix based.
     stringFromDate(NSDate(timeIntervalSinceReferenceDate = epochSeconds.toDouble() - 978_307_200.0))
 }

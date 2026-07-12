@@ -259,7 +259,7 @@
     <string name="usage_codex_used">%1$d%% used</string>
     <string name="usage_codex_remaining">%1$d remaining</string>
     <string name="usage_codex_resets_in">Resets in %1$s</string>
-    <string name="usage_codex_resets_on">Resets on %1$s</string>
+    <string name="usage_codex_resets_on">Resets on %1$s (Beijing time)</string>
     <string name="usage_codex_credits">Credits balance: %1$s</string>
     <string name="usage_codex_credits_unlimited">Unlimited credits</string>
     <string name="usage_codex_rate_limited">You\'ve reached your Codex limit for this window</string>
