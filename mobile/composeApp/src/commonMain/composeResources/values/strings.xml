@@ -269,6 +269,7 @@
     <string name="usage_codex_no_snapshot">No Codex limit snapshot yet. Start a Codex turn or use /status in Codex CLI, then refresh.</string>
     <string name="usage_live_refresh">Live check enabled</string>
     <string name="usage_refresh">Refresh now</string>
+    <string name="weekday_sun">Sun</string><string name="weekday_mon">Mon</string><string name="weekday_tue">Tue</string><string name="weekday_wed">Wed</string><string name="weekday_thu">Thu</string><string name="weekday_fri">Fri</string><string name="weekday_sat">Sat</string>
     <string name="terminal_open">Terminal</string>
     <string name="terminal_title">Terminal</string>
     <string name="terminal_hint">git status</string>

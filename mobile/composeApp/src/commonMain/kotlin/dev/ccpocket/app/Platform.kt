@@ -6,9 +6,6 @@ expect fun defaultDaemonUrl(): String
 /** Wall-clock epoch millis — for "2h ago" style relative times (kotlinx-datetime isn't a dependency). */
 expect fun epochMillis(): Long
 
-/** A future epoch second as a device-local short weekday and 24-hour time, e.g. "Sun 17:33". */
-expect fun localWeekdayTime(epochSeconds: Long): String
-
 /**
  * Preview/recording mode for producing App Store preview videos (see marketing/preview). When on, the
  * no-pairing demo gains a connecting → end-to-end-encrypted opener, hides the "demo mode" banner, and

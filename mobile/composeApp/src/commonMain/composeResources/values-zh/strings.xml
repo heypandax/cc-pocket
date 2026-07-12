@@ -269,6 +269,7 @@
     <string name="usage_codex_no_snapshot">暂时没有 Codex 限额快照。先运行一次 Codex，或在 Codex CLI 使用 /status，然后刷新。</string>
     <string name="usage_live_refresh">实时检查已开启</string>
     <string name="usage_refresh">立即刷新</string>
+    <string name="weekday_sun">周日</string><string name="weekday_mon">周一</string><string name="weekday_tue">周二</string><string name="weekday_wed">周三</string><string name="weekday_thu">周四</string><string name="weekday_fri">周五</string><string name="weekday_sat">周六</string>
     <string name="terminal_open">终端</string>
     <string name="terminal_title">终端</string>
     <string name="terminal_hint">git status</string>

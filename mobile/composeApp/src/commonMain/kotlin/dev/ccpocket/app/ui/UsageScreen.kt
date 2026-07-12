@@ -82,6 +82,13 @@ import dev.ccpocket.app.resources.usage_refresh
 import dev.ccpocket.app.resources.usage_title
 import dev.ccpocket.app.resources.usage_tokens
 import dev.ccpocket.app.resources.usage_trend
+import dev.ccpocket.app.resources.weekday_sun
+import dev.ccpocket.app.resources.weekday_mon
+import dev.ccpocket.app.resources.weekday_tue
+import dev.ccpocket.app.resources.weekday_wed
+import dev.ccpocket.app.resources.weekday_thu
+import dev.ccpocket.app.resources.weekday_fri
+import dev.ccpocket.app.resources.weekday_sat
 import dev.ccpocket.app.resources.usage_vs_yesterday
 import dev.ccpocket.app.theme.Tok
 import dev.ccpocket.protocol.AgentKind
@@ -318,7 +325,7 @@ private fun CodexLimitRow(label: String, window: CodexLimitWindow) {
         }
         Text(
             if (window.windowMinutes >= 24 * 60) {
-                stringResource(Res.string.usage_codex_resets_on, dev.ccpocket.app.localWeekdayTime(window.resetsAt))
+                stringResource(Res.string.usage_codex_resets_on, beijingWeekdayTime(window.resetsAt))
             } else {
                 stringResource(Res.string.usage_codex_resets_in, resetsInCaption(window.resetsAt))
             },
@@ -326,6 +333,29 @@ private fun CodexLimitRow(label: String, window: CodexLimitWindow) {
             fontSize = 11.sp,
         )
     }
+}
+
+/** Fixed UTC+8 without platform date APIs: 1970-01-01 was Thursday (weekday index 4). */
+@Composable
+private fun beijingWeekdayTime(epochSeconds: Long): String {
+    val local = epochSeconds + 8 * 3600L
+    val days = kotlin.math.floor(local.toDouble() / 86_400.0).toLong()
+    val secondOfDay = ((local % 86_400L) + 86_400L) % 86_400L
+    val weekday = (((days + 4) % 7 + 7) % 7).toInt()
+    val weekdayLabel = stringResource(
+        when (weekday) {
+            0 -> Res.string.weekday_sun
+            1 -> Res.string.weekday_mon
+            2 -> Res.string.weekday_tue
+            3 -> Res.string.weekday_wed
+            4 -> Res.string.weekday_thu
+            5 -> Res.string.weekday_fri
+            else -> Res.string.weekday_sat
+        },
+    )
+    val hour = secondOfDay / 3600
+    val minute = (secondOfDay % 3600) / 60
+    return "$weekdayLabel ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
 }
 
 /** Future reset time from a unix-seconds epoch — "2h 15m", "45m", or "soon". */
