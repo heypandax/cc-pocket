@@ -37,6 +37,23 @@ object CursorTranscriptReplay {
         return if (out.size > maxMessages) out.takeLast(maxMessages) else out
     }
 
+    /** First real user prompt in [file] (Cursor wrappers stripped), for titling native chats whose
+     *  meta.json carries no title. Stops at the first hit — no full-file parse per listing row. */
+    fun firstUserPrompt(file: Path, maxLen: Int = 500): String? {
+        if (!file.exists()) return null
+        return runCatching {
+            file.bufferedReader().useLines { lines ->
+                lines.firstNotNullOfOrNull { raw ->
+                    val obj = runCatching { json.parseToJsonElement(raw) }.getOrNull() as? JsonObject ?: return@firstNotNullOfOrNull null
+                    if (obj.str("role") != "user") return@firstNotNullOfOrNull null
+                    val content = obj.obj("message")?.get("content") as? JsonArray ?: return@firstNotNullOfOrNull null
+                    content.mapNotNull { (it as? JsonObject)?.takeIf { part -> part.str("type") == "text" }?.str("text") }
+                        .joinToString("").let(::userText).takeIf { it.isNotBlank() }?.take(maxLen)
+                }
+            }
+        }.getOrNull()
+    }
+
     internal fun userText(raw: String): String {
         val tagged = Regex("(?s)<user_query>\\s*(.*?)\\s*</user_query>").find(raw)?.groupValues?.get(1)
         return (tagged ?: raw.replace(Regex("(?s)<timestamp>.*?</timestamp>\\s*"), "")).trim()

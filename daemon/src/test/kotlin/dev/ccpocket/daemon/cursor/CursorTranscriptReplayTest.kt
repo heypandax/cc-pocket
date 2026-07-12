@@ -19,5 +19,6 @@ class CursorTranscriptReplayTest {
         val history = CursorTranscriptReplay.read(file)
         assertEquals(listOf(ChatRole.USER, ChatRole.ASSISTANT), history.map { it.role })
         assertEquals(listOf("hello", "hi"), history.map { it.text })
+        assertEquals("hello", CursorTranscriptReplay.firstUserPrompt(file))
     }
 }
