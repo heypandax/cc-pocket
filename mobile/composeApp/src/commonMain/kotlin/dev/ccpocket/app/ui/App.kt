@@ -89,6 +89,7 @@ import dev.ccpocket.app.media.rememberImageAttacher
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -485,7 +486,13 @@ private fun DirectoryScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}
 
     // typing in the filter then scrolling the list dismisses the keyboard (fires once per scroll gesture)
     val focus = LocalFocusManager.current
-    val listState = rememberLazyListState()
+    val listState = rememberLazyListState(repo.directoryScrollIndex, repo.directoryScrollOffset)
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }.collect { (index, offset) ->
+            repo.directoryScrollIndex = index
+            repo.directoryScrollOffset = offset
+        }
+    }
     LaunchedEffect(listState.isScrollInProgress) { if (listState.isScrollInProgress) focus.clearFocus() }
 
     Box(Modifier.fillMaxSize()) {
@@ -1215,6 +1222,7 @@ internal fun SessionsScreen(repo: PocketRepository) { // internal: driven end-to
                 onDismiss = { pickMode = false },
             )
         }
+        if (!pickMode && confirmDelete == null) EdgeSwipeBack { repo.backToDirectories() }
     }
 }
 
@@ -1395,9 +1403,10 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                 if (!pinned) {
                     val pillScope = rememberCoroutineScope()
                     JumpToLatestPill(Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp)) {
-                        pinned = true
                         pillScope.launch {
-                            if (repo.messages.isNotEmpty()) listState.animateScrollToItem(repo.messages.lastIndex, Int.MAX_VALUE)
+                            val last = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
+                            if (listState.layoutInfo.totalItemsCount > 0) listState.scrollToItem(last, Int.MAX_VALUE)
+                            pinned = true
                         }
                     }
                 }
@@ -1520,7 +1529,11 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                                     when {
                                         repo.pendingImages.isNotEmpty() -> Res.string.add_message_hint
                                         repo.streaming.value -> Res.string.message_queued_hint
-                                        else -> Res.string.message_claude_hint
+                                        else -> when (repo.sessionAgent.value ?: AgentKind.CLAUDE) {
+                                            AgentKind.CLAUDE -> Res.string.message_claude_hint
+                                            AgentKind.CODEX -> Res.string.message_codex_hint
+                                            AgentKind.CURSOR -> Res.string.message_cursor_hint
+                                        }
                                     },
                                 ),
                                 modifier = Modifier.weight(1f),
@@ -1590,7 +1603,40 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
         if (showChangedFiles) ChangedFilesSheet(repo, onOpen = { repo.openChangedFile(it) }) { showChangedFiles = false }
         if (showBgJobs) BackgroundJobsSheet(repo.backgroundJobs, onStop = { repo.stopBackgroundJob(it.id) }) { showBgJobs = false }
         if (showSwitcher) dev.ccpocket.app.ui.fleet.MachineSwitcherSheet(repo, onDismiss = { showSwitcher = false }, onManage = onOpenFleet)
+        if (viewer == null && !repo.micPermissionSheet.value && !showModeSheet && !showSessionInfo &&
+            !showQuickActions && !showChangedFiles && !showBgJobs && !showSwitcher
+        ) {
+            EdgeSwipeBack {
+                repo.saveDraft(draftKey, input)
+                repo.backToBrowse()
+            }
+        }
     }
+}
+
+/** iOS-style interactive affordance shared by the two drill-down levels. Keeping the hit target on the
+ *  extreme edge avoids stealing horizontal gestures from messages, code blocks, and sheets. */
+@Composable
+private fun EdgeSwipeBack(onBack: () -> Unit) {
+    val latestBack by rememberUpdatedState(onBack)
+    val thresholdPx = with(LocalDensity.current) { 64.dp.toPx() }
+    var distance by remember { mutableStateOf(0f) }
+    Box(
+        Modifier.fillMaxHeight().width(24.dp).pointerInput(thresholdPx) {
+            detectHorizontalDragGestures(
+                onDragStart = { distance = 0f },
+                onDragCancel = { distance = 0f },
+                onDragEnd = {
+                    if (distance >= thresholdPx) latestBack()
+                    distance = 0f
+                },
+                onHorizontalDrag = { change, amount ->
+                    distance = (distance + amount).coerceAtLeast(0f)
+                    change.consume()
+                },
+            )
+        },
+    )
 }
 
 /** The "/" autocomplete panel above the composer: tap a row to fill the input with the command. */

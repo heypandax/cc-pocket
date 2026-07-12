@@ -103,6 +103,8 @@
     <string name="continue_here">Continue here</string>
     <string name="add_message_hint">Add a message…</string>
     <string name="message_claude_hint">Message Claude…</string>
+    <string name="message_codex_hint">Message Codex…</string>
+    <string name="message_cursor_hint">Message Cursor…</string>
     <string name="send">Send</string>
     <string name="dictate">Dictate</string>
     <string name="attach_image">Attach image</string>

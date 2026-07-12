@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
@@ -69,19 +70,39 @@ fun AgentGlyph(agent: AgentKind, color: Color = agentColor(agent), size: Int = 1
             drawArc(color, startAngle = -90f, sweepAngle = 90f, useCenter = false, topLeft = box, size = d, style = Stroke(width = w, cap = StrokeCap.Round))
             drawArc(color, startAngle = 90f, sweepAngle = 90f, useCenter = false, topLeft = box, size = d, style = Stroke(width = w, cap = StrokeCap.Round))
         } else if (agent == AgentKind.CURSOR) {
-            // isometric cube: pointy-top hexagon outline + the three inner edges that make the top face pop
-            val w = 1.5f * s
-            val cx = 10f
-            val cy = 10f
-            val r = 7f
-            fun vertex(deg: Int): Offset {
-                val rad = deg * (kotlin.math.PI / 180.0)
-                return p(cx + r * kotlin.math.cos(rad).toFloat(), cy - r * kotlin.math.sin(rad).toFloat())
+            // Cursor's official 2D Cube path (466.73 × 532.09), scaled without changing its geometry.
+            // Source: Cursor brand assets / General Logos / Cube / CUBE_2D_*.svg.
+            val k = this.size.minDimension / 532.09f
+            val ox = (this.size.width - 466.73f * k) / 2f
+            fun x(v: Float) = ox + v * k
+            fun y(v: Float) = v * k
+            val logo = Path().apply {
+                moveTo(x(457.43f), y(125.94f))
+                lineTo(x(244.42f), y(2.96f))
+                cubicTo(x(237.58f), y(-0.99f), x(229.14f), y(-0.99f), x(222.30f), y(2.96f))
+                lineTo(x(9.30f), y(125.94f))
+                cubicTo(x(3.55f), y(129.26f), x(0f), y(135.40f), x(0f), y(142.05f))
+                lineTo(x(0f), y(390.04f))
+                cubicTo(x(0f), y(396.69f), x(3.55f), y(402.83f), x(9.30f), y(406.15f))
+                lineTo(x(222.31f), y(529.13f))
+                cubicTo(x(229.15f), y(533.08f), x(237.59f), y(533.08f), x(244.43f), y(529.13f))
+                lineTo(x(457.44f), y(406.15f))
+                cubicTo(x(463.19f), y(402.83f), x(466.74f), y(396.69f), x(466.74f), y(390.04f))
+                lineTo(x(466.74f), y(142.05f))
+                cubicTo(x(466.74f), y(135.40f), x(463.19f), y(129.26f), x(457.44f), y(125.94f))
+                close()
+                moveTo(x(444.05f), y(151.99f))
+                lineTo(x(238.42f), y(508.15f))
+                cubicTo(x(237.03f), y(510.55f), x(233.36f), y(509.57f), x(233.36f), y(506.79f))
+                lineTo(x(233.36f), y(273.58f))
+                cubicTo(x(233.36f), y(268.92f), x(230.87f), y(264.61f), x(226.83f), y(262.27f))
+                lineTo(x(24.87f), y(145.67f))
+                cubicTo(x(22.47f), y(144.28f), x(23.45f), y(140.61f), x(26.23f), y(140.61f))
+                lineTo(x(437.49f), y(140.61f))
+                cubicTo(x(443.33f), y(140.61f), x(446.98f), y(146.94f), x(444.06f), y(152f))
+                close()
             }
-            val hex = listOf(90, 150, 210, 270, 330, 30).map(::vertex)
-            for (i in hex.indices) drawLine(color, hex[i], hex[(i + 1) % hex.size], strokeWidth = w, cap = StrokeCap.Round)
-            val center = p(cx, cy)
-            intArrayOf(150, 270, 30).forEach { drawLine(color, center, vertex(it), strokeWidth = w, cap = StrokeCap.Round) }
+            drawPath(logo, color)
         } else {
             // Claude: Anthropic's radiant starburst — 8 rays with a slightly longer horizontal pair
             val w = 1.9f * s

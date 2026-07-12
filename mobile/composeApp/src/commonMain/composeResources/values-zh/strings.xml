@@ -103,6 +103,8 @@
     <string name="continue_here">在这里继续</string>
     <string name="add_message_hint">补充说明…</string>
     <string name="message_claude_hint">给 Claude 发消息…</string>
+    <string name="message_codex_hint">给 Codex 发消息…</string>
+    <string name="message_cursor_hint">给 Cursor 发消息…</string>
     <string name="send">发送</string>
     <string name="dictate">语音输入</string>
     <string name="attach_image">添加图片</string>

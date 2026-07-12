@@ -393,6 +393,8 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     val directoriesLoaded = mutableStateOf(false)
     val refreshing = mutableStateOf(false)
     val sessions = mutableStateListOf<SessionSummary>()
+    var directoryScrollIndex = 0
+    var directoryScrollOffset = 0
     val sessionsDir = mutableStateOf<String?>(null)
     val messages = mutableStateListOf<ChatItem>()
     val pendingImages = mutableStateListOf<PendingImage>() // photos staged in the composer (pre-send)
