@@ -256,6 +256,7 @@
     <string name="usage_codex_plan">ChatGPT %1$s</string>
     <string name="usage_codex_primary">5 小时限额</string>
     <string name="usage_codex_secondary">每周限额</string>
+    <string name="usage_codex_weekly_unavailable">每周额度尚未从 Codex 本机快照同步，请在官方用量面板查看当前额度。</string>
     <string name="usage_codex_used">已用 %1$d%%</string>
     <string name="usage_codex_remaining">剩余 %1$d</string>
     <string name="usage_codex_resets_in">%1$s 后重置</string>
@@ -265,7 +266,7 @@
     <string name="usage_codex_rate_limited">当前窗口的 Codex 限额已用尽</string>
     <string name="usage_codex_snapshot">每 10 秒检查 · Codex 快照更新于 %1$s</string>
     <string name="usage_codex_dashboard">打开官方用量面板</string>
-    <string name="usage_codex_dashboard_hint">精确额度来自 Codex 本机的限额快照；账户最终数据以官方面板为准。CC Pocket 不会保存你的账号或密码。</string>
+    <string name="usage_codex_dashboard_hint">这里只显示 Codex 本机快照中明确返回的每周额度；账户实时数据以官方面板为准。CC Pocket 不会保存你的账号或密码。</string>
     <string name="usage_codex_no_snapshot">暂时没有 Codex 限额快照。先运行一次 Codex，或在 Codex CLI 使用 /status，然后刷新。</string>
     <string name="usage_live_refresh">实时检查已开启</string>
     <string name="usage_refresh">立即刷新</string>

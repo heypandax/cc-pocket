@@ -277,8 +277,18 @@ private fun CodexLimitsCard(limits: CodexLimits) {
             }
         }
         Text(stringResource(Res.string.usage_live_refresh), color = Tok.codex, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-        limits.primary?.let { CodexLimitRow(stringResource(Res.string.usage_codex_primary), it) }
-        limits.secondary?.let { CodexLimitRow(stringResource(Res.string.usage_codex_secondary), it) }
+        // The ChatGPT usage surfaces currently expose the account's weekly allowance. Codex rollout
+        // files may also contain a `primary` 300-minute window, but that is a CLI-local rate-limit
+        // snapshot and must not be presented as the account's official allowance: it can outlive a
+        // reset, belong to an older login, or simply be omitted by the official account UI.
+        limits.secondary?.let {
+            CodexLimitRow(stringResource(Res.string.usage_codex_secondary), it)
+        } ?: Text(
+            stringResource(Res.string.usage_codex_weekly_unavailable),
+            color = Tok.tx2,
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+        )
         limits.credits?.takeIf { it.hasCredits || it.unlimited || !it.balance.isNullOrBlank() && it.balance != "0" }?.let { c ->
             val text = when {
                 c.unlimited -> stringResource(Res.string.usage_codex_credits_unlimited)
@@ -287,7 +297,7 @@ private fun CodexLimitsCard(limits: CodexLimits) {
             }
             text?.let { Text(it, color = Tok.tx2, fontSize = 12.sp) }
         }
-        if (limits.rateLimitReached) {
+        if ((limits.secondary?.usedPercent ?: 0.0) >= 100.0) {
             Text(stringResource(Res.string.usage_codex_rate_limited), color = Tok.warn, fontSize = 12.sp, fontWeight = FontWeight.Medium)
         }
         limits.capturedAt?.let { at ->
