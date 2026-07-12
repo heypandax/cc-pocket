@@ -453,7 +453,6 @@ private fun DirectoryScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}
     }
     val treeMode = tree && query.isBlank() // filtering or flat mode both render the flat grouped list
 
-    val openSessionsLabel = stringResource(Res.string.dir_open_sessions)
     val projectsLabel = stringResource(Res.string.dir_projects)
     val activeLabel = stringResource(Res.string.dir_active)
     val pinnedLabel = stringResource(Res.string.dir_pinned)
@@ -463,8 +462,8 @@ private fun DirectoryScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}
     // Reuse crumbs() (the breadcrumb's helper) so the title and breadcrumb tail stay identical by construction.
     val headerTitle = if (treeMode && base != root) crumbs(base).lastOrNull() ?: projectsLabel else projectsLabel
     val pinnedSnapshot = repo.pinnedPaths.toList()
-    val flatRows = remember(dirsSnapshot, query, pinnedSnapshot, openSessionsLabel, projectsLabel) {
-        buildDirRows(repo.directories, query, pinnedSnapshot, pinnedLabel, openSessionsLabel, projectsLabel)
+    val flatRows = remember(dirsSnapshot, query, pinnedSnapshot, pinnedLabel, projectsLabel) {
+        buildDirRows(repo.directories, query, pinnedSnapshot, pinnedLabel, projectsLabel)
     }
     // at the root, also surface projects OUTSIDE it (other drives / off-home) as plain leaves
     val treeRows = remember(dirsSnapshot, base, root) { buildTree(repo.directories, base, includeOrphans = base == root) }
@@ -522,16 +521,6 @@ private fun DirectoryScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}
             query, { query = it }, placeholder = { Text(stringResource(Res.string.filter_hint)) }, singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         )
-        // discoverable entry to open ANY folder by absolute path — the browser only shows folders that already
-        // have history, and the top-bar "+" reads as "new", so this spells out how to reach a fresh folder (#32)
-        Row(
-            Modifier.fillMaxWidth().clickable { showNewPath = true }.padding(horizontal = 16.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Rounded.Add, null, tint = Tok.accent, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(Res.string.new_path_open_row), color = Tok.tx2, fontSize = 13.sp)
-        }
         // ── breadcrumb (tree, drilled below root) ──
         if (treeMode && base != root) {
             // labels + real drill targets anchored at root — a reconstruction from display labels broke

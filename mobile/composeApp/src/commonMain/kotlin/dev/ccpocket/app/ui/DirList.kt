@@ -119,7 +119,6 @@ fun buildDirRows(
     query: String,
     pinned: List<String>,
     pinnedLabel: String,
-    openSessionsLabel: String,
     projectsLabel: String,
 ): List<DirRow> {
     val q = query.trim()
@@ -131,11 +130,8 @@ fun buildDirRows(
             it.latestSessionTitle?.contains(q, ignoreCase = true) == true ||
             it.activeSessionTitle?.contains(q, ignoreCase = true) == true
     }
-    // a session with running background work stays "open" in the list even if its claude process check lags;
-    // a project hosting several live sessions gets one row EACH (the row tap resumes that session directly)
-    val live = filtered.filter { it.open || it.busy }.flatMap(::expandLiveSessions)
-    // pinned-to-top, in pin order; only those still present (and matching the filter). Like the live section,
-    // a pinned project also keeps its copy in the full Projects list below.
+    // pinned-to-top, in pin order; only those still present (and matching the filter). A pinned project
+    // also keeps its copy in the full Projects list below.
     val pins = pinnedEntries(filtered, pinned)
     val rows = ArrayList<DirRow>()
     fun section(label: String, items: List<DirectoryEntry>, direct: Boolean) {
@@ -144,8 +140,7 @@ fun buildDirRows(
         items.forEach { rows += DirRow.Dir(it, showPath = true, direct = direct) }
     }
     section(pinnedLabel, pins, direct = true)
-    section(openSessionsLabel, live, direct = true)
-    section(if (live.isNotEmpty() || pins.isNotEmpty()) projectsLabel else "", filtered, direct = false)
+    section(if (pins.isNotEmpty()) projectsLabel else "", filtered, direct = false)
     return rows
 }
 

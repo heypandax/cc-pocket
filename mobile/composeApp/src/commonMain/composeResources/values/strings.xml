@@ -67,7 +67,6 @@
     <string name="exit">Exit</string>
     <string name="filter_hint">filter…</string>
     <string name="history_badge">history</string>
-    <string name="dir_open_sessions">Open Sessions</string>
     <string name="dir_projects">Projects</string>
     <string name="dir_active">Active</string>
     <string name="dir_pinned">Pinned</string>
@@ -201,7 +200,6 @@
     <string name="appearance_dark">Dark</string>
     <string name="appearance_hint">Choose the app\'s color theme. System follows your device\'s light/dark setting.</string>
     <string name="new_path_open">New session in a folder</string>
-    <string name="new_path_open_row">Open another folder by path…</string>
     <string name="new_path_title">New session in a folder</string>
     <string name="new_path_sub">Type the absolute path to a folder on your computer — it doesn\'t need any prior history. (To create a brand-new folder, make it first from the in-chat terminal.)</string>
     <string name="new_path_start">Start session</string>

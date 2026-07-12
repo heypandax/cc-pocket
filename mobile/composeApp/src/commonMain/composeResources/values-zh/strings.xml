@@ -67,7 +67,6 @@
     <string name="exit">退出</string>
     <string name="filter_hint">筛选…</string>
     <string name="history_badge">历史</string>
-    <string name="dir_open_sessions">进行中的会话</string>
     <string name="dir_projects">项目</string>
     <string name="dir_active">进行中</string>
     <string name="dir_pinned">置顶</string>
@@ -201,7 +200,6 @@
     <string name="appearance_dark">深色</string>
     <string name="appearance_hint">选择应用配色。跟随系统会随设备的浅色 / 深色设置切换。</string>
     <string name="new_path_open">在文件夹中新建会话</string>
-    <string name="new_path_open_row">打开其他目录（输入路径）…</string>
     <string name="new_path_title">在文件夹中新建会话</string>
     <string name="new_path_sub">输入电脑上某个文件夹的绝对路径，无需已有历史记录。（如需全新文件夹，可先用聊天里的终端创建。）</string>
     <string name="new_path_start">开始会话</string>
