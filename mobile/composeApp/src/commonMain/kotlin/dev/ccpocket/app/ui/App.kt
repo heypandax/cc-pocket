@@ -523,12 +523,12 @@ private fun DirectoryScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}
                 }
             },
         ) {
-            IconButton({ showNewPath = true }, modifier = Modifier.size(36.dp)) {
+            IconButton({ showNewPath = true }, modifier = Modifier.size(44.dp)) {
                 Icon(Icons.Rounded.Add, stringResource(Res.string.new_path_open), tint = Tok.tx2, modifier = Modifier.size(22.dp))
             }
             ViewToggle(tree) { repo.setTreeView(!tree) }
             Spacer(Modifier.width(4.dp))
-            IconButton({ showSettings = true }, modifier = Modifier.size(36.dp)) {
+            IconButton({ showSettings = true }, modifier = Modifier.size(44.dp)) {
                 Icon(Icons.Outlined.Settings, stringResource(Res.string.settings_open), tint = Tok.tx2, modifier = Modifier.size(20.dp))
             }
         }
@@ -796,7 +796,7 @@ private fun ProjectConversationCard(
                 TailPathText(e.path, color = Tok.muted, fontSize = 10.5.sp, modifier = Modifier.padding(top = 1.dp))
             }
             if (pinned) { PinGlyph(); Spacer(Modifier.width(5.dp)) }
-            IconButton({ repo.openSession(e.path) }, modifier = Modifier.size(34.dp)) {
+            IconButton({ repo.openSession(e.path) }, modifier = Modifier.size(44.dp)) {
                 Icon(Icons.Rounded.Add, "New session", tint = Tok.tx2, modifier = Modifier.size(18.dp))
             }
         }
@@ -950,7 +950,7 @@ private fun HistoryBadge(onClick: (() -> Unit)? = null) {
 private fun ViewToggle(tree: Boolean, onToggle: () -> Unit) {
     Row(
         Modifier.clip(RoundedCornerShape(9.dp)).background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(9.dp))
-            .clickable(onClick = onToggle).padding(2.dp),
+            .clickable(onClick = onToggle).heightIn(min = 44.dp).padding(2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ViewSeg(on = !tree, icon = Icons.Rounded.Reorder)
@@ -973,13 +973,16 @@ private fun Breadcrumb(segs: List<String>, onUp: () -> Unit, onSegment: (Int) ->
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Text("‹", color = Tok.tx2, fontSize = 18.sp, modifier = Modifier.clickable(onClick = onUp).padding(end = 2.dp))
+        Box(Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onUp), contentAlignment = Alignment.Center) {
+            Text("‹", color = Tok.tx2, fontSize = 18.sp)
+        }
         segs.forEachIndexed { i, s ->
             val last = i == segs.lastIndex
             Text(
                 s, color = if (last) Tok.tx else Tok.tx2, fontFamily = FontFamily.Monospace, fontSize = 12.sp,
                 fontWeight = if (last) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1,
-                modifier = Modifier.clickable(enabled = !last) { onSegment(i) },
+                modifier = Modifier.heightIn(min = 44.dp).clickable(enabled = !last) { onSegment(i) }
+                    .padding(horizontal = 3.dp, vertical = 12.dp),
             )
             if (!last) Text("›", color = Tok.muted, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
         }
@@ -1149,7 +1152,7 @@ internal fun SessionsScreen(repo: PocketRepository) { // internal: driven end-to
                         TailPathText(dir)
                     }
                 }
-                IconButton({ showSettings = true }, modifier = Modifier.size(40.dp)) {
+                IconButton({ showSettings = true }, modifier = Modifier.size(44.dp)) {
                     Icon(Icons.Outlined.Settings, stringResource(Res.string.settings_open), tint = Tok.tx2, modifier = Modifier.size(20.dp))
                 }
             }
