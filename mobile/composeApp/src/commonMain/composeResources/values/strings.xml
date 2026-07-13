@@ -9,6 +9,9 @@
     <string name="connect_direct">Connect direct</string>
     <string name="pairing_title">Connect your computer</string>
     <string name="pairing_subtitle">Pair this phone with the cc-pocket daemon on your computer.</string>
+    <string name="pairing_command_label">First, run this on the computer you want to connect:</string>
+    <string name="pairing_qr_scanner">Pairing QR code scanner</string>
+    <string name="pairing_code_input">Six-digit pairing code</string>
     <string name="scanning">scanning…</string>
     <string name="tap_to_scan">tap to scan the QR</string>
     <string name="or_enter_code">or enter the pairing code</string>

@@ -47,6 +47,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -72,6 +74,12 @@ fun PairingScreen(repo: PocketRepository) {
     var advanced by remember { mutableStateOf(false) }
     var url by remember { mutableStateOf(defaultDaemonUrl()) }
     val complete = code.length == 6
+    val pairStatus = repo.status.value
+    val pairing = pairStatus.res == Res.string.status_pairing
+    val statusColor = when (pairStatus.res) {
+        Res.string.status_invalid_link, Res.string.status_pair_failed, Res.string.status_local_denied -> Tok.danger
+        else -> Tok.muted
+    }
     // "Add a computer" entered from an existing binding — let the user back out to the device picker.
     val adding = repo.addingDevice.value
     if (adding) dev.ccpocket.app.SystemBackHandler(enabled = true) { repo.cancelAddDevice() }
@@ -100,17 +108,22 @@ fun PairingScreen(repo: PocketRepository) {
         Divider(stringResource(Res.string.or_enter_code))
         Spacer(Modifier.height(18.dp))
 
-        CodeInput(code) { v -> code = v; if (v.length == 6) repo.pairWithCode(v) }
+        CodeInput(code) { v -> code = v }
 
         Spacer(Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(Res.string.run_code_prefix) + " ", color = Tok.tx2, fontSize = 13.sp)
+        Text(stringResource(Res.string.pairing_command_label), color = Tok.tx2, fontSize = 12.5.sp)
+        Spacer(Modifier.height(6.dp))
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Tok.surface)
+                .border(1.dp, Tok.hair, RoundedCornerShape(10.dp))
+                .padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
                 "cc-pocket-daemon pair", color = Tok.tx, fontFamily = FontFamily.Monospace, fontSize = 12.5.sp,
-                modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Tok.surface)
-                    .border(1.dp, Tok.hair, RoundedCornerShape(6.dp)).padding(horizontal = 7.dp, vertical = 2.dp),
+                modifier = Modifier.weight(1f), maxLines = 1,
             )
-            Text(" " + stringResource(Res.string.run_code_suffix), color = Tok.tx2, fontSize = 13.sp)
+            CopyChip("cc-pocket-daemon pair")
         }
 
         TextButton({ showOnboarding = true }) { Text(stringResource(Res.string.ob_open), color = Tok.muted, fontSize = 12.sp) }
@@ -119,25 +132,29 @@ fun PairingScreen(repo: PocketRepository) {
             Spacer(Modifier.height(14.dp))
             OutlinedTextField(link, { link = it }, placeholder = { Text(stringResource(Res.string.paste_pair_link)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(8.dp))
-            OutlinedButton({ repo.pair(link) }, Modifier.fillMaxWidth(), enabled = link.isNotBlank()) { Text(stringResource(Res.string.pair_from_link)) }
+            OutlinedButton({ repo.pair(link) }, Modifier.fillMaxWidth().height(48.dp), enabled = link.isNotBlank()) { Text(stringResource(Res.string.pair_from_link)) }
         }
 
         Spacer(Modifier.height(10.dp))
-        Text(repo.status.value.resolve(), color = Tok.muted, fontSize = 12.sp, fontFamily = FontFamily.Monospace, textAlign = TextAlign.Center)
+        Text(pairStatus.resolve(), color = statusColor, fontSize = 12.sp, fontFamily = FontFamily.Monospace, textAlign = TextAlign.Center)
 
         Spacer(Modifier.height(20.dp))
-        Button({ if (complete) repo.pairWithCode(code) }, Modifier.fillMaxWidth(), enabled = complete) { Text(stringResource(Res.string.connect)) }
+        Button(
+            { if (complete && !pairing) repo.pairWithCode(code) },
+            Modifier.fillMaxWidth().height(50.dp),
+            enabled = complete && !pairing,
+        ) { Text(stringResource(if (pairing) Res.string.status_pairing else Res.string.connect)) }
         Spacer(Modifier.height(6.dp))
         TextButton({ advanced = !advanced }) { Text(stringResource(if (advanced) Res.string.hide_advanced else Res.string.advanced_direct_lan), color = Tok.muted, fontSize = 12.sp) }
         if (advanced) {
             OutlinedTextField(url, { url = it }, placeholder = { Text(stringResource(Res.string.daemon_ws_url)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(8.dp))
-            OutlinedButton({ repo.startDirect(url) }, Modifier.fillMaxWidth()) { Text(stringResource(Res.string.connect_direct)) }
+            OutlinedButton({ repo.startDirect(url) }, Modifier.fillMaxWidth().height(48.dp)) { Text(stringResource(Res.string.connect_direct)) }
         }
 
         Spacer(Modifier.height(20.dp))
         // No computer? Explore the whole app with sample data — no pairing or account needed.
-        OutlinedButton({ repo.enterDemo() }, Modifier.fillMaxWidth()) { Text(stringResource(Res.string.demo_cta)) }
+        OutlinedButton({ repo.enterDemo() }, Modifier.fillMaxWidth().height(48.dp)) { Text(stringResource(Res.string.demo_cta)) }
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -146,12 +163,14 @@ fun PairingScreen(repo: PocketRepository) {
 private fun Viewfinder(onScanned: (String) -> Unit) {
     var scanning by remember { mutableStateOf(true) } // auto-start the camera on the pairing screen
     var handled by remember { mutableStateOf(false) }
+    val scannerLabel = stringResource(Res.string.pairing_qr_scanner)
     val anim = rememberInfiniteTransition()
     val scanY by anim.animateFloat(6f, 196f, infiniteRepeatable(tween(1300, easing = LinearEasing), RepeatMode.Reverse))
     Box(
         Modifier.size(226.dp).clip(RoundedCornerShape(16.dp))
             .background(Brush.radialGradient(listOf(Color(0xFF15171A), Color(0xFF0B0C0D))))
             .border(1.dp, Tok.hair, RoundedCornerShape(16.dp))
+            .semantics { contentDescription = scannerLabel }
             .clickable { if (!scanning) { handled = false; scanning = true } },
     ) {
         if (scanning) {
@@ -200,6 +219,7 @@ private fun Divider(label: String) {
 
 @Composable
 private fun CodeInput(code: String, onCode: (String) -> Unit) {
+    val inputLabel = stringResource(Res.string.pairing_code_input)
     Box(Modifier.fillMaxWidth()) {
         // visible boxes
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -223,7 +243,7 @@ private fun CodeInput(code: String, onCode: (String) -> Unit) {
         BasicTextField(
             value = code,
             onValueChange = { onCode(it.filter(Char::isDigit).take(6)) },
-            modifier = Modifier.fillMaxWidth().height(58.dp).alpha(0f),
+            modifier = Modifier.fillMaxWidth().height(58.dp).semantics { contentDescription = inputLabel }.alpha(0f),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             cursorBrush = SolidColor(Color.Transparent),
         )

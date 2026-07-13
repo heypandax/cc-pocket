@@ -9,6 +9,9 @@
     <string name="connect_direct">直连</string>
     <string name="pairing_title">连接你的电脑</string>
     <string name="pairing_subtitle">将这台手机与电脑上的 cc-pocket 守护进程配对。</string>
+    <string name="pairing_command_label">先在要连接的电脑上运行：</string>
+    <string name="pairing_qr_scanner">配对二维码扫描器</string>
+    <string name="pairing_code_input">六位配对码</string>
     <string name="scanning">扫描中…</string>
     <string name="tap_to_scan">点按扫描二维码</string>
     <string name="or_enter_code">或输入配对码</string>
