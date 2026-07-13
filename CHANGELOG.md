@@ -16,6 +16,7 @@ Compared with 1.3.4, this release focuses on three-agent consistency, safer remo
 ### Improved
 
 - Claude, Codex, and Cursor now use the same new-session autonomy ladder, card height, spacing, selection state, and full-auto warning.
+- The chat model and reasoning controls now match Happy's compact status bar: borderless 24dp labels open a 236dp radio-option panel above the composer.
 - Pairing completes automatically after the sixth digit, dismisses the numeric keyboard, and provides clearer camera/error recovery.
 - Chats restore the intended reading position, stay pinned correctly around keyboard changes, and keep approvals reachable.
 - Long streaming replies render at a controlled cadence to reduce recomposition load and UI stutter.

@@ -54,6 +54,8 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Memory
+import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.rounded.AccountTree
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
@@ -120,6 +122,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
@@ -1644,14 +1649,6 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                     BackgroundJobsStrip(repo.backgroundJobs) { showBgJobs = true } // ≥1 running bg task → tap to expand
                     ComposerStatusBar(
                         repo = repo,
-                        onModel = {
-                            quickActionSection = QuickActionSection.MODEL
-                            showQuickActions = true
-                        },
-                        onEffort = {
-                            quickActionSection = QuickActionSection.EFFORT
-                            showQuickActions = true
-                        },
                         onMode = { showModeSheet = true },
                     )
                     val capturing = voiceState is VoiceState.Recording || voiceState is VoiceState.Transcribing
@@ -2089,13 +2086,36 @@ private fun NoResponseRow(onResend: () -> Unit) {
 }
 
 @Composable
-private fun ComposerStatusBar(repo: PocketRepository, onModel: () -> Unit, onEffort: () -> Unit, onMode: () -> Unit) {
-    val model = modelAlias(repo.model.value).ifBlank { stringResource(Res.string.value_model_default) }
+private fun ComposerStatusBar(repo: PocketRepository, onMode: () -> Unit) {
+    var openMenu by remember { mutableStateOf<String?>(null) }
+    val agent = repo.sessionAgent.value ?: AgentKind.CLAUDE
+    LaunchedEffect(agent) { if (agent == AgentKind.CURSOR) repo.refreshCursorModels() }
     val cursorVariant = if (repo.sessionAgent.value == AgentKind.CURSOR) {
         cursorModelForVariant(repo.cursorModels, repo.model.value)?.variants?.firstOrNull { it.id == repo.model.value }
     } else null
+    val cursorModel = if (agent == AgentKind.CURSOR) cursorModelForVariant(repo.cursorModels, repo.model.value) else null
+    val model = when (agent) {
+        AgentKind.CLAUDE -> modelAlias(repo.model.value)
+        AgentKind.CODEX -> repo.model.value.orEmpty()
+        AgentKind.CURSOR -> cursorModel?.name ?: repo.model.value.orEmpty()
+    }.ifBlank { stringResource(Res.string.value_model_default) }
     val effort = cursorVariant?.name ?: repo.effort.value ?: stringResource(Res.string.value_default)
     val mode = stringResource(MODE_BY[repo.mode.value]?.short ?: MODES.first().short)
+    val modelOptions = when (agent) {
+        AgentKind.CLAUDE -> CLAUDE_MODEL_OPTIONS
+        AgentKind.CODEX -> CODEX_MODEL_OPTIONS.map { it to it }
+        AgentKind.CURSOR -> mergedCursorModels(repo.cursorModels.toList())
+    }
+    val selectedModel = when (agent) {
+        AgentKind.CLAUDE -> modelAlias(repo.model.value)
+        AgentKind.CODEX -> repo.model.value.orEmpty()
+        AgentKind.CURSOR -> cursorModelForVariant(repo.cursorModels, repo.model.value)?.id ?: repo.model.value.orEmpty()
+    }
+    val effortOptions = when (agent) {
+        AgentKind.CURSOR -> cursorModel?.variants.orEmpty().map { it.name to it.id }
+        else -> EFFORT_OPTIONS.map { it to it }
+    }
+    val selectedEffort = cursorVariant?.id ?: repo.effort.value.orEmpty()
     val used = repo.contextUsed.value ?: 0L
     val window = repo.contextWindow.value
     val fraction = if (window != null && window > 0) (used.toFloat() / window).coerceIn(0f, 1f) else 0f
@@ -2104,18 +2124,39 @@ private fun ComposerStatusBar(repo: PocketRepository, onModel: () -> Unit, onEff
     } else {
         "${stringResource(Res.string.label_context)} ~${if (used >= 1000) "${used / 1000}k" else used}"
     }
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.End,
-    ) {
-        StatusBarChip("▣", model, onModel)
-        Spacer(Modifier.width(12.dp))
-        StatusBarChip("ϟ", effort, onEffort)
-        Spacer(Modifier.width(12.dp))
-        StatusBarChip("◇", mode, onMode)
-        Spacer(Modifier.width(12.dp))
-        Canvas(Modifier.size(18.dp).semantics { contentDescription = contextDescription }) {
+    Box(Modifier.fillMaxWidth()) {
+        if (openMenu == "model") {
+            HappyStatusOptionMenu(
+                options = modelOptions,
+                selectedKey = selectedModel,
+                onDismiss = { openMenu = null },
+            ) { (_, id) -> repo.switchModel(id); openMenu = null }
+        } else if (openMenu == "effort") {
+            HappyStatusOptionMenu(
+                options = effortOptions,
+                selectedKey = selectedEffort,
+                onDismiss = { openMenu = null },
+            ) { (_, id) ->
+                if (agent == AgentKind.CURSOR) repo.switchModel(id) else repo.switchEffort(id)
+                openMenu = null
+            }
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 4.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End,
+        ) {
+            HappyStatusChip(Icons.Outlined.Memory, model, active = openMenu == "model") {
+                openMenu = if (openMenu == "model") null else "model"
+            }
+            Spacer(Modifier.width(12.dp))
+            HappyStatusChip(Icons.Outlined.Bolt, effort, active = openMenu == "effort") {
+                if (effortOptions.isNotEmpty()) openMenu = if (openMenu == "effort") null else "effort"
+            }
+            Spacer(Modifier.width(12.dp))
+            StatusBarChip("◇", mode, onMode)
+            Spacer(Modifier.width(12.dp))
+            Canvas(Modifier.size(18.dp).semantics { contentDescription = contextDescription }) {
             val stroke = 3.dp.toPx()
             drawCircle(Tok.hair, style = Stroke(stroke))
             when {
@@ -2138,7 +2179,76 @@ private fun ComposerStatusBar(repo: PocketRepository, onModel: () -> Unit, onEff
                     drawCircle(Tok.info, radius = 1.5.dp.toPx())
                 }
             }
+            }
         }
+    }
+}
+
+/** Happy's SessionStatusBar popup geometry: 236dp, max 280dp, 12dp radius, radio rows. */
+@Composable
+private fun HappyStatusOptionMenu(
+    options: List<Pair<String, String>>,
+    selectedKey: String,
+    onDismiss: () -> Unit,
+    onSelect: (Pair<String, String>) -> Unit,
+) {
+    val density = LocalDensity.current
+    Popup(
+        alignment = Alignment.BottomEnd,
+        offset = with(density) { IntOffset((-8).dp.roundToPx(), (-36).dp.roundToPx()) },
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        val shape = RoundedCornerShape(12.dp)
+        Column(
+            Modifier.width(236.dp).heightIn(max = 280.dp).shadow(10.dp, shape)
+                .clip(shape).background(Tok.surface).border(1.dp, Tok.hair, shape)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            options.forEach { option ->
+                val selected = option.second.equals(selectedKey, ignoreCase = true)
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 42.dp).clickable { onSelect(option) }
+                        .padding(horizontal = 12.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(
+                        Modifier.padding(top = 2.dp).size(14.dp).clip(CircleShape)
+                            .border(2.dp, if (selected) Tok.accent else Tok.muted, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (selected) Box(Modifier.size(5.dp).clip(CircleShape).background(Tok.accent))
+                    }
+                    Text(
+                        option.first,
+                        color = if (selected) Tok.accent else Tok.tx,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HappyStatusChip(icon: ImageVector, label: String, active: Boolean, onClick: () -> Unit) {
+    val tint = if (active) Tok.accent else Tok.muted
+    Row(
+        Modifier.heightIn(min = 24.dp).clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick)
+            .padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(icon, null, tint = tint, modifier = Modifier.size(13.dp))
+        Text(
+            label, color = tint, fontSize = 12.sp, fontWeight = FontWeight.Medium,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 168.dp),
+        )
     }
 }
 

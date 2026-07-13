@@ -2,6 +2,7 @@ What's new in 1.3.5
 
 New and improved since 1.3.4
 • Claude, Codex, and Cursor now share one consistent new-session mode screen, including risk confirmation
+• Model and reasoning controls now use Happy's compact status style with a small radio-option panel above the composer
 • Approvals show risk, impact scope, and authorization history; the activity timeline records decisions, tools, and completion
 • Codex usage shows the local official limit snapshot, weekly allowance, and reset time
 • Better handoff across devices with takeover guidance, return summaries, and restored reading position
