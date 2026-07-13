@@ -428,7 +428,7 @@ private class ServiceInstallCmd : CliktCommand(name = "service-install") {
 }
 
 private class VoiceAgentCmd : CliktCommand(name = "voice-agent") {
-    private val action by option("--action", help = "start|stop|status").default("status")
+    private val action by option(help = "start|stop|status").default("status")
 
     override fun run() {
         val projectRoot = java.io.File(".").absoluteFile
