@@ -427,10 +427,45 @@ private class ServiceInstallCmd : CliktCommand(name = "service-install") {
     }
 }
 
+private class VoiceAgentCmd : CliktCommand(name = "voice-agent") {
+    private val action by option("--action", help = "start|stop|status").default("status")
+
+    override fun run() {
+        val projectRoot = java.io.File(".").absoluteFile
+        val service = dev.ccpocket.daemon.voice.VoiceAgentService(projectRoot)
+        val prefs = DaemonPrefs.load()
+
+        when (action.lowercase()) {
+            "start" -> {
+                prefs.setVoiceAgentEnabled(true)
+                if (service.start()) {
+                    echo("✅ voice agent started (auto-start on daemon boot: on)")
+                } else {
+                    echo("❌ ${service.error}")
+                    throw com.github.ajalt.clikt.core.ProgramResult(1)
+                }
+            }
+            "stop" -> {
+                prefs.setVoiceAgentEnabled(false)
+                service.stop()
+                echo("✅ voice agent stopped (auto-start on daemon boot: off)")
+            }
+            "status" -> {
+                val enabled = prefs.voiceAgentEnabled
+                echo("voice agent:")
+                echo("  config:   ${if (enabled) "✅ enabled (auto-start on boot)" else "○ disabled"}")
+                echo("  running:  ${if (service.running) "✅ running" else "○ not running"}")
+                if (service.error != null) echo("  error:    ${service.error}")
+            }
+            else -> throw com.github.ajalt.clikt.core.CliktError("--action must be start|stop|status (got: $action)")
+        }
+    }
+}
+
 fun main(args: Array<String>) {
     // BEFORE the first logger materializes: slf4j-simple freezes its config at init, and bare
     // timestamp-less lines made the 07-04 observe/fork incident unreconstructable from the logs
     System.setProperty("org.slf4j.simpleLogger.showDateTime", "true")
     System.setProperty("org.slf4j.simpleLogger.dateTimeFormat", "MM-dd HH:mm:ss.SSS")
-    Root().subcommands(RunCmd(), TestClientCmd(), PairCmd(), StatusCmd(), UpdateCmd(), ConfigCmd(), ServiceInstallCmd()).main(args)
+    Root().subcommands(RunCmd(), TestClientCmd(), PairCmd(), StatusCmd(), UpdateCmd(), ConfigCmd(), ServiceInstallCmd(), VoiceAgentCmd()).main(args)
 }

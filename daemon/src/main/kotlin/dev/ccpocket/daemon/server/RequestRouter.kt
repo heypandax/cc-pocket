@@ -43,7 +43,9 @@ import dev.ccpocket.protocol.SendPrompt
 import dev.ccpocket.protocol.SessionGone
 import dev.ccpocket.protocol.Sessions
 import dev.ccpocket.protocol.SetPushPrefs
+import dev.ccpocket.protocol.SetVoiceAgent
 import dev.ccpocket.protocol.ShellResult
+import dev.ccpocket.protocol.VoiceAgentStatus
 import dev.ccpocket.protocol.StopBackgroundJob
 import dev.ccpocket.protocol.SwitchDirectory
 import dev.ccpocket.protocol.SwitchMode
@@ -59,6 +61,7 @@ class RequestRouter(
     private val scope: CoroutineScope,
     private val auth: AuthService,
     private val prefs: DaemonPrefs,
+    private val voiceAgent: dev.ccpocket.daemon.voice.VoiceAgentService? = null,
 ) {
     suspend fun handle(frame: Frame, sink: OutboundSink, onOpened: suspend (String) -> Unit = {}) {
         when (frame) {
@@ -203,6 +206,25 @@ class RequestRouter(
             is SetPushPrefs -> {
                 frame.enabled?.let(prefs::setPushEnabled)
                 sink.emit(PushPrefs(prefs.pushEnabled))
+            }
+
+            is SetVoiceAgent -> {
+                val va = voiceAgent
+                if (va == null) {
+                    sink.emit(VoiceAgentStatus(enabled = false, error = "voice agent service not available"))
+                } else {
+                    frame.enabled?.let(prefs::setVoiceAgentEnabled)
+                    val desired = prefs.voiceAgentEnabled
+                    if (desired && !va.running) va.start()
+                    else if (!desired && va.running) va.stop()
+                    sink.emit(
+                        VoiceAgentStatus(
+                            enabled = desired,
+                            running = va.running,
+                            error = va.error,
+                        )
+                    )
+                }
             }
 
             else -> sink.emit(PocketError("unsupported", "frame not handled by daemon: ${frame::class.simpleName}"))

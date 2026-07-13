@@ -14,7 +14,11 @@ import java.io.File
  */
 class DaemonPrefs private constructor(private val path: File) {
     @Serializable
-    private data class Stored(val pushEnabled: Boolean = true, val isolatedClaudeAuth: Boolean = false)
+    private data class Stored(
+        val pushEnabled: Boolean = true,
+        val isolatedClaudeAuth: Boolean = false,
+        val voiceAgentEnabled: Boolean = false,
+    )
 
     @Volatile
     var pushEnabled: Boolean = true
@@ -36,10 +40,19 @@ class DaemonPrefs private constructor(private val path: File) {
         persist()
     }
 
+    @Volatile
+    var voiceAgentEnabled: Boolean = false
+        private set
+
+    fun setVoiceAgentEnabled(v: Boolean) {
+        voiceAgentEnabled = v
+        persist()
+    }
+
     private fun persist() {
         runCatching {
             path.parentFile?.mkdirs()
-            path.writeText(JSON.encodeToString(Stored(pushEnabled, isolatedClaudeAuth)))
+            path.writeText(JSON.encodeToString(Stored(pushEnabled, isolatedClaudeAuth, voiceAgentEnabled)))
         }
     }
 
@@ -53,6 +66,7 @@ class DaemonPrefs private constructor(private val path: File) {
                 val s = JSON.decodeFromString<Stored>(path.readText())
                 pushEnabled = s.pushEnabled
                 isolatedClaudeAuth = s.isolatedClaudeAuth
+                voiceAgentEnabled = s.voiceAgentEnabled
             }
         }
     }

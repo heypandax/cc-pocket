@@ -39,7 +39,15 @@ class DaemonCore(
         scope, registry::busyForAuth, registry::closeIdleForAuth, registry::closeBusyForAuth,
         claudeConfigDir = claudeConfigDir,
     )
-    val router = RequestRouter(registry, dirs, transcribe, shell, scope, auth, prefs)
+    val voiceAgent = dev.ccpocket.daemon.voice.VoiceAgentService(projectRoot = java.io.File(".").absoluteFile)
+    // auto-start if enabled in prefs
+    init {
+        if (prefs.voiceAgentEnabled) voiceAgent.start()
+    }
+    val router = RequestRouter(registry, dirs, transcribe, shell, scope, auth, prefs, voiceAgent)
 
-    suspend fun shutdown() = registry.closeAll()
+    suspend fun shutdown() {
+        voiceAgent.stop()
+        registry.closeAll()
+    }
 }
