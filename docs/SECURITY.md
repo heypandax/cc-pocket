@@ -1,6 +1,6 @@
 # cc-pocket 安全与信任模型
 
-cc-pocket 让你的手机在任意网络下驱动你电脑上的 `claude`，流量经一台公网中转服务器（relay）转发。本文说明：中转服务器**看不到你的对话内容**（零知识），它如何防攻击，以及你如何亲自验证这一点。
+cc-pocket 让手机或桌面客户端在任意网络下驱动你主机上的 `claude`、`codex` 或 `cursor-agent`，流量经公网中转服务器（relay）转发。本文说明：中转服务器**看不到你的对话内容**（零知识），它如何防攻击，以及你如何亲自验证这一点。
 
 > 适用范围：当前部署 `wss://pocket.ark-nexus.cc`（中转）。relay 完全开源、可自托管（见文末）。
 
@@ -13,7 +13,7 @@ flowchart LR
     Phone["手机 (设备)<br/>P-256 静态密钥"] -- "wss + Noise 密文" --> CF[Cloudflare]
     CF --> Caddy["Caddy :443<br/>(TLS 终结)"]
     Caddy --> Relay["relay :9000<br/>零知识路由<br/>只存指纹/公钥/哈希"]
-    Relay -- "wss + Noise 密文" --> Daemon["Mac 上的 daemon<br/>Ed25519 + P-256 静态密钥<br/>驱动 claude"]
+    Relay -- "wss + Noise 密文" --> Daemon["主机上的 daemon<br/>Ed25519 + P-256 静态密钥<br/>驱动 Claude / Codex / Cursor"]
     Phone -. "端到端会话密钥 (relay 不持有)" .- Daemon
 ```
 

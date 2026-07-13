@@ -9,6 +9,16 @@ CC Pocket is a self-hosted remote client for driving **Claude Code**, **OpenAI C
 
 This repository is the `ac54u-mobile` edition. It extends the upstream project with Cursor Agent support, live Cursor account model discovery, three-backend session management, a redesigned mobile project/chat experience, and unsigned iOS packages for TrollStore.
 
+## What's new in 1.3.5
+
+- One consistent new-session mode UI for Claude, Codex, and Cursor. Fresh installs start with **Claude + Default**; saved defaults are reused afterward.
+- Approval risk/impact details and a chronological audit trail for decisions, tools, and completion.
+- Cross-device handoff and reading-position restoration; reopened chats return to where they belong.
+- Automatic six-digit pairing, smoother long replies, and keyboard-safe recent messages.
+- Codex limit snapshots, the official OpenAI Blossom mark, and a native iOS photo attachment symbol.
+
+See the full [changelog](CHANGELOG.md).
+
 > This is not an official Anthropic, OpenAI, or Cursor product. Cursor usage and model access come from the Cursor account logged in on the daemon host.
 
 ## Highlights
@@ -18,6 +28,7 @@ This repository is the `ac54u-mobile` edition. It extends the upstream project w
 - Discover the models available to the logged-in Cursor account instead of presenting an invented catalog.
 - Switch model, reasoning effort/variant, and permission mode from the composer status bar.
 - Stream answers, thinking, tool activity, background jobs, approvals, and context usage.
+- Review approval risk, affected scope, authorization history, and a chronological activity timeline.
 - Send image attachments, use voice dictation, slash commands, and `@file` completion.
 - Browse changed files, inspect highlighted diffs, and open a remote terminal.
 - Pair multiple computers and move between active sessions from one phone.
@@ -135,6 +146,7 @@ Secrets, signing identities, Firebase credentials, and deployment hosts are inte
 - [Security model](docs/SECURITY.md)
 - [iOS device build/install](docs/ios-device.md)
 - [Release process](docs/RELEASE.md)
+- [Changelog](CHANGELOG.md)
 - [Relay deployment](deploy/README.md)
 
 ## Upstream and license

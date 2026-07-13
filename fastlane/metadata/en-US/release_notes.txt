@@ -1,11 +1,13 @@
-What's new in 1.3.4
+What's new in 1.3.5
 
-Fixes & improvements
-• Chinese input is solid: fast pinyin no longer stutters or falls back to English, punctuation stops eating characters, and Send clears the box reliably
-• Long replies are no longer cut off behind the composer
-• Task panel: running jobs show elapsed time, can be stopped from your phone with a long-press, and settle instantly
-• Usage: the overview follows Today/7d/30d with a labeled comparison; trend bars share one baseline and the peak label stays visible
-• Changes viewer: diffs and text are selectable, with a new soft-wrap toggle
-• New sessions show their effective model up front; switching models mid-session now applies next turn instead of interrupting the reply
+New and improved since 1.3.4
+• Claude, Codex, and Cursor now share one consistent new-session mode screen, including risk confirmation
+• Approvals show risk, impact scope, and authorization history; the activity timeline records decisions, tools, and completion
+• Codex usage shows the local official limit snapshot, weekly allowance, and reset time
+• Better handoff across devices with takeover guidance, return summaries, and restored reading position
+• Six-digit pairing codes submit automatically and dismiss the keyboard; scanner recovery is clearer
+• Chats reopen at the last reading position or latest message, and the keyboard no longer hides recent content
+• Throttled incremental rendering makes long streaming replies smoother; offline and empty-state recovery is clearer
+• Updated OpenAI Codex branding, a native iOS photo attachment symbol, and clean letter-free project avatars
 
-Note: some fixes need the computer-side cc-pocket-daemon on 1.3.4 — run "cc-pocket-daemon update" (or brew upgrade / scoop update).
+Compatibility: daemon-backed additions require daemon 1.3.5 or newer. An installed 1.3.18 daemon should not be downgraded.

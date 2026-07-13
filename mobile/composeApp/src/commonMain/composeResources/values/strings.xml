@@ -237,7 +237,7 @@
     <!-- ── new-session default mode ──────────────────────────────── -->
     <string name="default_mode_section">NEW SESSION DEFAULT</string>
     <string name="default_model_section">DEFAULT MODEL</string>
-    <string name="default_model_hint">Which model new Claude sessions start on — Codex sessions keep their own. A live session switches from ⋯ → Model.</string>
+    <string name="default_model_hint">Which model new Claude sessions start on — Codex and Cursor keep their own. A live session switches from ⋯ → Model.</string>
     <string name="default_effort_section">DEFAULT REASONING EFFORT</string>
     <string name="context_window_section">CONTEXT WINDOW</string>
     <string name="context_window_hint">The token budget the usage statusline fills toward. Set this when a custom model\'s real window isn\'t 200K — the CLI can\'t report it.</string>
@@ -312,7 +312,6 @@
     <string name="usage_codex_credits_unlimited">Unlimited credits</string>
     <string name="usage_codex_rate_limited">You\'ve reached your Codex limit for this window</string>
     <string name="usage_codex_snapshot">Checked every 10s · Codex snapshot updated %1$s</string>
-    <string name="usage_codex_dashboard">Open official usage dashboard</string>
     <string name="usage_codex_dashboard_hint">Only a weekly allowance explicitly reported by the local Codex snapshot is shown here. The official dashboard is the source of truth; CC Pocket stores no password.</string>
     <string name="usage_codex_no_snapshot">No Codex limit snapshot yet. Start a Codex turn or use /status in Codex CLI, then refresh.</string>
     <string name="usage_live_refresh">Live check enabled</string>
@@ -419,7 +418,7 @@
     <string name="session_delete_confirm">“%1$s” and its history on the computer will be deleted. This cannot be undone.</string>
     <string name="session_delete_action">Delete</string>
 
-    <!-- ── multi-agent (Claude / Codex) ──────────────────────────── -->
+    <!-- ── multi-agent (Claude / Codex / Cursor) ─────────────────── -->
     <string name="label_agent">Agent</string>
     <string name="recommended_badge">RECOMMENDED</string>
     <string name="codex_preset_cautious">Cautious</string>

@@ -237,7 +237,7 @@
     <!-- ── 新会话默认模式 ────────────────────────────────────────── -->
     <string name="default_mode_section">新会话默认模式</string>
     <string name="default_model_section">默认模型</string>
-    <string name="default_model_hint">新建 Claude 会话默认使用的模型（Codex 会话不受影响）。会话中可在 ⋯ → 模型 里临时切换。</string>
+    <string name="default_model_hint">新建 Claude 会话默认使用的模型（Codex 与 Cursor 不受影响）。会话中可在 ⋯ → 模型 里临时切换。</string>
     <string name="default_effort_section">默认推理强度</string>
     <string name="context_window_section">上下文窗口</string>
     <string name="context_window_hint">用量状态栏对应的 token 上限。自定义模型真实窗口不是 200K 时在此设置（CLI 无法自动上报）。</string>
@@ -312,7 +312,6 @@
     <string name="usage_codex_credits_unlimited">Credits 无上限</string>
     <string name="usage_codex_rate_limited">当前窗口的 Codex 限额已用尽</string>
     <string name="usage_codex_snapshot">每 10 秒检查 · Codex 快照更新于 %1$s</string>
-    <string name="usage_codex_dashboard">打开官方用量面板</string>
     <string name="usage_codex_dashboard_hint">这里只显示 Codex 本机快照中明确返回的每周额度；账户实时数据以官方面板为准。CC Pocket 不会保存你的账号或密码。</string>
     <string name="usage_codex_no_snapshot">暂时没有 Codex 限额快照。先运行一次 Codex，或在 Codex CLI 使用 /status，然后刷新。</string>
     <string name="usage_live_refresh">实时检查已开启</string>
@@ -419,7 +418,7 @@
     <string name="session_delete_confirm">将删除“%1$s”及其在电脑上的历史记录，此操作无法撤销。</string>
     <string name="session_delete_action">删除</string>
 
-    <!-- ── 多智能体（Claude / Codex） ────────────────────────────── -->
+    <!-- ── 多智能体（Claude / Codex / Cursor） ───────────────────── -->
     <string name="label_agent">智能体</string>
     <string name="recommended_badge">推荐</string>
     <string name="codex_preset_cautious">谨慎</string>
