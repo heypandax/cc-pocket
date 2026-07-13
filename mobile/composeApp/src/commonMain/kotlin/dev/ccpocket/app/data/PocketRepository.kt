@@ -99,6 +99,8 @@ import dev.ccpocket.protocol.CancelTurn
 import dev.ccpocket.protocol.TurnDone
 import dev.ccpocket.protocol.SetPushPrefs
 import dev.ccpocket.protocol.PushPrefs
+import dev.ccpocket.protocol.SetVoiceAgent
+import dev.ccpocket.protocol.VoiceAgentStatus
 import dev.ccpocket.app.isPreviewMode
 import dev.ccpocket.app.resources.Res
 import dev.ccpocket.app.resources.preview_cmd_title
@@ -1376,6 +1378,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
             is Usage -> { usage.value = f; usageLoading.value = false }
             is AuthState -> authState.value = f
             is PushPrefs -> pushPrefs.value = f.enabled
+            is VoiceAgentStatus -> voiceAgent.value = f
             // the daemon told us where it lives on the LAN — persist per binding; the next connect (this
             // repo OR a rebuilt fleet satellite reading the same store) dials it before the relay. An
             // address that already answered with the WRONG daemon key stays blacklisted — the daemon
@@ -1699,6 +1702,14 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     fun fetchPushPrefs() = scope.launch { runCatching { send(SetPushPrefs()) } }
 
     fun setPushEnabled(enabled: Boolean) = scope.launch { runCatching { send(SetPushPrefs(enabled)) } }
+
+    /** The daemon-side xAI phone assistant — daemon truth via [VoiceAgentStatus].
+     *  Null until first fetched (or the daemon predates pocket/voice-agent.* — hide the section then). */
+    val voiceAgent = mutableStateOf<VoiceAgentStatus?>(null)
+
+    fun fetchVoiceAgent() = scope.launch { runCatching { send(SetVoiceAgent()) } }
+
+    fun setVoiceAgentEnabled(enabled: Boolean) = scope.launch { runCatching { send(SetVoiceAgent(enabled)) } }
 
     /** Switch account: the daemon logs the CLI out (when needed) and starts `claude auth login` —
      *  the browser opens on the daemon host; [authState] turns loginPending with the OAuth URL.

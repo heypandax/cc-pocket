@@ -622,6 +622,7 @@ data class VoiceAgentStatus(
     val enabled: Boolean,
     val running: Boolean = false,
     val phoneNumber: String? = null,
+    val xaiConnected: Boolean? = null, // null = agent not answering its /health probe
     val error: String? = null,
 ) : ToPhone
 

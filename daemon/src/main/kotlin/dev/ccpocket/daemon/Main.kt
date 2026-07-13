@@ -466,10 +466,20 @@ private class VoiceAgentCmd : CliktCommand(name = "voice-agent") {
             }
             "status" -> {
                 val enabled = prefs.voiceAgentEnabled
+                val st = service.status() // probes /health — sees the daemon-owned instance too
                 echo("voice agent:")
                 echo("  config:   ${if (enabled) "✅ enabled (auto-start on boot)" else "○ disabled"}")
-                echo("  running:  ${if (service.running) "✅ running" else "○ not running"}")
-                if (service.error != null) echo("  error:    ${service.error}")
+                echo("  running:  ${if (st.running) "✅ running" else "○ not running"}")
+                if (st.running) {
+                    val xai = when (st.xaiConnected) {
+                        true -> "✅ connected"
+                        false -> "❌ disconnected"
+                        null -> "? no /health reply"
+                    }
+                    echo("  xAI:      $xai")
+                }
+                st.phoneNumber?.let { echo("  phone:    $it") }
+                if (st.error != null) echo("  error:    ${st.error}")
             }
             else -> throw com.github.ajalt.clikt.core.CliktError("--action must be start|stop|status (got: $action)")
         }

@@ -234,6 +234,17 @@
     <string name="notify_on_complete">任务完成时通知</string>
     <string name="notify_on_complete_sub">应用关闭时，Claude 完成一轮回复就唤醒手机。</string>
 
+    <!-- ── 电话助手（xAI voice agent）────────────────────────────── -->
+    <string name="voice_agent_section">电话助手</string>
+    <string name="voice_agent_toggle">xAI 电话助手</string>
+    <string name="voice_agent_toggle_sub">在这台电脑上接听打到你 xAI 号码的来电。</string>
+    <string name="voice_agent_status">状态</string>
+    <string name="voice_agent_stopped">已停止</string>
+    <string name="voice_agent_starting">启动中…</string>
+    <string name="voice_agent_ready">在线，可接听来电</string>
+    <string name="voice_agent_xai_down">已启动，xAI 未连接</string>
+    <string name="voice_agent_phone">号码</string>
+
     <!-- ── 新会话默认模式 ────────────────────────────────────────── -->
     <string name="default_mode_section">新会话默认模式</string>
     <string name="default_model_section">默认模型</string>

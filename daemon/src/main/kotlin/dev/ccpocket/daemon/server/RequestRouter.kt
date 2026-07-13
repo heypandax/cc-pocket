@@ -216,12 +216,15 @@ class RequestRouter(
                     frame.enabled?.let(prefs::setVoiceAgentEnabled)
                     val desired = prefs.voiceAgentEnabled
                     if (desired && !va.running) va.start()
-                    else if (!desired && va.running) va.stop()
+                    else if (!desired) va.stop() // stop() also sweeps instances we hold no handle on
+                    val st = va.status()
                     sink.emit(
                         VoiceAgentStatus(
                             enabled = desired,
-                            running = va.running,
-                            error = va.error,
+                            running = st.running,
+                            phoneNumber = st.phoneNumber,
+                            xaiConnected = st.xaiConnected,
+                            error = st.error,
                         )
                     )
                 }
