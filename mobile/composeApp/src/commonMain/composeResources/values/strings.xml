@@ -92,6 +92,14 @@
 
     <!-- ── chat ──────────────────────────────────────────────────── -->
     <string name="chat_title">Chat</string>
+    <string name="chat_starter_title">Start with the project</string>
+    <string name="chat_starter_body">Choose a starting point. It will be placed in the composer so you can review it before sending.</string>
+    <string name="chat_starter_status_label">Check project status</string>
+    <string name="chat_starter_status_prompt">Check this project and summarize its current state, including anything that needs attention.</string>
+    <string name="chat_starter_changes_label">Summarize recent changes</string>
+    <string name="chat_starter_changes_prompt">Summarize the recent changes in this project and highlight any risks or unfinished work.</string>
+    <string name="chat_starter_next_label">Suggest the next step</string>
+    <string name="chat_starter_next_prompt">Review the project context and suggest the most useful next step. Do not make changes yet.</string>
     <string name="stop">Stop</string>
     <string name="thinking_streaming">Thinking…</string>
     <string name="chat_running">running</string>

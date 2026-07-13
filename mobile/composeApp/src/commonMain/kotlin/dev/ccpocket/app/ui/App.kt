@@ -1424,6 +1424,15 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                     state = listState, verticalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(bottom = bottomGutter),
                 ) {
+                    if (repo.messages.isEmpty() && !repo.streaming.value) {
+                        item {
+                            EmptyChatStarter { suggestion ->
+                                input = suggestion
+                                composerFocus.requestFocus()
+                                keyboard?.show()
+                            }
+                        }
+                    }
                     items(repo.messages) { m ->
                         // a prompt the daemon hasn't acknowledged while the link is down — or while the link
                         // CLAIMS up but receipts stalled past the deadline (issue #78, multi-computer links):
@@ -1933,6 +1942,34 @@ private fun WorkingRow() {
     ) {
         PulseDot(Tok.muted)
         Text(stringResource(Res.string.thinking_streaming), color = Tok.muted, fontSize = 12.5.sp, fontStyle = FontStyle.Italic)
+    }
+}
+
+/**
+ * A new session should offer a useful first move instead of an empty transcript. Suggestions fill
+ * the composer (never auto-send), preserving the user's chance to review or tailor the instruction.
+ */
+@Composable
+private fun EmptyChatStarter(onPick: (String) -> Unit) {
+    val suggestions = listOf(
+        stringResource(Res.string.chat_starter_status_label) to stringResource(Res.string.chat_starter_status_prompt),
+        stringResource(Res.string.chat_starter_changes_label) to stringResource(Res.string.chat_starter_changes_prompt),
+        stringResource(Res.string.chat_starter_next_label) to stringResource(Res.string.chat_starter_next_prompt),
+    )
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Tok.surface)
+            .border(1.dp, Tok.hair, RoundedCornerShape(14.dp)).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(stringResource(Res.string.chat_starter_title), color = Tok.tx, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(Res.string.chat_starter_body), color = Tok.tx2, fontSize = 13.sp, lineHeight = 19.sp)
+        suggestions.forEach { (label, prompt) ->
+            OutlinedButton(
+                onClick = { onPick(prompt) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                shape = RoundedCornerShape(10.dp),
+            ) { Text(label, fontSize = 13.5.sp) }
+        }
     }
 }
 

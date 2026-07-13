@@ -92,6 +92,14 @@
 
     <!-- ── 对话 ──────────────────────────────────────────────────── -->
     <string name="chat_title">对话</string>
+    <string name="chat_starter_title">从当前项目开始</string>
+    <string name="chat_starter_body">选择一个起点，内容会先填入输入框，确认或修改后再发送。</string>
+    <string name="chat_starter_status_label">检查项目状态</string>
+    <string name="chat_starter_status_prompt">检查当前项目并总结现在的状态，包括需要关注的问题。</string>
+    <string name="chat_starter_changes_label">总结最近改动</string>
+    <string name="chat_starter_changes_prompt">总结当前项目最近的改动，并指出风险或尚未完成的工作。</string>
+    <string name="chat_starter_next_label">建议下一步</string>
+    <string name="chat_starter_next_prompt">查看当前项目上下文，建议最有价值的下一步，但暂时不要修改任何内容。</string>
     <string name="stop">停止</string>
     <string name="thinking_streaming">思考中…</string>
     <string name="chat_running">运行中</string>
