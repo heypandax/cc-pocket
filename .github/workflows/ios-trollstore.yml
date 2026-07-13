@@ -27,7 +27,11 @@ jobs:
           java-version: "17"
 
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: |
+          # GitHub's macOS image may carry an unrelated untrusted aws/tap. It is not
+          # needed here; remove it instead of weakening Homebrew's tap trust checks.
+          brew untap aws/tap 2>/dev/null || true
+          brew install xcodegen
 
       - name: Unpin dev-box JDK from gradle.properties
         run: sed -i '' '/^org\.gradle\.java\.home=/d' gradle.properties
