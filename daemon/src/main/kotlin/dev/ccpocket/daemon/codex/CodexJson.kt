@@ -32,10 +32,23 @@ internal fun codexMessageText(message: JsonObject): String? {
  * — when a Files-mentioned/empty block was the first user turn, leaving a blank first line — the title
  * collapsed to the raw session UUID. Prefixes are matched after [trimStart] so the newline-led block counts.
  */
-internal fun isSyntheticUserText(text: String): Boolean {
+internal fun humanUserText(text: String): String? {
     val t = text.trimStart()
-    return t.isEmpty() ||
-        t.startsWith("<") ||
-        t.startsWith("# AGENTS.md instructions") ||
-        t.startsWith("# Files mentioned by the user")
+    if (t.startsWith("<cc-pocket-agency-agents>")) {
+        val open = "<user-request>"
+        val close = "</user-request>"
+        val start = t.indexOf(open)
+        val end = if (start >= 0) t.indexOf(close, start + open.length) else -1
+        return if (start >= 0 && end >= 0) {
+            t.substring(start + open.length, end).trim().takeIf { it.isNotEmpty() }
+        } else null
+    }
+    return text.takeUnless {
+        t.isEmpty() ||
+            t.startsWith("<") ||
+            t.startsWith("# AGENTS.md instructions") ||
+            t.startsWith("# Files mentioned by the user")
+    }
 }
+
+internal fun isSyntheticUserText(text: String): Boolean = humanUserText(text) == null

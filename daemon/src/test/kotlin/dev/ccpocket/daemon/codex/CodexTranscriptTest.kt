@@ -120,6 +120,30 @@ class CodexTranscriptTest {
     }
 
     @Test
+    fun agency_agent_wrapper_is_listed_and_replayed_as_original_request() {
+        val wrapped = "<cc-pocket-agency-agents>\n<agent id=\"ui\">large private profile</agent>\n" +
+            "</cc-pocket-agency-agents>\n\n<user-request>\n@UI 设计师 这个项目怎么样\n</user-request>"
+        val escaped = wrapped.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+        val f = Files.createTempFile("rollout-2026-07-13T00-00-00-thr-agent", ".jsonl").also {
+            it.writeText(
+                """{"timestamp":"t0","type":"session_meta","payload":{"id":"thr-agent","cwd":"/repo","cli_version":"0.144.1"}}""" + "\n" +
+                    """{"timestamp":"t1","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"$escaped"}]}}""" + "\n" +
+                    """{"timestamp":"t2","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"设计建议"}]}}""",
+            )
+        }
+
+        val summary = CodexTranscriptScanner.summarize(f, "/repo", emptyMap())!!
+        assertEquals("@UI 设计师 这个项目怎么样", summary.firstPrompt)
+        assertEquals("@UI 设计师 这个项目怎么样", summary.title)
+        assertEquals(1, summary.messageCount)
+
+        val replay = CodexTranscriptReplay.read(f)
+        assertEquals(2, replay.size)
+        assertEquals("@UI 设计师 这个项目怎么样", replay[0].text)
+        assertEquals("设计建议", replay[1].text)
+    }
+
+    @Test
     fun replay_keeps_a_long_reply_whole() {
         // issue #81 (codex side, mirrors the Claude replay): an assistant reply longer than the old
         // 2000-char per-message cap must replay whole, not clip.

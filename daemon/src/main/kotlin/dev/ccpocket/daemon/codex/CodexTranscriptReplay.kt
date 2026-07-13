@@ -33,7 +33,7 @@ object CodexTranscriptReplay {
                         "message" -> {
                             val text = codexMessageText(p)?.takeIf { it.isNotBlank() } ?: continue
                             when (p.str("role")) {
-                                "user" -> if (!isSyntheticUserText(text)) out += HistoryMessage(ChatRole.USER, text)
+                                "user" -> humanUserText(text)?.let { out += HistoryMessage(ChatRole.USER, it) }
                                 "assistant" -> out += HistoryMessage(ChatRole.ASSISTANT, text)
                                 else -> {}
                             }

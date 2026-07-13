@@ -121,9 +121,10 @@ object CodexTranscriptScanner {
                     val t = codexMessageText(p)
                     // skip Codex-injected context turns (env/permission wrappers, AGENTS.md dump, @-file
                     // expansion) — they aren't real user turns and were poisoning the title/preview
-                    if (t != null && !isSyntheticUserText(t)) {
+                    val human = t?.let(::humanUserText)
+                    if (human != null) {
                         userCount++
-                        if (firstPrompt == null) firstPrompt = t
+                        if (firstPrompt == null) firstPrompt = human
                     }
                 }
                 line = r.readLine()
