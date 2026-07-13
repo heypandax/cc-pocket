@@ -122,6 +122,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collectLatest
 import dev.ccpocket.app.defaultDaemonUrl
 import dev.ccpocket.app.data.ChatItem
 import dev.ccpocket.app.data.ConnPhase
@@ -728,10 +729,24 @@ internal fun rememberBottomPinned(
 private fun ImeFollower(listState: LazyListState, repo: PocketRepository, pinned: () -> Boolean) {
     val imeBottom = rememberUpdatedState(WindowInsets.ime.getBottom(LocalDensity.current))
     LaunchedEffect(listState) {
-        snapshotFlow { imeBottom.value }.collect { bottom ->
-            if (pinned() && bottom > 0 && repo.messages.isNotEmpty()) listState.scrollToItem(repo.messages.lastIndex, Int.MAX_VALUE)
+        snapshotFlow { imeBottom.value }.collectLatest { bottom ->
+            if (pinned() && bottom > 0 && repo.messages.isNotEmpty()) {
+                // IME insets animate frame-by-frame. Scrolling on every frame forces the transcript
+                // through repeated measure/layout passes and makes typing feel sticky, especially on
+                // iOS. collectLatest + this short settle window collapses the animation into one
+                // correction at its current resting height; a newer inset cancels the pending one.
+                delay(80)
+                if (pinned()) scrollToTranscriptEnd(listState, repo.messages.lastIndex)
+            }
         }
     }
+}
+
+/** Scroll to the visual transcript tail, including synthetic live-status rows after [messageLastIndex]. */
+private suspend fun scrollToTranscriptEnd(listState: LazyListState, messageLastIndex: Int) {
+    if (messageLastIndex < 0) return
+    val last = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(messageLastIndex)
+    listState.scrollToItem(last, Int.MAX_VALUE)
 }
 
 /** Tap a project: jump straight into its live session when one is running, else open its session list.
@@ -1292,9 +1307,17 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
     }
     // persist the composer draft per project (debounced) so leaving mid-message doesn't lose it
     LaunchedEffect(input, draftKey) { delay(400); repo.saveDraft(draftKey, input) }
-    // a huge scrollOffset lands at the bottom even when the last message is taller than the viewport
-    LaunchedEffect(repo.messages.size, repo.messages.lastOrNull(), repo.streaming.value) {
-        if (pinned && repo.messages.isNotEmpty()) { listState.scrollToItem(repo.messages.lastIndex, Int.MAX_VALUE); landed = true }
+    // Follow streaming output at a bounded cadence. Keying a LaunchedEffect directly with the last
+    // message restarted it for every protocol chunk; each restart immediately forced a list layout.
+    // snapshotFlow conflates changes while this collector is delayed, capping follow work at 20 Hz.
+    LaunchedEffect(listState) {
+        snapshotFlow { Triple(repo.messages.size, repo.messages.lastOrNull(), repo.streaming.value) }.collect {
+            delay(50)
+            if (pinned && repo.messages.isNotEmpty()) {
+                scrollToTranscriptEnd(listState, repo.messages.lastIndex)
+                landed = true
+            }
+        }
     }
     // keyboard-follow lives in its own leaf composable: the ime inset must be a COMPOSITION read
     // (iOS misses the animation otherwise), and reading it here would re-execute all of ChatScreen
