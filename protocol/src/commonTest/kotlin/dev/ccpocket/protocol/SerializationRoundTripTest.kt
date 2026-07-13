@@ -177,6 +177,25 @@ class SerializationRoundTripTest {
     }
 
     @Test
+    fun usage_claude_limits_roundtrip_and_old_frames_default() {
+        val limits = dev.ccpocket.protocol.ClaudeLimits(
+            planType = "pro",
+            session = dev.ccpocket.protocol.ClaudeLimitWindow(19.0, 300, 1783940399),
+            weekly = dev.ccpocket.protocol.ClaudeLimitWindow(2.0, 10080, 1784116799),
+            capturedAt = 1_700_000_000_000,
+        )
+        val u = Usage(days = listOf(UsageDay("Mon", 1)), claudeLimits = limits)
+        val json = PocketJson.encodeToString(Envelope(id = "u6", ts = 0, body = u))
+        assertTrue("\"claudeLimits\"" in json, json)
+        val back = (PocketJson.decodeFromString<Envelope>(json).body as Usage).claudeLimits
+        assertEquals(limits, back)
+
+        val old = """{"id":"u7","ts":0,"to":"PEER","body":{"t":"pocket/usage","days":[{"label":"Mon","tokens":100}],
+            "models":[],"tokensToday":100,"requestsToday":2}}"""
+        assertEquals(null, (PocketJson.decodeFromString<Envelope>(old).body as Usage).claudeLimits)
+    }
+
+    @Test
     fun sessionGone_roundtrips() {
         val env = Envelope(id = "3", ts = 0, body = SessionGone("c9"))
         val json = PocketJson.encodeToString(env)

@@ -240,6 +240,28 @@ data class CodexLimits(
     val capturedAt: Long? = null, // millis when this snapshot was read from disk
 )
 
+/** One Claude allowance window (5-hour session or weekly) from the account's OAuth usage endpoint. */
+@Serializable
+data class ClaudeLimitWindow(
+    val usedPercent: Double,
+    val windowMinutes: Int,
+    val resetsAt: Long, // unix epoch seconds
+)
+
+/**
+ * Live Claude plan limits read from the signed-in account's OAuth usage endpoint — the same data
+ * Claude Code's /usage panel shows (5-hour session + weekly windows, plan badge). Null when the
+ * daemon has no readable Claude credential, the fetch failed, or the daemon predates the field.
+ */
+@Serializable
+data class ClaudeLimits(
+    val planType: String? = null,
+    val session: ClaudeLimitWindow? = null,    // 5-hour window
+    val weekly: ClaudeLimitWindow? = null,     // 7-day window, all models
+    val weeklyOpus: ClaudeLimitWindow? = null, // 7-day Opus window (Max plans only)
+    val capturedAt: Long? = null, // millis when this snapshot was fetched
+)
+
 /** What kind of background work a [BackgroundJob] is. */
 @Serializable
 enum class JobKind {

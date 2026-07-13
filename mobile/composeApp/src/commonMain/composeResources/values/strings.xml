@@ -314,6 +314,15 @@
     <string name="usage_codex_snapshot">Checked every 10s · Codex snapshot updated %1$s</string>
     <string name="usage_codex_dashboard_hint">Only a weekly allowance explicitly reported by the local Codex snapshot is shown here. The official dashboard is the source of truth; CC Pocket stores no password.</string>
     <string name="usage_codex_no_snapshot">No Codex limit snapshot yet. Start a Codex turn or use /status in Codex CLI, then refresh.</string>
+    <string name="usage_claude_limits">Claude limits</string>
+    <string name="usage_claude_plan">Claude %1$s</string>
+    <string name="usage_claude_session">5-hour limit</string>
+    <string name="usage_claude_weekly">Weekly limit</string>
+    <string name="usage_claude_weekly_opus">Weekly limit (Opus)</string>
+    <string name="usage_claude_rate_limited">You\'ve reached your Claude limit for this window</string>
+    <string name="usage_claude_snapshot">Checked every 10s · Claude account checked %1$s</string>
+    <string name="usage_claude_no_snapshot">Claude limits unavailable. Sign in to Claude Code on this computer (a fresh Claude turn also renews its login), then refresh.</string>
+    <string name="usage_claude_dashboard_hint">Same source as /usage in Claude Code — read live from the signed-in account. CC Pocket stores no password.</string>
     <string name="usage_live_refresh">Live check enabled</string>
     <string name="usage_refresh">Refresh now</string>
     <string name="weekday_sun">Sun</string><string name="weekday_mon">Mon</string><string name="weekday_tue">Tue</string><string name="weekday_wed">Wed</string><string name="weekday_thu">Thu</string><string name="weekday_fri">Fri</string><string name="weekday_sat">Sat</string>

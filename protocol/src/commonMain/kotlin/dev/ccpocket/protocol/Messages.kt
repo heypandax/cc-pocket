@@ -348,6 +348,8 @@ data class AgencyAgents(
  * null from an older daemon (the phone then hides the Today trend area) and null for the 7d/30d ranges.
  * [codexLimits] is the newest Codex `rate_limits` snapshot from local rollouts (independent of [days]); null
  * when Codex has never reported limits on this machine or the daemon predates the field.
+ * [claudeLimits] is the signed-in Claude account's live limits (OAuth usage endpoint); null when no
+ * credential is readable, the fetch failed, or the daemon predates the field.
  */
 @Serializable
 @SerialName("pocket/usage")
@@ -360,6 +362,7 @@ data class Usage(
     val costUsdToday: Double? = null,
     val hours: List<UsageDay>? = null,
     val codexLimits: CodexLimits? = null,
+    val claudeLimits: ClaudeLimits? = null,
 ) : ToPhone
 
 /**

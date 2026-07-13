@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -48,6 +50,15 @@ import dev.ccpocket.app.data.PocketRepository
 import dev.ccpocket.app.resources.Res
 import dev.ccpocket.app.resources.usage_by_model
 import dev.ccpocket.app.resources.usage_cache
+import dev.ccpocket.app.resources.usage_claude_dashboard_hint
+import dev.ccpocket.app.resources.usage_claude_limits
+import dev.ccpocket.app.resources.usage_claude_no_snapshot
+import dev.ccpocket.app.resources.usage_claude_plan
+import dev.ccpocket.app.resources.usage_claude_rate_limited
+import dev.ccpocket.app.resources.usage_claude_session
+import dev.ccpocket.app.resources.usage_claude_snapshot
+import dev.ccpocket.app.resources.usage_claude_weekly
+import dev.ccpocket.app.resources.usage_claude_weekly_opus
 import dev.ccpocket.app.resources.usage_codex_credits
 import dev.ccpocket.app.resources.usage_codex_credits_unlimited
 import dev.ccpocket.app.resources.usage_codex_limits
@@ -91,7 +102,7 @@ import dev.ccpocket.app.resources.weekday_sat
 import dev.ccpocket.app.resources.usage_vs_yesterday
 import dev.ccpocket.app.theme.Tok
 import dev.ccpocket.protocol.AgentKind
-import dev.ccpocket.protocol.CodexLimitWindow
+import dev.ccpocket.protocol.ClaudeLimits
 import dev.ccpocket.protocol.CodexLimits
 import dev.ccpocket.protocol.Usage
 import dev.ccpocket.protocol.UsageDay
@@ -168,7 +179,7 @@ fun UsageScreen(repo: PocketRepository, onBack: () -> Unit) {
         }
 
         when {
-            u != null && (u.tokensToday > 0 || u.models.isNotEmpty() || u.days.any { it.tokens > 0 } || u.codexLimits != null) -> Populated(u)
+            u != null && (u.tokensToday > 0 || u.models.isNotEmpty() || u.days.any { it.tokens > 0 } || u.codexLimits != null || u.claudeLimits != null) -> Populated(u)
             u != null -> Empty(u.days.size)
             !connected || timedOut -> Offline()
             else -> Loading()
@@ -201,7 +212,7 @@ private fun Populated(u: Usage) {
         HeroCard(windowTokens, scope, periodCaption(u), deltaPct, zeroToday)
 
         Spacer(Modifier.height(10.dp))
-        u.codexLimits?.let { CodexLimitsCard(it) } ?: CodexLimitsUnavailableCard()
+        LimitsPager(u.codexLimits, u.claudeLimits)
 
         // The three metrics the daemon only knows for TODAY.
         // is unmistakable even while the hero above reads a wider window. A missing sub-metric shows a labeled
@@ -234,6 +245,83 @@ private fun Populated(u: Usage) {
             for (m in u.models) ModelRow(m, max)
         }
         Spacer(Modifier.height(20.dp))
+    }
+}
+
+/** The limits area: Codex on the first page (unchanged look), swipe right-to-left for the Claude page.
+ *  Two indicator dots below make the second page discoverable. Each page keeps its own unavailable pane. */
+@Composable
+private fun LimitsPager(codex: CodexLimits?, claude: ClaudeLimits?) {
+    val pager = rememberPagerState { 2 }
+    Column(Modifier.fillMaxWidth()) {
+        HorizontalPager(pager, pageSpacing = 10.dp, verticalAlignment = Alignment.Top) { page ->
+            when (page) {
+                0 -> codex?.let { CodexLimitsCard(it) } ?: CodexLimitsUnavailableCard()
+                else -> claude?.let { ClaudeLimitsCard(it) } ?: ClaudeLimitsUnavailableCard()
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.Center) {
+            repeat(2) { i ->
+                Box(
+                    Modifier.padding(horizontal = 3.dp).size(6.dp).clip(RoundedCornerShape(999.dp))
+                        .background(if (pager.currentPage == i) Tok.tx2 else Tok.raised),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ClaudeLimitsUnavailableCard() {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Tok.surface)
+            .border(1.dp, Tok.hair, RoundedCornerShape(14.dp)).padding(horizontal = 16.dp, vertical = 15.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(stringResource(Res.string.usage_claude_limits), color = Tok.tx, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(Res.string.usage_claude_no_snapshot), color = Tok.tx2, fontSize = 12.sp, lineHeight = 18.sp)
+        Text(stringResource(Res.string.usage_claude_dashboard_hint), color = Tok.muted, fontSize = 11.5.sp, lineHeight = 17.sp)
+    }
+}
+
+/** The Claude twin of [CodexLimitsCard]: same frame, Claude accent, the account's 5-hour + weekly
+ *  windows (+ the Opus weekly window Max plans report) straight from the daemon's live snapshot. */
+@Composable
+private fun ClaudeLimitsCard(limits: ClaudeLimits) {
+    val windows = listOfNotNull(
+        limits.session?.let { Res.string.usage_claude_session to it },
+        limits.weekly?.let { Res.string.usage_claude_weekly to it },
+        limits.weeklyOpus?.let { Res.string.usage_claude_weekly_opus to it },
+    )
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(14.dp))
+            .padding(horizontal = 16.dp, vertical = 15.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(Res.string.usage_claude_limits), color = Tok.tx, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            limits.planType?.takeIf { it.isNotBlank() }?.let { plan ->
+                Text(
+                    stringResource(Res.string.usage_claude_plan, plan.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }),
+                    color = Tok.accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(Tok.accent.copy(alpha = 0.12f)).padding(horizontal = 8.dp, vertical = 3.dp),
+                )
+            }
+        }
+        Text(stringResource(Res.string.usage_live_refresh), color = Tok.accent, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+        for ((label, w) in windows) {
+            LimitRow(stringResource(label), w.usedPercent, w.windowMinutes, w.resetsAt, Tok.accent)
+        }
+        if (windows.any { it.second.usedPercent >= 100.0 }) {
+            Text(stringResource(Res.string.usage_claude_rate_limited), color = Tok.warn, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        }
+        limits.capturedAt?.let { at ->
+            Text(stringResource(Res.string.usage_claude_snapshot, relativeTime(at)), color = Tok.muted, fontSize = 11.sp)
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Tok.hair))
+        Text(stringResource(Res.string.usage_claude_dashboard_hint), color = Tok.muted, fontSize = 11.5.sp, lineHeight = 17.sp)
     }
 }
 
@@ -280,7 +368,7 @@ private fun CodexLimitsCard(limits: CodexLimits) {
         // snapshot and must not be presented as the account's official allowance: it can outlive a
         // reset, belong to an older login, or simply be omitted by the official account UI.
         weekly?.let {
-            CodexLimitRow(stringResource(Res.string.usage_codex_secondary), it)
+            LimitRow(stringResource(Res.string.usage_codex_secondary), it.usedPercent, it.windowMinutes, it.resetsAt, Tok.codex)
         } ?: Text(
             stringResource(Res.string.usage_codex_weekly_unavailable),
             color = Tok.tx2,
@@ -306,15 +394,17 @@ private fun CodexLimitsCard(limits: CodexLimits) {
     }
 }
 
+/** One allowance-window row (remaining % + bar + reset caption), shared by the Codex and Claude cards;
+ *  [accent] is the healthy bar color (each agent's identity color), warn/danger tints stay shared. */
 @Composable
-private fun CodexLimitRow(label: String, window: CodexLimitWindow) {
-    val used = window.usedPercent.coerceIn(0.0, 100.0)
+private fun LimitRow(label: String, usedPercent: Double, windowMinutes: Int, resetsAt: Long, accent: Color) {
+    val used = usedPercent.coerceIn(0.0, 100.0)
     val remaining = (100.0 - used).coerceIn(0.0, 100.0)
     val pct = remaining.roundToInt()
     val barColor = when {
         remaining <= 0.0 -> Tok.danger
         remaining <= 20.0 -> Tok.warn
-        else -> Tok.codex
+        else -> accent
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -328,10 +418,10 @@ private fun CodexLimitRow(label: String, window: CodexLimitWindow) {
             )
         }
         Text(
-            if (window.windowMinutes >= 24 * 60) {
-                stringResource(Res.string.usage_codex_resets_on, beijingWeekdayTime(window.resetsAt))
+            if (windowMinutes >= 24 * 60) {
+                stringResource(Res.string.usage_codex_resets_on, beijingWeekdayTime(resetsAt))
             } else {
-                stringResource(Res.string.usage_codex_resets_in, resetsInCaption(window.resetsAt))
+                stringResource(Res.string.usage_codex_resets_in, resetsInCaption(resetsAt))
             },
             color = Tok.muted,
             fontSize = 11.sp,
@@ -654,7 +744,7 @@ private fun Empty(span: Int) {
             Spacer(Modifier.height(12.dp))
             Text(stringResource(Res.string.usage_empty_hint), color = Tok.muted, fontSize = 13.sp, lineHeight = 20.sp, modifier = Modifier.padding(top = 2.dp))
         }
-        CodexLimitsUnavailableCard()
+        LimitsPager(codex = null, claude = null)
         Spacer(Modifier.height(20.dp))
     }
 }

@@ -314,6 +314,15 @@
     <string name="usage_codex_snapshot">每 10 秒检查 · Codex 快照更新于 %1$s</string>
     <string name="usage_codex_dashboard_hint">这里只显示 Codex 本机快照中明确返回的每周额度；账户实时数据以官方面板为准。CC Pocket 不会保存你的账号或密码。</string>
     <string name="usage_codex_no_snapshot">暂时没有 Codex 限额快照。先运行一次 Codex，或在 Codex CLI 使用 /status，然后刷新。</string>
+    <string name="usage_claude_limits">Claude 限额</string>
+    <string name="usage_claude_plan">Claude %1$s</string>
+    <string name="usage_claude_session">5 小时限额</string>
+    <string name="usage_claude_weekly">每周限额</string>
+    <string name="usage_claude_weekly_opus">每周限额（Opus）</string>
+    <string name="usage_claude_rate_limited">当前窗口的 Claude 限额已用尽</string>
+    <string name="usage_claude_snapshot">每 10 秒检查 · Claude 账户查询于 %1$s</string>
+    <string name="usage_claude_no_snapshot">暂时读不到 Claude 限额。请确认这台电脑已登录 Claude Code（跑一轮 Claude 会话也会刷新登录态），然后刷新。</string>
+    <string name="usage_claude_dashboard_hint">与 Claude Code 的 /usage 面板同源，实时读取当前登录账户。CC Pocket 不会保存你的账号或密码。</string>
     <string name="usage_live_refresh">实时检查已开启</string>
     <string name="usage_refresh">立即刷新</string>
     <string name="weekday_sun">周日</string><string name="weekday_mon">周一</string><string name="weekday_tue">周二</string><string name="weekday_wed">周三</string><string name="weekday_thu">周四</string><string name="weekday_fri">周五</string><string name="weekday_sat">周六</string>

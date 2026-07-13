@@ -83,7 +83,11 @@ class RequestRouter(
 
             // heavy transcript scan → off the inbound pump so it can't wedge the socket
             is FetchUsage -> scope.launch {
-                sink.emit(UsageService.aggregate(frame.days, liveCodexLimits = dev.ccpocket.daemon.codex.CodexRateLimitsClient.read()))
+                sink.emit(UsageService.aggregate(
+                    frame.days,
+                    liveCodexLimits = dev.ccpocket.daemon.codex.CodexRateLimitsClient.read(),
+                    liveClaudeLimits = dev.ccpocket.daemon.claude.ClaudeRateLimitsClient.read(),
+                ))
             }
 
             // both re-scan the transcript from disk (issue #36) → same off-pump rule as FetchUsage
