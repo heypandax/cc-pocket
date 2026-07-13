@@ -21,7 +21,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,7 +36,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -60,7 +58,6 @@ import dev.ccpocket.app.resources.usage_codex_resets_on
 import dev.ccpocket.app.resources.usage_codex_secondary
 import dev.ccpocket.app.resources.usage_codex_weekly_unavailable
 import dev.ccpocket.app.resources.usage_codex_snapshot
-import dev.ccpocket.app.resources.usage_codex_dashboard
 import dev.ccpocket.app.resources.usage_codex_dashboard_hint
 import dev.ccpocket.app.resources.usage_codex_no_snapshot
 import dev.ccpocket.app.resources.usage_codex_remaining
@@ -241,7 +238,6 @@ private fun Populated(u: Usage) {
 
 @Composable
 private fun CodexLimitsUnavailableCard() {
-    val uri = LocalUriHandler.current
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Tok.surface)
             .border(1.dp, Tok.hair, RoundedCornerShape(14.dp)).padding(horizontal = 16.dp, vertical = 15.dp),
@@ -250,16 +246,11 @@ private fun CodexLimitsUnavailableCard() {
         Text(stringResource(Res.string.usage_codex_limits), color = Tok.tx, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
         Text(stringResource(Res.string.usage_codex_no_snapshot), color = Tok.tx2, fontSize = 12.sp, lineHeight = 18.sp)
         Text(stringResource(Res.string.usage_codex_dashboard_hint), color = Tok.muted, fontSize = 11.5.sp, lineHeight = 17.sp)
-        TextButton(
-            onClick = { runCatching { uri.openUri("https://chatgpt.com/codex/cloud/settings/usage") } },
-            modifier = Modifier.align(Alignment.End),
-        ) { Text(stringResource(Res.string.usage_codex_dashboard), color = Tok.codex, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
     }
 }
 
 @Composable
 private fun CodexLimitsCard(limits: CodexLimits) {
-    val uri = LocalUriHandler.current
     // Codex may return a weekly-only account as `primary` (not `secondary`). Classify by duration;
     // primary/secondary describe ordering, not a permanent 5h/week meaning.
     val weekly = listOfNotNull(limits.primary, limits.secondary)
@@ -311,10 +302,6 @@ private fun CodexLimitsCard(limits: CodexLimits) {
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(Tok.hair))
         Text(stringResource(Res.string.usage_codex_dashboard_hint), color = Tok.muted, fontSize = 11.5.sp, lineHeight = 17.sp)
-        TextButton(
-            onClick = { runCatching { uri.openUri("https://chatgpt.com/codex/cloud/settings/usage") } },
-            modifier = Modifier.align(Alignment.End),
-        ) { Text(stringResource(Res.string.usage_codex_dashboard), color = Tok.codex, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
     }
 }
 

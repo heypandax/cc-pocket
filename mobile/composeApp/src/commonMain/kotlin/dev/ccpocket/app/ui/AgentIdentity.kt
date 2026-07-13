@@ -11,11 +11,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -26,6 +26,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ccpocket.app.theme.Tok
 import dev.ccpocket.protocol.AgentKind
+import dev.ccpocket.app.resources.Res
+import dev.ccpocket.app.resources.openai_blossom
+import org.jetbrains.compose.resources.painterResource
 
 /**
  * Agent identity — the consistent visual language for "which backend drives this session".
@@ -52,24 +55,24 @@ fun agentTagline(agent: AgentKind): String = when (agent) {
 internal fun Color.agentTintFill(): Color = copy(alpha = 0.12f)
 internal fun Color.agentTintBorder(): Color = copy(alpha = 0.42f)
 
-/** A line glyph per agent, drawn in a 20×20 grid — shaped after each product's real mark so the
+/** A glyph per agent, drawn in a 20×20 grid — shaped after each product's real mark so the
  *  identity is recognizable even at badge sizes: Claude = Anthropic's radiant starburst ✻;
- *  Codex = the in-app orbit mark; Cursor = the isometric cube from Cursor's logo. */
+ *  Codex = OpenAI's official Blossom; Cursor = the isometric cube from Cursor's logo. */
 @Composable
 fun AgentGlyph(agent: AgentKind, color: Color = agentColor(agent), size: Int = 18) {
+    if (agent == AgentKind.CODEX) {
+        Icon(
+            painter = painterResource(Res.drawable.openai_blossom),
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(size.dp),
+        )
+        return
+    }
     Canvas(Modifier.size(size.dp)) {
         val s = this.size.minDimension / 20f
         fun p(x: Float, y: Float) = Offset(x * s, y * s)
-        if (agent == AgentKind.CODEX) {
-            val w = 1.6f * s
-            // central node
-            drawCircle(color, radius = 2.3f * s, center = p(10f, 10f), style = Stroke(width = w))
-            // two orbit arcs (top-right + bottom-left), radius 6.8 around center
-            val box = Offset((10f - 6.8f) * s, (10f - 6.8f) * s)
-            val d = Size(13.6f * s, 13.6f * s)
-            drawArc(color, startAngle = -90f, sweepAngle = 90f, useCenter = false, topLeft = box, size = d, style = Stroke(width = w, cap = StrokeCap.Round))
-            drawArc(color, startAngle = 90f, sweepAngle = 90f, useCenter = false, topLeft = box, size = d, style = Stroke(width = w, cap = StrokeCap.Round))
-        } else if (agent == AgentKind.CURSOR) {
+        if (agent == AgentKind.CURSOR) {
             // Cursor's official 2D Cube path (466.73 × 532.09), scaled without changing its geometry.
             // Source: Cursor brand assets / General Logos / Cube / CUBE_2D_*.svg.
             val k = this.size.minDimension / 532.09f

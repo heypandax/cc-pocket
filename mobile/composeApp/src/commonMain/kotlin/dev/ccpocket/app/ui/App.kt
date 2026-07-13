@@ -953,10 +953,7 @@ private fun ProjectAvatar(seed: String, agent: AgentKind?) {
     Box(Modifier.size(38.dp)) {
         Box(
             Modifier.size(34.dp).clip(CircleShape).background(Brush.linearGradient(listOf(a, b))),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(folderName(seed).take(1).uppercase(), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-        }
+        )
         Box(
             Modifier.align(Alignment.BottomEnd).size(15.dp).clip(CircleShape).background(Tok.surface)
                 .border(1.dp, Tok.hair, CircleShape),
@@ -1693,8 +1690,7 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                             val attachInteraction = remember { MutableInteractionSource() }
                             val attachPressed by attachInteraction.collectIsPressedAsState()
                             IconButton(onClick = { launchPicker() }, interactionSource = attachInteraction, modifier = Modifier.size(44.dp)) {
-                                Icon(
-                                    AttachImageIcon,
+                                AttachImageGlyph(
                                     contentDescription = stringResource(Res.string.attach_image),
                                     tint = if (repo.pendingImages.isNotEmpty() || attachPressed) Tok.accent else Tok.tx2,
                                     modifier = Modifier.size(24.dp),
