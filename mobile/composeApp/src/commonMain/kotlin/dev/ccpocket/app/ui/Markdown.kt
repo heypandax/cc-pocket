@@ -193,6 +193,30 @@ fun MarkdownText(text: String, color: Color) {
     }
 }
 
+/**
+ * Markdown for the actively growing assistant tail. Transport chunks may arrive every few
+ * milliseconds; reparsing the entire accumulated response for each one turns a long answer into
+ * quadratic UI work. Sample the latest text at a frame-friendly cadence while live, then render the
+ * exact final value immediately when streaming ends. This changes presentation cadence only — the
+ * repository and copy action retain every byte as it arrives.
+ */
+@Composable
+fun StreamingMarkdownText(text: String, color: Color, live: Boolean) {
+    val latest = androidx.compose.runtime.rememberUpdatedState(text)
+    var shown by remember { mutableStateOf(text) }
+    LaunchedEffect(live) {
+        if (live) {
+            while (true) {
+                shown = latest.value
+                delay(50)
+            }
+        } else {
+            shown = latest.value
+        }
+    }
+    MarkdownText(if (live) shown else text, color)
+}
+
 /** Copy-with-feedback state shared by every copy affordance (mobile [CopyChip], desktop chat's button):
  *  `copied` flashes true for the same beat after `copy(text)` writes the clipboard, so confirmations
  *  read identically everywhere. */

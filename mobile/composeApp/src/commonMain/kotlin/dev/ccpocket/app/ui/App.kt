@@ -1421,7 +1421,7 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                         // silently offline)
                         val undelivered = m is ChatItem.User && m.pending && (repo.phase.value != ConnPhase.Ready || repo.sendStalled.value)
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            MessageItem(m) { imgs, i -> viewer = imgs to i }
+                            MessageItem(m, live = repo.streaming.value && m === repo.messages.lastOrNull()) { imgs, i -> viewer = imgs to i }
                             when {
                                 undelivered -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                                     PulseDot(Tok.warn, size = 5.dp)
@@ -1818,7 +1818,7 @@ private fun AtCompletionMenu(
 }
 
 @Composable
-private fun MessageItem(m: ChatItem, onOpenImages: (List<ByteArray>, Int) -> Unit = { _, _ -> }) {
+private fun MessageItem(m: ChatItem, live: Boolean = false, onOpenImages: (List<ByteArray>, Int) -> Unit = { _, _ -> }) {
     when (m) {
         // accent-rail user turn (design: User Turn Styles.html, direction B) — the terracotta
         // rail + warm tint mark "what I said" as a quote; no label, assistant flow untouched
@@ -1852,7 +1852,9 @@ private fun MessageItem(m: ChatItem, onOpenImages: (List<ByteArray>, Int) -> Uni
         }
         }
         is ChatItem.Assistant -> Column {
-            SelectionContainer { MarkdownText(m.text, Tok.tx) } // drag-select any span to copy
+            // Protocol chunks can arrive much faster than a phone can parse and lay out Markdown.
+            // Sample only the live tail; completed/history turns still render immediately and fully.
+            SelectionContainer { StreamingMarkdownText(m.text, Tok.tx, live) }
             if (m.text.isNotBlank()) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 CopyChip(m.text) // one-tap copy of the whole turn
             }
@@ -2013,7 +2015,8 @@ private fun ThinkingRow(m: ChatItem.Thinking) {
     var expanded by remember(m.seconds == null) { mutableStateOf(false) }
     Column {
         Row(
-            Modifier.clip(RoundedCornerShape(6.dp)).clickable { expanded = !expanded }.padding(vertical = 2.dp),
+            Modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(6.dp)).clickable { expanded = !expanded }
+                .padding(vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(if (expanded) "▾ " else "▸ ", color = Tok.muted, fontSize = 11.sp)
