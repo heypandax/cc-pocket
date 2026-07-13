@@ -124,6 +124,7 @@
     <string name="jump_to_latest_activity">New activity</string>
     <string name="jump_to_latest_count">%1$d new · Jump to latest</string>
     <string name="observing_notice">👁 Observing · running in a terminal</string>
+    <string name="handoff_activity_summary">%1$d recent activities available before takeover</string>
     <string name="continue_here">Continue here</string>
     <string name="add_message_hint">Add a message…</string>
     <string name="message_claude_hint">Message Claude…</string>
@@ -187,6 +188,12 @@
     <string name="activity_permission_allowed">Allowed %1$s once</string>
     <string name="activity_permission_always">Always allowed %1$s this session</string>
     <string name="activity_permission_denied">Denied %1$s</string>
+    <string name="activity_title">Activity</string>
+    <string name="activity_subtitle">Permission decisions, tool runs, and completed turns in this live session.</string>
+    <string name="activity_empty">Activity will appear here as the session runs.</string>
+    <string name="activity_kind_permission">Permission</string>
+    <string name="activity_kind_tool">Tool</string>
+    <string name="activity_kind_turn">Turn</string>
     <string name="permission_fallback">Permission</string>
     <string name="deny">Deny</string>
     <string name="allow_once">Allow once</string>

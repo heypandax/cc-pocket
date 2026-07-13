@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ccpocket.app.data.PocketRepository
+import dev.ccpocket.app.data.ActivityKind
 import dev.ccpocket.app.epochMillis
 import dev.ccpocket.app.resources.*
 import dev.ccpocket.app.theme.Tok
@@ -202,7 +203,7 @@ private fun Hairline() = Box(Modifier.fillMaxWidth().height(1.dp).background(Tok
 // ════════════════════════════════════════════════════════════════════
 //  Quick actions: switch model / effort, compact, clear, simplify
 // ════════════════════════════════════════════════════════════════════
-enum class QuickActionSection { MAIN, MODEL, EFFORT }
+enum class QuickActionSection { MAIN, MODEL, EFFORT, ACTIVITY }
 
 @Composable
 fun QuickActionsSheet(
@@ -220,7 +221,7 @@ fun QuickActionsSheet(
         Column(
             Modifier.padding(horizontal = 16.dp).padding(bottom = 14.dp, top = 4.dp)
                 .then(
-                    if (sub == QuickActionSection.MODEL || sub == QuickActionSection.EFFORT) Modifier.fillMaxHeight(0.88f).verticalScroll(modelScroll)
+                    if (sub != QuickActionSection.MAIN) Modifier.fillMaxHeight(0.88f).verticalScroll(modelScroll)
                     else Modifier,
                 ),
         ) {
@@ -246,6 +247,11 @@ fun QuickActionsSheet(
                         ) { onMode(); onDismiss() }
                         ActionRow(stringResource(Res.string.terminal_open)) { onTerminal(); onDismiss() }
                         ActionRow(stringResource(Res.string.qa_files)) { onFiles(); onDismiss() }
+                        ActionRow(
+                            stringResource(Res.string.activity_title),
+                            value = repo.activityEvents.size.takeIf { it > 0 }?.toString(),
+                            chevron = true,
+                        ) { sub = QuickActionSection.ACTIVITY }
                         ActionRow(stringResource(Res.string.qa_compact)) { repo.sendPrompt("/compact"); onDismiss() }
                         if (repo.hasSimplify()) ActionRow(stringResource(Res.string.qa_simplify)) { repo.sendPrompt("/simplify"); onDismiss() }
                         ActionRow(
@@ -279,6 +285,45 @@ fun QuickActionsSheet(
                         ) { repo.switchEffort(it); onDismiss() }
                     }
                 }
+                QuickActionSection.ACTIVITY -> ActivityView(repo, onBack = { sub = QuickActionSection.MAIN })
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActivityView(repo: PocketRepository, onBack: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("‹ ", color = Tok.tx2, fontSize = 18.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 4.dp))
+        Text(stringResource(Res.string.activity_title), color = Tok.tx, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    }
+    Text(stringResource(Res.string.activity_subtitle), color = Tok.tx2, fontSize = 12.5.sp, modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
+    if (repo.activityEvents.isEmpty()) {
+        Text(stringResource(Res.string.activity_empty), color = Tok.muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 24.dp))
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        repo.activityEvents.asReversed().take(100).forEach { event ->
+            val color = when { event.ok == false -> Tok.danger; event.ok == true -> Tok.ok; else -> Tok.accent }
+            val kind = when (event.kind) {
+                ActivityKind.PERMISSION -> Res.string.activity_kind_permission
+                ActivityKind.TOOL -> Res.string.activity_kind_tool
+                ActivityKind.TURN -> Res.string.activity_kind_turn
+            }
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Tok.surface)
+                    .border(1.dp, Tok.hair, RoundedCornerShape(10.dp)).padding(11.dp),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(9.dp),
+            ) {
+                Box(Modifier.padding(top = 5.dp).size(7.dp).clip(CircleShape).background(color))
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(kind) + " · " + event.title, color = Tok.tx, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                    event.detail?.takeIf { it.isNotBlank() }?.let {
+                        Text(it, color = Tok.muted, fontFamily = FontFamily.Monospace, fontSize = 10.5.sp, maxLines = 2)
+                    }
+                }
+                Text(relativeTime(event.at), color = Tok.muted, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
             }
         }
     }

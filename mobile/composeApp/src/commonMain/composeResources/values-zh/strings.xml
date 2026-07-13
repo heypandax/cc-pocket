@@ -124,6 +124,7 @@
     <string name="jump_to_latest_activity">有新内容</string>
     <string name="jump_to_latest_count">%1$d 条新内容 · 回到最新</string>
     <string name="observing_notice">👁 观察中 · 正在终端里运行</string>
+    <string name="handoff_activity_summary">接管前可查看最近 %1$d 项活动</string>
     <string name="continue_here">在这里继续</string>
     <string name="add_message_hint">补充说明…</string>
     <string name="message_claude_hint">给 Claude 发消息…</string>
@@ -187,6 +188,12 @@
     <string name="activity_permission_allowed">已允许 %1$s 执行一次</string>
     <string name="activity_permission_always">本会话已始终允许 %1$s</string>
     <string name="activity_permission_denied">已拒绝 %1$s</string>
+    <string name="activity_title">活动记录</string>
+    <string name="activity_subtitle">当前在线会话中的授权决定、工具运行和任务完成记录。</string>
+    <string name="activity_empty">会话运行后，活动会显示在这里。</string>
+    <string name="activity_kind_permission">授权</string>
+    <string name="activity_kind_tool">工具</string>
+    <string name="activity_kind_turn">回合</string>
     <string name="permission_fallback">权限</string>
     <string name="deny">拒绝</string>
     <string name="allow_once">允许一次</string>

@@ -190,6 +190,12 @@ sealed interface ChatItem {
     data class TurnEnded(val seconds: Int? = null) : ChatItem
 }
 
+enum class ActivityKind { PERMISSION, TOOL, TURN }
+data class ActivityEvent(
+    val kind: ActivityKind, val title: String, val detail: String? = null,
+    val ok: Boolean? = null, val at: Long = dev.ccpocket.app.epochMillis(),
+)
+
 enum class ImgState { Compressing, Ready, Rejected }
 
 /** One quick-terminal command and its [ShellResult] (null while awaiting approval/result). Issue #3. */
@@ -418,8 +424,15 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     fun saveSessionScrollPosition(workdir: String, index: Int, offset: Int) {
         sessionScrollPositions[workdir] = index to offset
     }
+    private val chatScrollPositions = mutableMapOf<String, Pair<Int, Int>>()
+    fun hasChatScrollPosition(key: String): Boolean = key in chatScrollPositions
+    fun chatScrollPosition(key: String): Pair<Int, Int> = chatScrollPositions[key] ?: (0 to 0)
+    fun saveChatScrollPosition(key: String, index: Int, offset: Int) {
+        chatScrollPositions[key] = index to offset
+    }
     val sessionsDir = mutableStateOf<String?>(null)
     val messages = mutableStateListOf<ChatItem>()
+    val activityEvents = mutableStateListOf<ActivityEvent>()
     val pendingImages = mutableStateListOf<PendingImage>() // photos staged in the composer (pre-send)
     private var pendingIdSeq = 0L
     val convoId = mutableStateOf<String?>(null)
@@ -1061,7 +1074,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         sessionsDir.value = null
         workdir.value = null // clear with the rest so a stale path can't leak into the next machine's ⌘N (issue #56)
         pendingAsk.value = null
-        directories.clear(); sessions.clear(); messages.clear(); pendingImages.clear(); clearBackgroundJobs()
+        directories.clear(); sessions.clear(); messages.clear(); activityEvents.clear(); pendingImages.clear(); clearBackgroundJobs()
         demoMode.value = false // leaving the demo returns to real pairing
         demoConnecting.value = false
         abandonVoice()
@@ -1174,7 +1187,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         opening.value = false; openTimedOut.value = false; switching.value = false
         autoFocusComposer.value = false
         pendingAsk.value = null
-        messages.clear(); pendingImages.clear()
+        messages.clear(); activityEvents.clear(); pendingImages.clear()
         terminalEntries.clear(); terminalBusy.value = false
         changedFiles.clear(); changedFilesLoading.value = false; changedFilesUnavailable.value = false
         closeFileViewer()
@@ -1447,6 +1460,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 replayEcho = false // turn boundary — the next block belongs to a new turn, never a replay echo
                 val turnWasLive = streaming.value // gate the marker/notify on a turn we actually watched run
                 finishThinking(); streaming.value = false
+                activityEvents.add(ActivityEvent(ActivityKind.TURN, "Turn completed", f.error, ok = f.error == null))
                 // a FAILED turn (API error / synthetic placeholder — issue #65): show the error row where
                 // the reply would be; no green ✓ marker for a turn that produced nothing
                 f.error?.let { messages.add(ChatItem.Sys(it)) }
@@ -1563,6 +1577,12 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
      *    (falling back to today's inline card when the parent isn't on screen, e.g. attached mid-run).
      */
     private fun onToolEvent(f: ToolEvent) {
+        activityEvents.add(
+            ActivityEvent(
+                ActivityKind.TOOL, f.tool, f.inputPreview?.take(140),
+                ok = if (f.phase == ToolPhase.RESULT) f.ok else null,
+            ),
+        )
         val parent = f.parentToolUseId
         // one-shot replay-echo dedupe (issue #107), tool flavor: a START right after a merged
         // ConvoHistory may duplicate the replayed tail card (which has no taskId). Fold into it —
@@ -1762,7 +1782,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         // the previous session's in-flight work on every switch. Switching back later resumes by
         // sessionId and reattaches the still-live conversation (registry live-match), no fork.
         convoId.value?.let { if (observing.value || !streaming.value) send(CloseSession(it)) }
-        messages.clear(); convoId.value = null; replayEcho = false
+        messages.clear(); activityEvents.clear(); convoId.value = null; replayEcho = false
         sessionKey.value = resumeId // durable draft key known immediately on resume; null for a brand-new session
         composerEpoch.value++ // a REAL context switch — composers re-init from the target's draft (#29/#88); identity flips don't
         terminalEntries.clear(); terminalBusy.value = false // the quick-terminal scrollback is per-session
@@ -2262,6 +2282,13 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         val c = convoId.value ?: return
         pendingAsk.value = null
         messages.add(ChatItem.PermissionDecision(a.tool, decision == Decision.ALLOW, remember, dev.ccpocket.app.epochMillis()))
+        activityEvents.add(
+            ActivityEvent(
+                ActivityKind.PERMISSION, a.tool,
+                if (remember) "always" else if (decision == Decision.ALLOW) "once" else "denied",
+                ok = decision == Decision.ALLOW,
+            ),
+        )
         if (decision == Decision.ALLOW && remember) a.rule?.let { r ->
             if (r !in allowRules) allowRules.add(r)
             messages.add(ChatItem.RuleChip(r)) // drop the "always allowing X" chip into the stream
@@ -2330,7 +2357,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     /** Clear the conversation — the daemon starts a fresh session (keeps model/effort/mode) and wipes history. */
     fun clearConversation() {
         val c = convoId.value ?: return
-        messages.clear(); chatTitle.value = null; contextUsed.value = null
+        messages.clear(); activityEvents.clear(); chatTitle.value = null; contextUsed.value = null
         clearBackgroundJobs()
         scope.launch { send(SendPrompt(c, "/clear")) }
     }
@@ -2378,7 +2405,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         }
         convoId.value = null
         chatTitle.value = null
-        messages.clear()
+        messages.clear(); activityEvents.clear()
         pendingImages.clear()
         clearBackgroundJobs()
         observing.value = false
@@ -2399,7 +2426,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         val wd = workdir.value ?: return
         scope.launch {
             obs?.let { send(CloseSession(it)) }
-            messages.clear(); convoId.value = null; observing.value = false
+            messages.clear(); activityEvents.clear(); convoId.value = null; observing.value = false
             // "Continue here" resumes under the Settings default mode — omitting it fell back to the
             // wire default (ask each step), ignoring the user's chosen mode (issue #50). Model/effort
             // still restore per-session, same as openSession.
@@ -2415,7 +2442,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         streaming.value = false
         convoId.value = null
         chatTitle.value = null
-        messages.clear()
+        messages.clear(); activityEvents.clear()
         pendingImages.clear()
         clearBackgroundJobs()
         abandonVoice()

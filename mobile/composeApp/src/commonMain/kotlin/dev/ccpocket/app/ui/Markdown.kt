@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ccpocket.app.resources.*
 import dev.ccpocket.app.theme.LocalFontScale
+import dev.ccpocket.app.theme.PocketMotion
 import dev.ccpocket.app.theme.Tok
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
@@ -208,13 +209,40 @@ fun StreamingMarkdownText(text: String, color: Color, live: Boolean) {
         if (live) {
             while (true) {
                 shown = latest.value
-                delay(50)
+                delay(PocketMotion.streamSampleMs)
             }
         } else {
             shown = latest.value
         }
     }
-    MarkdownText(if (live) shown else text, color)
+    if (live) IncrementalMarkdownText(shown, color) else MarkdownText(text, color)
+}
+
+/**
+ * Split a growing response at the last completed blank-line boundary outside a fenced code block.
+ * The stable prefix keeps identical parameters and Compose skips its Markdown subtree while only the
+ * small live tail is reparsed. Fences stay wholly in the tail until closed, preserving code behavior.
+ */
+@Composable
+private fun IncrementalMarkdownText(text: String, color: Color) {
+    val split = remember(text) { stableMarkdownBoundary(text) }
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        if (split > 0) MarkdownText(text.substring(0, split), color)
+        if (split < text.length) MarkdownText(text.substring(split), color)
+    }
+}
+
+internal fun stableMarkdownBoundary(text: String): Int {
+    var inFence = false
+    var lastStable = 0
+    var offset = 0
+    text.lineSequence().forEach { line ->
+        val next = offset + line.length + 1
+        if (line.trimStart().startsWith("```")) inFence = !inFence
+        else if (!inFence && line.isBlank()) lastStable = next.coerceAtMost(text.length)
+        offset = next
+    }
+    return lastStable
 }
 
 /** Copy-with-feedback state shared by every copy affordance (mobile [CopyChip], desktop chat's button):

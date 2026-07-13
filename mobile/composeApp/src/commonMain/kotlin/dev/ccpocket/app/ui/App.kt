@@ -135,6 +135,7 @@ import dev.ccpocket.app.ui.fleet.fleetAttention
 import dev.ccpocket.app.resources.*
 import dev.ccpocket.app.theme.LocalFontScale
 import dev.ccpocket.app.theme.PocketTheme
+import dev.ccpocket.app.theme.PocketMotion
 import dev.ccpocket.app.theme.ThemeMode
 import dev.ccpocket.app.theme.Tok
 import dev.ccpocket.app.voice.openAppSettings
@@ -761,8 +762,9 @@ internal fun rememberBottomPinned(
     listState: LazyListState,
     vararg resetKeys: Any?,
     userGesturesOnly: Boolean = true,
+    initialPinned: Boolean = true,
 ): MutableState<Boolean> {
-    val pinned = remember(*resetKeys) { mutableStateOf(true) }
+    val pinned = remember(*resetKeys) { mutableStateOf(initialPinned) }
     // keyed on the pinned INSTANCE too: resetKeys mint a fresh state, and a collector keyed only on
     // the list would keep writing the previous one (desktop resets per selected session)
     LaunchedEffect(listState, userGesturesOnly, pinned) {
@@ -792,7 +794,7 @@ private fun ImeFollower(listState: LazyListState, repo: PocketRepository, pinned
                 // through repeated measure/layout passes and makes typing feel sticky, especially on
                 // iOS. collectLatest + this short settle window collapses the animation into one
                 // correction at its current resting height; a newer inset cancels the pending one.
-                delay(80)
+                delay(PocketMotion.imeSettleMs)
                 if (pinned()) scrollToTranscriptEnd(listState, repo.messages.lastIndex)
             }
         }
@@ -1347,10 +1349,20 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
     }
     // platform picker resizes/compresses on-device; the repo budgets the picked photos against the 256 KiB frame
     val launchPicker = rememberImageAttacher { added -> repo.attachImages(added) }
-    val listState = rememberLazyListState()
+    val scrollKey = repo.convoId.value ?: draftKey
+    val hasSavedScroll = repo.hasChatScrollPosition(scrollKey)
+    val savedScroll = repo.chatScrollPosition(scrollKey)
+    val listState = remember(scrollKey) { LazyListState(savedScroll.first, savedScroll.second) }
+    LaunchedEffect(listState, scrollKey) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) -> repo.saveChatScrollPosition(scrollKey, index, offset) }
+    }
     // stick to the bottom only while the user is there ("pinned"); scrolling up unpins and shows
     // the Jump-to-latest pill instead of yanking the viewport down on every streamed chunk.
-    var pinned by rememberBottomPinned(listState)
+    var pinned by rememberBottomPinned(
+        listState, scrollKey,
+        initialPinned = !hasSavedScroll,
+    )
     // Snapshot the transcript when the user leaves the bottom. The latest assistant bubble grows in
     // place while streaming (the list size does not change), so retain both count and tail identity:
     // the jump affordance can honestly signal fresh activity in either case.
@@ -1361,7 +1373,7 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
     // keep the message list hidden until it's first parked at the bottom, so opening a session with
     // history doesn't flash the top then visibly scroll down. Resets per session (convoId); a short
     // grace reveals an empty/new session that has no history to position on.
-    var landed by remember(repo.convoId.value) { mutableStateOf(false) }
+    var landed by remember(repo.convoId.value) { mutableStateOf(hasSavedScroll) }
     LaunchedEffect(repo.convoId.value) { delay(180); landed = true }
     // a just-created session opens on an empty chat — focus the composer and raise the keyboard
     // right away instead of making the user tap the field first. openSession arms the flag only
@@ -1383,7 +1395,7 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
     // snapshotFlow conflates changes while this collector is delayed, capping follow work at 20 Hz.
     LaunchedEffect(listState) {
         snapshotFlow { Triple(repo.messages.size, repo.messages.lastOrNull(), repo.streaming.value) }.collect {
-            delay(50)
+            delay(PocketMotion.streamSampleMs)
             if (pinned && repo.messages.isNotEmpty()) {
                 scrollToTranscriptEnd(listState, repo.messages.lastIndex)
                 landed = true
@@ -1585,7 +1597,13 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                 // composer yields while the card's field has the keyboard
             } else if (repo.observing.value) {
                 Row(Modifier.fillMaxWidth().background(Tok.surface).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(Res.string.observing_notice), color = Tok.tx2, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(Res.string.observing_notice), color = Tok.tx2, fontSize = 13.sp)
+                        if (repo.activityEvents.isNotEmpty()) Text(
+                            stringResource(Res.string.handoff_activity_summary, repo.activityEvents.size),
+                            color = Tok.muted, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
                     Button({ repo.takeOver() }) { Text(stringResource(Res.string.continue_here)) }
                 }
             } else {
