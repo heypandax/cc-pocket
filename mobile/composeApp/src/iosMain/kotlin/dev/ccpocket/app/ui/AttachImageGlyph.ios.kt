@@ -10,6 +10,7 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import platform.UIKit.UIColor
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageView
+import platform.UIKit.UIViewContentMode
 
 @Composable
 @OptIn(ExperimentalForeignApi::class)
@@ -18,7 +19,8 @@ actual fun AttachImageGlyph(tint: Color, modifier: Modifier, contentDescription:
         factory = {
             UIImageView().apply {
                 // SF Symbols arrive as template images, so UIImageView.tintColor controls state.
-                image = UIImage.systemImageNamed("photo.badge.plus")
+                image = UIImage.systemImageNamed("photo")
+                contentMode = UIViewContentMode.UIViewContentModeScaleAspectFit
             }
         },
         modifier = modifier.then(

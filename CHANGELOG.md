@@ -20,7 +20,7 @@ Compared with 1.3.4, this release focuses on three-agent consistency, safer remo
 - Chats restore the intended reading position, stay pinned correctly around keyboard changes, and keep approvals reachable.
 - Long streaming replies render at a controlled cadence to reduce recomposition load and UI stutter.
 - Project, offline, empty, attention, navigation, and status states have larger targets and clearer recovery actions.
-- Project avatars no longer contain generated letters; Codex uses OpenAI's official Blossom asset; iOS uses the native `photo.badge.plus` attachment symbol.
+- Project avatars no longer contain generated letters; Codex uses OpenAI's official Blossom asset; iOS uses the clean native `photo` attachment symbol.
 - Desktop switching, recent-session persistence, notifications, prompt delivery, relay reconnects, and replay of long transcripts are more resilient.
 
 ### Fixed

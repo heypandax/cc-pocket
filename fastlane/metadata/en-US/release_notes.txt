@@ -8,6 +8,6 @@ New and improved since 1.3.4
 • Six-digit pairing codes submit automatically and dismiss the keyboard; scanner recovery is clearer
 • Chats reopen at the last reading position or latest message, and the keyboard no longer hides recent content
 • Throttled incremental rendering makes long streaming replies smoother; offline and empty-state recovery is clearer
-• Updated OpenAI Codex branding, a native iOS photo attachment symbol, and clean letter-free project avatars
+• Updated OpenAI Codex branding, a clean native iOS photo symbol, and letter-free project avatars
 
 Compatibility: daemon-backed additions require daemon 1.3.5 or newer. An installed 1.3.18 daemon should not be downgraded.
