@@ -14,6 +14,8 @@
     <string name="pairing_code_input">Six-digit pairing code</string>
     <string name="scanning">scanning…</string>
     <string name="tap_to_scan">tap to scan the QR</string>
+    <string name="camera_unavailable">Camera unavailable</string>
+    <string name="camera_use_code">Tap to retry, or use the six-digit code below.</string>
     <string name="or_enter_code">or enter the pairing code</string>
     <string name="run_code_prefix">Run</string>
     <string name="run_code_suffix">to get a code.</string>

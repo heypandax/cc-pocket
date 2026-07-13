@@ -163,6 +163,7 @@ fun PairingScreen(repo: PocketRepository) {
 private fun Viewfinder(onScanned: (String) -> Unit) {
     var scanning by remember { mutableStateOf(true) } // auto-start the camera on the pairing screen
     var handled by remember { mutableStateOf(false) }
+    var cameraFailed by remember { mutableStateOf(false) }
     val scannerLabel = stringResource(Res.string.pairing_qr_scanner)
     val anim = rememberInfiniteTransition()
     val scanY by anim.animateFloat(6f, 196f, infiniteRepeatable(tween(1300, easing = LinearEasing), RepeatMode.Reverse))
@@ -171,7 +172,13 @@ private fun Viewfinder(onScanned: (String) -> Unit) {
             .background(Brush.radialGradient(listOf(Color(0xFF15171A), Color(0xFF0B0C0D))))
             .border(1.dp, Tok.hair, RoundedCornerShape(16.dp))
             .semantics { contentDescription = scannerLabel }
-            .clickable { if (!scanning) { handled = false; scanning = true } },
+            .clickable {
+                if (!scanning) {
+                    handled = false
+                    cameraFailed = false
+                    scanning = true
+                }
+            },
     ) {
         if (scanning) {
             QrScanner(
@@ -181,7 +188,7 @@ private fun Viewfinder(onScanned: (String) -> Unit) {
                 openImagePicker = false,
                 onCompletion = { v -> if (!handled) { handled = true; scanning = false; onScanned(v) } },
                 imagePickerHandler = {},
-                onFailure = {},
+                onFailure = { cameraFailed = true; scanning = false },
                 overlayColor = Color.Transparent,      // suppress qr-kit's own dimming; we draw the frame
                 overlayBorderColor = Color.Transparent,
             )
@@ -199,6 +206,22 @@ private fun Viewfinder(onScanned: (String) -> Unit) {
                 Modifier.fillMaxWidth().padding(horizontal = 14.dp).offset(y = scanY.dp).height(2.dp)
                     .background(Brush.horizontalGradient(listOf(Color.Transparent, Tok.accent, Color.Transparent))),
             )
+        }
+        if (cameraFailed) {
+            Column(
+                Modifier.align(Alignment.Center).padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    stringResource(Res.string.camera_unavailable), color = Tok.tx, fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    stringResource(Res.string.camera_use_code), color = Tok.tx2, fontSize = 12.sp,
+                    lineHeight = 17.sp, textAlign = TextAlign.Center,
+                )
+            }
         }
         Text(
             stringResource(if (scanning) Res.string.scanning else Res.string.tap_to_scan),

@@ -14,6 +14,8 @@
     <string name="pairing_code_input">六位配对码</string>
     <string name="scanning">扫描中…</string>
     <string name="tap_to_scan">点按扫描二维码</string>
+    <string name="camera_unavailable">相机不可用</string>
+    <string name="camera_use_code">点按重试，或使用下方六位配对码。</string>
     <string name="or_enter_code">或输入配对码</string>
     <string name="run_code_prefix">在电脑上运行</string>
     <string name="run_code_suffix">获取配对码。</string>
