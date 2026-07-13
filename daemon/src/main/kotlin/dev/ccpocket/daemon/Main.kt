@@ -431,7 +431,21 @@ private class VoiceAgentCmd : CliktCommand(name = "voice-agent") {
     private val action by option(help = "start|stop|status").default("status")
 
     override fun run() {
-        val projectRoot = java.io.File(".").absoluteFile
+        val projectRoot = run {
+            val envHome = System.getenv("CC_POCKET_HOME")
+            if (envHome != null) {
+                java.io.File(envHome).absoluteFile
+            } else {
+                val codeSource = dev.ccpocket.daemon.voice.VoiceAgentService::class.java
+                    .protectionDomain?.codeSource?.location
+                if (codeSource != null && codeSource.protocol == "file") {
+                    val libDir = java.io.File(codeSource.toURI()).parentFile
+                    libDir?.parentFile?.absoluteFile ?: java.io.File(".").absoluteFile
+                } else {
+                    java.io.File(".").absoluteFile
+                }
+            }
+        }
         val service = dev.ccpocket.daemon.voice.VoiceAgentService(projectRoot)
         val prefs = DaemonPrefs.load()
 
