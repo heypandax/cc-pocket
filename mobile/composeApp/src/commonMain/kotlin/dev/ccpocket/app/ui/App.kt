@@ -1010,8 +1010,7 @@ private fun HistoryBadge(onClick: (() -> Unit)? = null) {
 private fun ViewToggle(tree: Boolean, onToggle: () -> Unit) {
     val label = stringResource(if (tree) Res.string.view_switch_list else Res.string.view_switch_tree)
     Row(
-        Modifier.clip(RoundedCornerShape(9.dp)).background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(9.dp))
-            .clickable(onClick = onToggle).semantics { contentDescription = label }
+        Modifier.clip(RoundedCornerShape(9.dp)).clickable(onClick = onToggle).semantics { contentDescription = label }
             .heightIn(min = 44.dp).padding(2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

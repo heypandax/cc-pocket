@@ -28,7 +28,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -49,6 +48,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -73,9 +74,10 @@ fun PairingScreen(repo: PocketRepository) {
     var link by remember { mutableStateOf("") }
     var advanced by remember { mutableStateOf(false) }
     var url by remember { mutableStateOf(defaultDaemonUrl()) }
-    val complete = code.length == 6
+    var submittedCode by remember { mutableStateOf<String?>(null) }
+    val focus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
     val pairStatus = repo.status.value
-    val pairing = pairStatus.res == Res.string.status_pairing
     val statusColor = when (pairStatus.res) {
         Res.string.status_invalid_link, Res.string.status_pair_failed, Res.string.status_local_denied -> Tok.danger
         else -> Tok.muted
@@ -108,7 +110,16 @@ fun PairingScreen(repo: PocketRepository) {
         Divider(stringResource(Res.string.or_enter_code))
         Spacer(Modifier.height(18.dp))
 
-        CodeInput(code) { v -> code = v }
+        CodeInput(code) { v ->
+            code = v
+            if (v.length < 6) submittedCode = null
+            if (v.length == 6 && v != submittedCode) {
+                submittedCode = v
+                focus.clearFocus()
+                keyboard?.hide()
+                repo.pairWithCode(v)
+            }
+        }
 
         Spacer(Modifier.height(16.dp))
         Text(stringResource(Res.string.pairing_command_label), color = Tok.tx2, fontSize = 12.5.sp)
@@ -138,12 +149,6 @@ fun PairingScreen(repo: PocketRepository) {
         Spacer(Modifier.height(10.dp))
         Text(pairStatus.resolve(), color = statusColor, fontSize = 12.sp, fontFamily = FontFamily.Monospace, textAlign = TextAlign.Center)
 
-        Spacer(Modifier.height(20.dp))
-        Button(
-            { if (complete && !pairing) repo.pairWithCode(code) },
-            Modifier.fillMaxWidth().height(50.dp),
-            enabled = complete && !pairing,
-        ) { Text(stringResource(if (pairing) Res.string.status_pairing else Res.string.connect)) }
         Spacer(Modifier.height(6.dp))
         TextButton({ advanced = !advanced }) { Text(stringResource(if (advanced) Res.string.hide_advanced else Res.string.advanced_direct_lan), color = Tok.muted, fontSize = 12.sp) }
         if (advanced) {
