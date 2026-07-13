@@ -47,6 +47,7 @@
     <string name="conn_computer_offline_title">Your computer is offline</string>
     <string name="conn_computer_offline_body">CC Pocket can\'t see your computer. Make sure it\'s awake and the cc-pocket app is running.</string>
     <string name="conn_computer_offline_hint">We\'ll reconnect automatically as soon as it\'s back.</string>
+    <string name="conn_run_on_computer">If the service stopped, run this on the computer:</string>
     <string name="conn_computer_offline_banner">Computer offline — waiting for it to come back…</string>
     <string name="conn_connecting_banner">Connecting to your computer…</string>
     <string name="msg_pending_undelivered">Not delivered yet — will send once connected</string>
@@ -60,7 +61,8 @@
     <string name="conn_pairing_invalid_title">Pairing expired</string>
     <string name="conn_pairing_invalid_body">This phone is no longer paired with your computer. Pair again to reconnect.</string>
     <string name="dir_empty_title">No projects yet</string>
-    <string name="dir_empty_body">Open a folder with the cc-pocket CLI on your computer, then pull to refresh.</string>
+    <string name="dir_empty_body">Choose a folder to start your first session, or refresh if you already opened one on the computer.</string>
+    <string name="dir_empty_start">Start in a folder</string>
     <string name="dir_refresh">Refresh</string>
     <string name="dir_no_matches">No matches</string>
 
@@ -69,6 +71,9 @@
     <string name="filter_hint">filter…</string>
     <string name="history_badge">history</string>
     <string name="dir_projects">Projects</string>
+    <string name="open_computers">Open your computers</string>
+    <string name="view_switch_list">Switch to list view</string>
+    <string name="view_switch_tree">Switch to tree view</string>
     <string name="home_attention_title">%1$d item needs you</string>
     <string name="home_attention_body">Review waiting approvals and computer activity</string>
     <string name="dir_active">Active</string>

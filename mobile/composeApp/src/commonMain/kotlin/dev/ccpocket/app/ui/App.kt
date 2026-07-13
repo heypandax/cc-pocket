@@ -324,6 +324,7 @@ private fun ConnectionGate(repo: PocketRepository, content: @Composable () -> Un
                 stringResource(Res.string.conn_computer_offline_body),
                 stringResource(Res.string.conn_retry), { repo.retryConnection() }, onExit = { repo.disconnect() },
                 hint = stringResource(Res.string.conn_computer_offline_hint),
+                recoveryCommand = "cc-pocket-daemon service-install --apply",
             )
         ConnPhase.Connecting ->
             if (repo.directoriesLoaded.value || repo.convoId.value != null) content() else DirectorySkeleton(repo)
@@ -335,7 +336,7 @@ private fun ConnectionGate(repo: PocketRepository, content: @Composable () -> Un
 @Composable
 private fun CenteredState(
     dot: Color, title: String, body: String, primary: String, onPrimary: () -> Unit,
-    onExit: (() -> Unit)? = null, hint: String? = null,
+    onExit: (() -> Unit)? = null, hint: String? = null, recoveryCommand: String? = null,
 ) {
     Column(
         Modifier.fillMaxSize().padding(32.dp),
@@ -349,6 +350,23 @@ private fun CenteredState(
         if (hint != null) {
             Spacer(Modifier.height(6.dp))
             Text(hint, color = Tok.muted, fontSize = 12.sp, textAlign = TextAlign.Center)
+        }
+        if (recoveryCommand != null) {
+            Spacer(Modifier.height(16.dp))
+            Text(stringResource(Res.string.conn_run_on_computer), color = Tok.muted, fontSize = 12.sp)
+            Spacer(Modifier.height(6.dp))
+            Row(
+                Modifier.fillMaxWidth().widthIn(max = 360.dp).clip(RoundedCornerShape(10.dp))
+                    .background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(10.dp))
+                    .padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    recoveryCommand, color = Tok.tx2, fontFamily = FontFamily.Monospace, fontSize = 11.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                )
+                CopyChip(recoveryCommand)
+            }
         }
         Spacer(Modifier.height(24.dp))
         Button(onPrimary, Modifier.fillMaxWidth().widthIn(max = 360.dp).heightIn(min = 48.dp)) { Text(primary) }
@@ -407,7 +425,7 @@ private fun DirectorySkeleton(repo: PocketRepository) {
 
 /** Real empty-list state — connected, but the computer has no projects open yet (not a blank screen). */
 @Composable
-private fun EmptyDirectories(onRefresh: () -> Unit) {
+private fun EmptyDirectories(onAdd: () -> Unit, onRefresh: () -> Unit) {
     Column(
         Modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally,
@@ -416,7 +434,13 @@ private fun EmptyDirectories(onRefresh: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         Text(stringResource(Res.string.dir_empty_body), color = Tok.tx2, fontSize = 13.sp, textAlign = TextAlign.Center, lineHeight = 19.sp)
         Spacer(Modifier.height(20.dp))
-        OutlinedButton(onRefresh, Modifier.heightIn(min = 48.dp)) { Text(stringResource(Res.string.dir_refresh)) }
+        Button(onAdd, Modifier.fillMaxWidth().widthIn(max = 320.dp).heightIn(min = 48.dp)) {
+            Text(stringResource(Res.string.dir_empty_start))
+        }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(onRefresh, Modifier.fillMaxWidth().widthIn(max = 320.dp).heightIn(min = 48.dp)) {
+            Text(stringResource(Res.string.dir_refresh))
+        }
     }
 }
 
@@ -473,6 +497,7 @@ private fun DirectoryScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}
     val activeLabel = stringResource(Res.string.dir_active)
     val pinnedLabel = stringResource(Res.string.dir_pinned)
     val currentProjectLabel = stringResource(Res.string.dir_current_project)
+    val computersLabel = stringResource(Res.string.open_computers)
     // drilled into a folder → the header names where you are (folder name); root keeps the section title.
     // This stops the big title and the in-list "Projects" label from both reading "Projects" while drilled in.
     // Reuse crumbs() (the breadcrumb's helper) so the title and breadcrumb tail stay identical by construction.
@@ -517,7 +542,8 @@ private fun DirectoryScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}
             if (repo.phase.value == ConnPhase.Ready) Tok.ok else Tok.warn,
             repo.paired.value?.displayName(),
             // the machine line is the doorway into the fleet: tap → Your computers (live overview)
-            machineLineModifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable(onClick = onOpenFleet).padding(vertical = 2.dp),
+            machineLineModifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable(onClick = onOpenFleet)
+                .semantics { contentDescription = computersLabel }.padding(vertical = 2.dp),
             machineTrailing = {
                 val waiting = repo.fleetAttention().size
                 if (repo.pairedList.size > 1 || waiting > 0) {
@@ -561,7 +587,7 @@ private fun DirectoryScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}
         PullToRefreshBox(isRefreshing = repo.refreshing.value, onRefresh = { repo.refreshDirectories() }, modifier = Modifier.fillMaxSize()) {
             when {
                 repo.directories.isEmpty() && repo.directoriesLoaded.value && query.isBlank() ->
-                    EmptyDirectories { repo.refreshDirectories() }
+                    EmptyDirectories(onAdd = { showNewPath = true }) { repo.refreshDirectories() }
                 !treeMode && flatRows.isEmpty() && repo.directoriesLoaded.value ->
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(stringResource(Res.string.dir_no_matches), color = Tok.muted, fontSize = 13.sp)
@@ -979,9 +1005,11 @@ private fun HistoryBadge(onClick: (() -> Unit)? = null) {
 /** Flat ⇄ tree view-mode toggle (top-bar right). Tapping flips the persisted mode. */
 @Composable
 private fun ViewToggle(tree: Boolean, onToggle: () -> Unit) {
+    val label = stringResource(if (tree) Res.string.view_switch_list else Res.string.view_switch_tree)
     Row(
         Modifier.clip(RoundedCornerShape(9.dp)).background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(9.dp))
-            .clickable(onClick = onToggle).heightIn(min = 44.dp).padding(2.dp),
+            .clickable(onClick = onToggle).semantics { contentDescription = label }
+            .heightIn(min = 44.dp).padding(2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ViewSeg(on = !tree, icon = Icons.Rounded.Reorder)
