@@ -92,6 +92,28 @@ val MODES = listOf(
 )
 val MODE_BY = MODES.associateBy { it.key }
 
+/** UI-side fallback for older daemons: explicit metadata wins, then conservative tool/input hints. */
+private enum class PermissionRisk { LOW, MEDIUM, HIGH }
+private enum class DangerChoice { ONCE, ALWAYS }
+
+private fun PermissionAsk.risk(): PermissionRisk {
+    if (danger) return PermissionRisk.HIGH
+    val input = inputPreview.lowercase()
+    if (listOf("rm -rf", "sudo ", "reset --hard", "push --force", "mkfs", "drop table", "chmod 777").any(input::contains)) {
+        return PermissionRisk.HIGH
+    }
+    val writeTools = setOf("write", "edit", "multiedit", "notebookedit", "bash", "exitplanmode", "exit_plan_mode")
+    return if (diff != null || tool.lowercase() in writeTools) PermissionRisk.MEDIUM else PermissionRisk.LOW
+}
+
+private fun PermissionAsk.impactResource(): StringResource = when {
+    diff != null -> Res.string.permission_impact_patch
+    tool.lowercase() in setOf("write", "edit", "multiedit", "notebookedit") -> Res.string.permission_impact_files
+    tool.equals("bash", ignoreCase = true) -> Res.string.permission_impact_command
+    tool.lowercase() in setOf("webfetch", "websearch") -> Res.string.permission_impact_network
+    else -> Res.string.permission_impact_read
+}
+
 // ── bottom-sheet shell (scrim + raised card, radius-20 top) ─────
 @Composable
 fun PocketSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
@@ -420,6 +442,7 @@ fun PermissionSheet(
     onDeny: () -> Unit, onOnce: () -> Unit, onAlways: () -> Unit, onDismiss: () -> Unit,
 ) {
     var seconds by remember(ask.askId) { mutableStateOf(ask.total()) }
+    var dangerChoice by remember(ask.askId) { mutableStateOf<DangerChoice?>(null) }
     LaunchedEffect(ask.askId) {
         seconds = ask.total()
         while (seconds > 0) { delay(1000); seconds -= 1 }
@@ -449,7 +472,17 @@ fun PermissionSheet(
                     Text(stringResource(Res.string.dismiss), color = Tok.accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onDismiss() }.padding(6.dp))
                 }
             } else {
-                Decision(ask, onDeny, onOnce, onAlways)
+                val risk = ask.risk()
+                when (dangerChoice) {
+                    DangerChoice.ONCE -> DangerDecisionConfirm(ask, remember = false, onCancel = { dangerChoice = null }, onConfirm = onOnce)
+                    DangerChoice.ALWAYS -> DangerDecisionConfirm(ask, remember = true, onCancel = { dangerChoice = null }, onConfirm = onAlways)
+                    null -> Decision(
+                        ask,
+                        onDeny,
+                        onOnce = { if (risk == PermissionRisk.HIGH) dangerChoice = DangerChoice.ONCE else onOnce() },
+                        onAlways = { if (risk == PermissionRisk.HIGH) dangerChoice = DangerChoice.ALWAYS else onAlways() },
+                    )
+                }
             }
         }
     }
@@ -459,10 +492,12 @@ private fun PermissionAsk.total() = 30
 
 @Composable
 private fun PermBody(ask: PermissionAsk, workdir: String?) {
+    val risk = ask.risk()
     Column {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            Icon(Icons.Outlined.Shield, null, tint = if (ask.danger) Tok.danger else Tok.warn, modifier = Modifier.size(16.dp))
+            Icon(Icons.Outlined.Shield, null, tint = risk.color(), modifier = Modifier.size(16.dp))
             Text(stringResource(Res.string.needs_permission), color = Tok.tx2, fontSize = 13.sp)
+            RiskBadge(risk)
         }
         Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.Bottom) {
             Text(ask.title.ifBlank { stringResource(Res.string.permission_fallback) }, color = Tok.tx, fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -488,6 +523,60 @@ private fun PermBody(ask: PermissionAsk, workdir: String?) {
         }
         if (workdir != null) {
             TailPathText(workdir, fontSize = 11.5.sp, modifier = Modifier.padding(top = 12.dp))
+        }
+        Row(
+            Modifier.padding(top = 10.dp).fillMaxWidth().clip(RoundedCornerShape(9.dp))
+                .background(risk.color().copy(alpha = 0.08f)).padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(stringResource(Res.string.permission_impact_label), color = Tok.muted, fontSize = 11.5.sp)
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(ask.impactResource()), color = risk.color(), fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+private fun PermissionRisk.color(): Color = when (this) {
+    PermissionRisk.LOW -> Tok.ok
+    PermissionRisk.MEDIUM -> Tok.warn
+    PermissionRisk.HIGH -> Tok.danger
+}
+
+@Composable
+private fun RiskBadge(risk: PermissionRisk) {
+    val label = when (risk) {
+        PermissionRisk.LOW -> Res.string.permission_risk_low
+        PermissionRisk.MEDIUM -> Res.string.permission_risk_medium
+        PermissionRisk.HIGH -> Res.string.permission_risk_high
+    }
+    Text(
+        stringResource(label), color = risk.color(), fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(risk.color().copy(alpha = 0.12f))
+            .border(1.dp, risk.color().copy(alpha = 0.4f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 7.dp, vertical = 2.dp),
+    )
+}
+
+@Composable
+private fun DangerDecisionConfirm(
+    ask: PermissionAsk, remember: Boolean, onCancel: () -> Unit, onConfirm: () -> Unit,
+) {
+    Column(
+        Modifier.padding(top = 16.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp))
+            .background(Tok.danger.copy(alpha = 0.08f)).border(1.dp, Tok.danger.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+            .padding(14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Rounded.WarningAmber, null, tint = Tok.danger, modifier = Modifier.size(18.dp))
+            Text(stringResource(Res.string.danger_confirm_title), color = Tok.tx, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        }
+        Text(
+            stringResource(if (remember) Res.string.danger_confirm_always else Res.string.danger_confirm_once, ask.tool),
+            color = Tok.tx2, fontSize = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 7.dp),
+        )
+        Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SheetButton(stringResource(Res.string.cancel), Modifier.weight(1f), outline = true, onClick = onCancel)
+            SheetButton(stringResource(Res.string.danger_confirm_cta), Modifier.weight(1.35f), bg = Tok.danger, fg = Color.White, onClick = onConfirm)
         }
     }
 }
@@ -532,7 +621,7 @@ private fun Decision(ask: PermissionAsk, onDeny: () -> Unit, onOnce: () -> Unit,
         }
         return
     }
-    val danger = ask.danger
+    val danger = ask.risk() == PermissionRisk.HIGH
     Column(Modifier.padding(top = 16.dp)) {
         Row(Modifier.padding(bottom = 11.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             Icon(
