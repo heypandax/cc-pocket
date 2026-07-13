@@ -69,6 +69,8 @@
     <string name="filter_hint">filter…</string>
     <string name="history_badge">history</string>
     <string name="dir_projects">Projects</string>
+    <string name="home_attention_title">%1$d item needs you</string>
+    <string name="home_attention_body">Review waiting approvals and computer activity</string>
     <string name="dir_active">Active</string>
     <string name="dir_pinned">Pinned</string>
     <string name="dir_current_project">Current project</string>

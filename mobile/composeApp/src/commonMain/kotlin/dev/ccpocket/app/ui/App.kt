@@ -539,6 +539,10 @@ private fun DirectoryScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}
                 Icon(Icons.Outlined.Settings, stringResource(Res.string.settings_open), tint = Tok.tx2, modifier = Modifier.size(20.dp))
             }
         }
+        val homeAttention = repo.fleetAttention().size
+        if (homeAttention > 0) {
+            HomeAttentionCard(homeAttention, onOpenFleet)
+        }
         OutlinedTextField(
             query, { query = it }, placeholder = { Text(stringResource(Res.string.filter_hint)) }, singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -632,6 +636,26 @@ private fun DirectoryScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}
                 onDismiss = { newPathTarget = null },
             )
         }
+    }
+}
+
+/** High-priority home entry: decisions waiting on any paired computer outrank project browsing. */
+@Composable
+private fun HomeAttentionCard(count: Int, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(12.dp)
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(shape)
+            .background(Tok.warn.copy(alpha = 0.10f)).border(1.dp, Tok.warn.copy(alpha = 0.45f), shape)
+            .clickable(onClick = onClick).heightIn(min = 52.dp).padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        PulseDot(Tok.warn, size = 8.dp)
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(Res.string.home_attention_title, count), color = Tok.tx, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.home_attention_body), color = Tok.tx2, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Icon(Icons.Rounded.KeyboardArrowRight, null, tint = Tok.warn, modifier = Modifier.size(18.dp))
     }
 }
 
