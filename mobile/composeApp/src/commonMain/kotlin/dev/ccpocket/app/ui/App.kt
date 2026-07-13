@@ -998,7 +998,8 @@ private fun HistoryBadge(onClick: (() -> Unit)? = null) {
     val base = Modifier.clip(RoundedCornerShape(999.dp)).background(Tok.accent.copy(alpha = 0.14f))
     Text(
         stringResource(Res.string.history_badge), color = Tok.accent, fontSize = 10.5.sp,
-        modifier = (if (onClick != null) base.clickable(onClick = onClick) else base).padding(horizontal = 8.dp, vertical = 3.dp),
+        modifier = (if (onClick != null) base.heightIn(min = 44.dp).clickable(onClick = onClick) else base)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
     )
 }
 
@@ -1170,7 +1171,8 @@ private fun AgentFilterChip(filter: String, onClear: () -> Unit) {
     Row(
         Modifier.clip(RoundedCornerShape(999.dp)).background(color.copy(alpha = 0.12f))
             .border(1.dp, color.copy(alpha = 0.4f), RoundedCornerShape(999.dp))
-            .clickable(onClick = onClear).padding(start = 11.dp, end = 8.dp, top = 5.dp, bottom = 5.dp),
+            .clickable(onClick = onClear).heightIn(min = 44.dp)
+            .padding(start = 11.dp, end = 8.dp, top = 5.dp, bottom = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color))
@@ -2030,7 +2032,8 @@ private fun EmptyChatStarter(onPick: (String) -> Unit) {
 @Composable
 private fun NoResponseRow(onResend: () -> Unit) {
     Row(
-        Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onResend).padding(vertical = 3.dp, horizontal = 4.dp),
+        Modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onResend)
+            .padding(vertical = 3.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -2096,7 +2099,8 @@ private fun ComposerStatusBar(repo: PocketRepository, onModel: () -> Unit, onEff
 @Composable
 private fun StatusBarChip(icon: String, label: String, onClick: () -> Unit) {
     Row(
-        Modifier.heightIn(min = 24.dp).clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick).padding(vertical = 3.dp),
+        Modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick)
+            .padding(vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
