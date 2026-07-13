@@ -173,6 +173,9 @@ sealed interface ChatItem {
         val lastChild: String? = null,
     ) : ChatItem
     data class Sys(val text: String) : ChatItem
+    data class PermissionDecision(
+        val tool: String, val allowed: Boolean, val remembered: Boolean, val at: Long,
+    ) : ChatItem
     data class RuleChip(val rule: String) : ChatItem // "Always allowing X this session" confirmation
 
     /** The compact transcript row left behind after answering an AskUserQuestion card:
@@ -2258,6 +2261,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         val a = pendingAsk.value ?: return
         val c = convoId.value ?: return
         pendingAsk.value = null
+        messages.add(ChatItem.PermissionDecision(a.tool, decision == Decision.ALLOW, remember, dev.ccpocket.app.epochMillis()))
         if (decision == Decision.ALLOW && remember) a.rule?.let { r ->
             if (r !in allowRules) allowRules.add(r)
             messages.add(ChatItem.RuleChip(r)) // drop the "always allowing X" chip into the stream

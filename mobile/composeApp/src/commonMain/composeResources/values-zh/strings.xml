@@ -184,6 +184,9 @@
     <string name="danger_confirm_once">允许 %1$s 执行一次？继续前请确认命令和受影响的项目。</string>
     <string name="danger_confirm_always">本会话始终允许 %1$s？之后匹配的操作可能不再询问。</string>
     <string name="danger_confirm_cta">确认允许</string>
+    <string name="activity_permission_allowed">已允许 %1$s 执行一次</string>
+    <string name="activity_permission_always">本会话已始终允许 %1$s</string>
+    <string name="activity_permission_denied">已拒绝 %1$s</string>
     <string name="permission_fallback">权限</string>
     <string name="deny">拒绝</string>
     <string name="allow_once">允许一次</string>

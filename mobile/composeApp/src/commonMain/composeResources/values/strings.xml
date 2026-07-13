@@ -184,6 +184,9 @@
     <string name="danger_confirm_once">Allow %1$s once? Review the command and affected project before continuing.</string>
     <string name="danger_confirm_always">Always allow %1$s for this session? Future matching operations may run without another prompt.</string>
     <string name="danger_confirm_cta">Confirm allow</string>
+    <string name="activity_permission_allowed">Allowed %1$s once</string>
+    <string name="activity_permission_always">Always allowed %1$s this session</string>
+    <string name="activity_permission_denied">Denied %1$s</string>
     <string name="permission_fallback">Permission</string>
     <string name="deny">Deny</string>
     <string name="allow_once">Allow once</string>

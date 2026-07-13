@@ -1953,6 +1953,7 @@ private fun MessageItem(m: ChatItem, live: Boolean = false, onOpenImages: (List<
             }
         }
         is ChatItem.Sys -> Text(stringResource(Res.string.error_prefix, m.text), color = Tok.danger, fontSize = 12.sp)
+        is ChatItem.PermissionDecision -> PermissionDecisionRow(m)
         is ChatItem.RuleChip -> AllowChip(m.rule)
         // the quiet residue of a question exchange: an expandable answered row / a muted withdrawn note
         is ChatItem.QuestionsAnswered -> QuestionsAnsweredRow(m.items)
@@ -1964,6 +1965,32 @@ private fun MessageItem(m: ChatItem, live: Boolean = false, onOpenImages: (List<
                 color = Tok.ok, fontSize = 11.sp,
             )
         }
+    }
+}
+
+/** Durable-in-session audit residue for a phone approval decision. */
+@Composable
+private fun PermissionDecisionRow(m: ChatItem.PermissionDecision) {
+    val color = if (m.allowed) Tok.ok else Tok.danger
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).background(color.copy(alpha = 0.07f))
+            .padding(horizontal = 10.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(if (m.allowed) "✓" else "×", color = color, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text(
+            stringResource(
+                when {
+                    !m.allowed -> Res.string.activity_permission_denied
+                    m.remembered -> Res.string.activity_permission_always
+                    else -> Res.string.activity_permission_allowed
+                },
+                m.tool,
+            ),
+            color = Tok.tx2, fontSize = 12.sp, modifier = Modifier.weight(1f),
+        )
+        Text(relativeTime(m.at), color = Tok.muted, fontSize = 10.5.sp, fontFamily = FontFamily.Monospace)
     }
 }
 

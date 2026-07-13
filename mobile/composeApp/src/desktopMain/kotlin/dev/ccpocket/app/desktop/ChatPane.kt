@@ -114,6 +114,7 @@ import dev.ccpocket.app.ui.atInsertText
 import dev.ccpocket.app.ui.slashQueryOf
 import dev.ccpocket.app.ui.slashSuggestions
 import dev.ccpocket.app.ui.turnDurLabel
+import dev.ccpocket.app.ui.relativeTime
 import dev.ccpocket.protocol.AgentKind
 import dev.ccpocket.protocol.CommandSource
 import dev.ccpocket.protocol.isQuestion
@@ -393,6 +394,21 @@ private fun MessageRow(item: ChatItem, isLast: Boolean = false, undelivered: Boo
             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Tok.surface)
                 .border(1.dp, Tok.hair, RoundedCornerShape(8.dp)).padding(horizontal = 11.dp, vertical = 8.dp),
         )
+        is ChatItem.PermissionDecision -> Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                .background((if (item.allowed) Tok.ok else Tok.danger).copy(alpha = 0.07f))
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            val color = if (item.allowed) Tok.ok else Tok.danger
+            Text(if (item.allowed) "✓" else "×", color = color, fontWeight = FontWeight.Bold)
+            Text(
+                (if (item.allowed) "Allowed " else "Denied ") + item.tool + if (item.remembered) " · remembered" else "",
+                color = Tok.tx2, fontFamily = Dk.ui, fontSize = 12.sp, modifier = Modifier.weight(1f),
+            )
+            Text(relativeTime(item.at), color = Tok.muted, fontFamily = Dk.mono, fontSize = 10.5.sp)
+        }
         is ChatItem.RuleChip -> Text(
             "Always allowing  ${item.rule}", color = Tok.accent, fontFamily = Dk.mono, fontSize = 11.sp,
             modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(Tok.accent.copy(alpha = 0.14f)).padding(horizontal = 10.dp, vertical = 4.dp),

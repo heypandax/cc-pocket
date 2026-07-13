@@ -138,7 +138,7 @@ object TranscriptMerge {
 
     /** Rows the transcript never contains — carried through a merge, invisible to pairing. */
     private fun isLocalOnly(item: ChatItem): Boolean = when (item) {
-        is ChatItem.Thinking, is ChatItem.Sys, is ChatItem.RuleChip,
+        is ChatItem.Thinking, is ChatItem.Sys, is ChatItem.PermissionDecision, is ChatItem.RuleChip,
         is ChatItem.QuestionsAnswered, ChatItem.QuestionsWithdrawn, is ChatItem.TurnEnded,
         -> true
         is ChatItem.User -> item.pending // an undelivered bubble has no transcript row yet
