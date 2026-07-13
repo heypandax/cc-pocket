@@ -1349,7 +1349,7 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
     }
     // platform picker resizes/compresses on-device; the repo budgets the picked photos against the 256 KiB frame
     val launchPicker = rememberImageAttacher { added -> repo.attachImages(added) }
-    val scrollKey = repo.convoId.value ?: draftKey
+    val scrollKey = repo.convoId.value ?: draftKey ?: "new:${repo.workdir.value.orEmpty()}"
     val hasSavedScroll = repo.hasChatScrollPosition(scrollKey)
     val savedScroll = repo.chatScrollPosition(scrollKey)
     val listState = remember(scrollKey) { LazyListState(savedScroll.first, savedScroll.second) }
