@@ -25,6 +25,7 @@ import dev.ccpocket.protocol.FetchUsage
 import dev.ccpocket.protocol.Frame
 import dev.ccpocket.protocol.ListDirectories
 import dev.ccpocket.protocol.ListCursorModels
+import dev.ccpocket.protocol.ListAgencyAgents
 import dev.ccpocket.protocol.CursorModels
 import dev.ccpocket.protocol.ListPathEntries
 import dev.ccpocket.protocol.ListSessionFiles
@@ -76,6 +77,10 @@ class RequestRouter(
                 sink.emit(CursorModels(models, if (models.isEmpty()) "cursor-agent model discovery failed" else null))
             }
 
+            is ListAgencyAgents -> scope.launch {
+                sink.emit(dev.ccpocket.daemon.agent.AgencyAgentService.list())
+            }
+
             // heavy transcript scan → off the inbound pump so it can't wedge the socket
             is FetchUsage -> scope.launch {
                 sink.emit(UsageService.aggregate(frame.days, liveCodexLimits = dev.ccpocket.daemon.codex.CodexRateLimitsClient.read()))
@@ -118,7 +123,11 @@ class RequestRouter(
                 }
             }
 
-            is SendPrompt -> if (!registry.sendPrompt(frame)) sink.emit(SessionGone(frame.convoId))
+            is SendPrompt -> {
+                val expanded = if (frame.agencyAgentIds.isEmpty()) frame.text else
+                    dev.ccpocket.daemon.agent.AgencyAgentService.expand(frame.text, frame.agencyAgentIds)
+                if (!registry.sendPrompt(frame.copy(text = expanded))) sink.emit(SessionGone(frame.convoId))
+            }
             // a verdict may resolve a SHELL ask (issue #3) or an agent tool ask — shell claims its own by askId
             is PermissionVerdict -> if (!shell.onVerdict(frame)) registry.verdict(frame)
             is SwitchMode -> registry.switchMode(frame)

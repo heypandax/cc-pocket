@@ -33,6 +33,8 @@ import dev.ccpocket.protocol.CloseSession
 import dev.ccpocket.protocol.CommandList
 import dev.ccpocket.protocol.DeleteSession
 import dev.ccpocket.protocol.CursorModels
+import dev.ccpocket.protocol.AgencyAgent
+import dev.ccpocket.protocol.AgencyAgents
 import dev.ccpocket.protocol.AgentModel
 import dev.ccpocket.protocol.SlashCommand
 import dev.ccpocket.protocol.contextWindowFor
@@ -50,6 +52,7 @@ import dev.ccpocket.protocol.FileDiff
 import dev.ccpocket.protocol.isImageFile
 import dev.ccpocket.protocol.ListDirectories
 import dev.ccpocket.protocol.ListCursorModels
+import dev.ccpocket.protocol.ListAgencyAgents
 import dev.ccpocket.protocol.ListPathEntries
 import dev.ccpocket.protocol.ListSessionFiles
 import dev.ccpocket.protocol.ListSessions
@@ -434,6 +437,9 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     val viewedFile = mutableStateOf<FileContent?>(null)       // the loaded content; ok=false carries a user-facing error
     val viewedFileDiff = mutableStateOf<FileDiff?>(null)      // the loaded line-level diff; ok=false = none/too-old daemon
     val pathListing = mutableStateOf<PathEntries?>(null)     // latest @-file completion listing (issue #75); match its subPath before use
+    val agencyAgents = mutableStateListOf<AgencyAgent>()
+    val agencyAgentsLoading = mutableStateOf(false)
+    val agencyAgentsError = mutableStateOf<String?>(null)
     val mode = mutableStateOf(PermissionMode.DEFAULT)        // current execution/permission mode
     val model = mutableStateOf<String?>(null)                // daemon's actual model for this session (header + info sheet)
     val sessionAgent = mutableStateOf<AgentKind?>(null)      // backend driving this session (Claude/Codex) — header badge
@@ -466,7 +472,10 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
      *  session and resend this once — the fix for "sent a message into a ghost session, nothing happened".
      *  Cleared on the first sign of processing; consumed (single retry, no loops) by the resend.
      *  [promptId] rides along so the resend reuses it — the daemon dedupes if the original landed (#66). */
-    private class PromptRetry(val text: String, val images: List<ImageData>, val workdir: String, val promptId: String?)
+    private class PromptRetry(
+        val text: String, val images: List<ImageData>, val workdir: String, val promptId: String?,
+        val agencyAgentIds: List<String> = emptyList(),
+    )
     private var promptRetry: PromptRetry? = null
     private var promptResendArmed = false // set by SessionGone: the next matching SessionLive resends promptRetry
     private var promptPending = false // a User bubble is marked pending until the daemon shows signs of life
@@ -1407,7 +1416,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                     streaming.value = true
                     // same promptId as the original: if the first send actually landed, the daemon
                     // dedupes and just re-acks instead of running the turn twice (issue #66)
-                    scope.launch { send(SendPrompt(f.convoId, retry.text, retry.images, promptId = retry.promptId)) }
+                    scope.launch { send(SendPrompt(f.convoId, retry.text, retry.images, promptId = retry.promptId, agencyAgentIds = retry.agencyAgentIds)) }
                     armPromptWatchdog() // the resent copy gets its own receipt deadline
                 }
             }
@@ -1509,6 +1518,11 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 cursorModelsLoading.value = false
                 cursorModelsError.value = f.error
                 if (f.models.isNotEmpty()) replace(cursorModels, f.models)
+            }
+            is AgencyAgents -> {
+                agencyAgentsLoading.value = false
+                agencyAgentsError.value = f.error
+                if (f.agents.isNotEmpty()) replace(agencyAgents, f.agents)
             }
             is Transcript -> onTranscript(f)
             is ShellResult -> if (f.convoId == convoId.value) {
@@ -1843,15 +1857,16 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         if (voice.value is VoiceState.Failed) clearVoice() // sending dismisses the error chip
         val images = ready.map { ImageData("image/jpeg", Base64.Default.encode(it)) }
         val promptId = newPromptId()
+        val selectedAgents = agencyAgents.filter { text.contains("@${it.nameZh}") }.map { it.id }.distinct().take(3)
         messages.add(ChatItem.User(text, ready, pending = true, promptId = promptId))
         promptPending = true
         turnStartMark = kotlin.time.TimeSource.Monotonic.markNow()
         if (chatTitle.value == null && text.isNotBlank()) chatTitle.value = text.take(48) // new session: first prompt becomes the header title
         pendingImages.clear()
         streaming.value = true
-        workdir.value?.let { promptRetry = PromptRetry(text, images, it, promptId); promptResendArmed = false }
+        workdir.value?.let { promptRetry = PromptRetry(text, images, it, promptId, selectedAgents); promptResendArmed = false }
         Telemetry.track(TelEvent.PromptSent)
-        scope.launch { send(SendPrompt(c, text, images, promptId = promptId)) }
+        scope.launch { send(SendPrompt(c, text, images, promptId = promptId, agencyAgentIds = selectedAgents)) }
         armPromptWatchdog()
         return true
     }
@@ -1904,12 +1919,12 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         turnStalled.value = false
         turnWatchdog?.cancel(); turnWatchdog = null; awaitingTurn = false
         val freshId = newPromptId()
-        promptRetry = PromptRetry(retry.text, retry.images, retry.workdir, freshId)
+        promptRetry = PromptRetry(retry.text, retry.images, retry.workdir, freshId, retry.agencyAgentIds)
         promptResendArmed = false
         promptPending = true // pending until the re-driven turn shows life
         streaming.value = true
         Telemetry.track(TelEvent.PromptResent)
-        scope.launch { send(SendPrompt(c, retry.text, retry.images, promptId = freshId)) }
+        scope.launch { send(SendPrompt(c, retry.text, retry.images, promptId = freshId, agencyAgentIds = retry.agencyAgentIds)) }
         armPromptWatchdog() // the resent copy gets its own receipt deadline; its ack re-arms the turn watchdog
     }
 
@@ -1997,6 +2012,13 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     fun browseFiles(subPath: String) {
         val wd = workdir.value ?: return
         scope.launch { send(ListPathEntries(wd, subPath)) }
+    }
+
+    fun refreshAgencyAgents() {
+        if (agencyAgentsLoading.value || agencyAgents.isNotEmpty()) return
+        agencyAgentsLoading.value = true
+        agencyAgentsError.value = null
+        scope.launch { send(ListAgencyAgents) }
     }
 
     /** Refresh Cursor's account-specific model catalog from the daemon-host CLI. */

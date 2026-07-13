@@ -1496,10 +1496,20 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                 val atToken = if (suggestions.isEmpty()) atTokenAt(input, input.length) else null
                 val atDir = atToken?.let { atDirOf(it.query, atSep) } ?: ""
                 val atLeaf = atToken?.let { atLeafOf(it.query, atSep) } ?: ""
-                LaunchedEffect(atToken != null, atDir) { if (atToken != null) repo.browseFiles(atDir) }
+                LaunchedEffect(atToken != null, atDir) {
+                    if (atToken != null) { repo.refreshAgencyAgents(); repo.browseFiles(atDir) }
+                }
                 val atListing = repo.pathListing.value
                 val atFileMatches = remember(atListing, atToken, atDir, atLeaf) {
                     if (atToken == null || atListing?.subPath != atDir) emptyList() else atMatches(atListing.entries, atLeaf)
+                }
+                val atAgentMatches = remember(repo.agencyAgents.toList(), atToken) {
+                    val q = atToken?.query.orEmpty()
+                    if (atToken == null || q.contains('/') || q.contains('\\')) emptyList()
+                    else repo.agencyAgents.filter {
+                        q.isEmpty() || it.nameZh.contains(q, true) || it.summaryZh.contains(q, true) ||
+                            it.categoryZh.contains(q, true) || it.id.contains(q, true)
+                    }.take(50)
                 }
                 Column(Modifier.fillMaxWidth().background(Tok.surface)) {
                     BackgroundJobsStrip(repo.backgroundJobs) { showBgJobs = true } // ≥1 running bg task → tap to expand
@@ -1518,10 +1528,16 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                     val capturing = voiceState is VoiceState.Recording || voiceState is VoiceState.Transcribing
                     if (suggestions.isNotEmpty() && !capturing) {
                         SlashCommandMenu(suggestions) { cmd -> input = cmd.completion() }
-                    } else if (atFileMatches.isNotEmpty() && !capturing) {
-                        FileCompletionMenu(atFileMatches, atDir, atSep) { entry ->
-                            atToken?.let { input = input.substring(0, it.at + 1) + atInsertText(atDir, entry, atSep) + input.substring(it.end) }
-                        }
+                    } else if ((atAgentMatches.isNotEmpty() || atFileMatches.isNotEmpty()) && !capturing) {
+                        AtCompletionMenu(
+                            agents = atAgentMatches, entries = atFileMatches, dir = atDir, sep = atSep,
+                            onAgent = { agent ->
+                                atToken?.let { input = input.substring(0, it.at) + "@${agent.nameZh} " + input.substring(it.end) }
+                            },
+                            onFile = { entry ->
+                                atToken?.let { input = input.substring(0, it.at + 1) + atInsertText(atDir, entry, atSep) + input.substring(it.end) }
+                            },
+                        )
                     }
                     AttachTray(repo.pendingImages, repo::removePendingImage)
                     repo.voiceNotice.value?.let { n ->
@@ -1710,11 +1726,13 @@ private fun SlashCommandMenu(commands: List<SlashCommand>, onPick: (SlashCommand
 /** The composer's "@file" completion panel (issue #75): tap a row to insert its relative path — a folder
  *  drills in (trailing separator, the daemon re-lists it), a file completes the reference. */
 @Composable
-private fun FileCompletionMenu(
+private fun AtCompletionMenu(
+    agents: List<dev.ccpocket.protocol.AgencyAgent>,
     entries: List<dev.ccpocket.protocol.PathEntry>,
     dir: String,
     sep: Char,
-    onPick: (dev.ccpocket.protocol.PathEntry) -> Unit,
+    onAgent: (dev.ccpocket.protocol.AgencyAgent) -> Unit,
+    onFile: (dev.ccpocket.protocol.PathEntry) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().background(Tok.raised)) {
         Text(
@@ -1723,10 +1741,27 @@ private fun FileCompletionMenu(
             maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 2.dp),
         )
-        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = 4.dp)) {
+        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 280.dp).padding(bottom = 4.dp)) {
+            if (agents.isNotEmpty()) {
+                item { Text("AGENTS", color = Tok.accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
+                items(agents, key = { "agent:${it.id}" }) { agent ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { onAgent(agent) }.padding(horizontal = 16.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(agent.emoji ?: "◎", fontSize = 16.sp, modifier = Modifier.width(28.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(agent.nameZh, color = Tok.tx, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text(agent.summaryZh, color = Tok.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Text(agent.categoryZh, color = Tok.muted, fontSize = 10.sp)
+                    }
+                }
+            }
+            if (entries.isNotEmpty()) item { Text("文件", color = Tok.muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
             items(entries) { entry ->
                 Row(
-                    Modifier.fillMaxWidth().clickable { onPick(entry) }.padding(horizontal = 16.dp, vertical = 9.dp),
+                    Modifier.fillMaxWidth().clickable { onFile(entry) }.padding(horizontal = 16.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(

@@ -22,6 +22,11 @@ data class ListSessions(val workdir: String) : ToDaemon
 @SerialName("pocket/cursor.models.list")
 data object ListCursorModels : ToDaemon
 
+/** Fetch the Chinese @-agent catalog maintained by ac54u-mobile/agency-agents. */
+@Serializable
+@SerialName("pocket/agency.agents.list")
+data object ListAgencyAgents : ToDaemon
+
 /** Fetch aggregated token usage over the last [days] local days (reads transcripts; no launch). Issue #26. */
 @Serializable
 @SerialName("pocket/usage.fetch")
@@ -56,6 +61,7 @@ data class SendPrompt(
     val text: String,
     val images: List<ImageData> = emptyList(),
     val promptId: String? = null,
+    val agencyAgentIds: List<String> = emptyList(),
 ) : ToDaemon
 
 /** A base64 image attached to a prompt — downscaled on the phone to fit the relay frame cap. */
@@ -316,6 +322,23 @@ data class Sessions(val workdir: String, val items: List<SessionSummary>) : ToPh
 @Serializable
 @SerialName("pocket/cursor.models")
 data class CursorModels(val models: List<AgentModel> = emptyList(), val error: String? = null) : ToPhone
+
+@Serializable
+data class AgencyAgent(
+    val id: String,
+    val nameZh: String,
+    val summaryZh: String,
+    val categoryZh: String,
+    val emoji: String? = null,
+)
+
+@Serializable
+@SerialName("pocket/agency.agents")
+data class AgencyAgents(
+    val agents: List<AgencyAgent> = emptyList(),
+    val catalogVersion: String? = null,
+    val error: String? = null,
+) : ToPhone
 
 /**
  * Aggregated token usage (issue #26). [tokensToday]/[requestsToday]/[cacheHitPct]/[costUsdToday] are for the
