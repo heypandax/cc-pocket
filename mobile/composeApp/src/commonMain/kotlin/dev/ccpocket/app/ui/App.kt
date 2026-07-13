@@ -1352,15 +1352,11 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
     val hasSavedScroll = repo.hasChatScrollPosition(scrollKey)
     val savedScroll = repo.chatScrollPosition(scrollKey)
     val listState = remember(scrollKey) { LazyListState(savedScroll.first, savedScroll.second) }
-    LaunchedEffect(listState, scrollKey) {
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-            .collect { (index, offset) -> repo.saveChatScrollPosition(scrollKey, index, offset) }
-    }
     // stick to the bottom only while the user is there ("pinned"); scrolling up unpins and shows
     // the Jump-to-latest pill instead of yanking the viewport down on every streamed chunk.
     var pinned by rememberBottomPinned(
         listState, scrollKey,
-        initialPinned = !hasSavedScroll,
+        initialPinned = !hasSavedScroll || savedScroll.third,
     )
     // Snapshot the transcript when the user leaves the bottom. The latest assistant bubble grows in
     // place while streaming (the list size does not change), so retain both count and tail identity:
@@ -1372,8 +1368,18 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
     // keep the message list hidden until it's first parked at the bottom, so opening a session with
     // history doesn't flash the top then visibly scroll down. Resets per session (convoId); a short
     // grace reveals an empty/new session that has no history to position on.
-    var landed by remember(repo.convoId.value) { mutableStateOf(hasSavedScroll) }
+    var landed by remember(repo.convoId.value) { mutableStateOf(hasSavedScroll && !savedScroll.third) }
     LaunchedEffect(repo.convoId.value) { delay(180); landed = true }
+    // Never persist the transient top position before history has landed. Store whether the user was
+    // pinned too: a saved bottom session must reopen at the latest message, while an intentional
+    // history position restores exactly.
+    LaunchedEffect(listState, scrollKey, landed, repo.messages.isNotEmpty()) {
+        if (landed && repo.messages.isNotEmpty()) snapshotFlow {
+            Triple(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset, pinned)
+        }.collect { (index, offset, atBottom) ->
+            repo.saveChatScrollPosition(scrollKey, index, offset, atBottom)
+        }
+    }
     // a just-created session opens on an empty chat — focus the composer and raise the keyboard
     // right away instead of making the user tap the field first. openSession arms the flag only
     // for resumeId == null (never on resume/reattach/fleet-follow); consumed here exactly once.
