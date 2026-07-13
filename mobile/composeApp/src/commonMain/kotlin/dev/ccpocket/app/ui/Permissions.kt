@@ -234,20 +234,14 @@ fun StartSessionModeSheet(
                     AgentOption(AgentKind.CURSOR, chosenAgent == AgentKind.CURSOR, Modifier.weight(1f)) { chosenAgent = AgentKind.CURSOR }
                 }
                 SectionLabel(stringResource(Res.string.label_mode))
-                if (chosenAgent == AgentKind.CLAUDE) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        MODES.forEach { m ->
-                            ModeRow(m, selected = m.key == selected, enabled = true) {
-                                if (m.key == PermissionMode.BYPASS_PERMISSIONS) confirmBypass = true else onPick(m.key, AgentKind.CLAUDE)
-                            }
-                        }
-                    }
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CODEX_PRESETS.forEach { p ->
-                            PresetRow(p, selected = p.mode == selected) {
-                                if (p.danger) confirmBypass = true else onPick(p.mode, chosenAgent)
-                            }
+                // All backends share one autonomy ladder. Keeping the same rows, spacing and copy
+                // prevents the sheet from jumping in height when the user compares Claude/Codex/Cursor;
+                // the daemon still translates each PermissionMode into the backend's native policy.
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    MODES.forEach { m ->
+                        ModeRow(m, selected = m.key == selected, enabled = true) {
+                            if (m.key == PermissionMode.BYPASS_PERMISSIONS) confirmBypass = true
+                            else onPick(m.key, chosenAgent)
                         }
                     }
                 }
