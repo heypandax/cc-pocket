@@ -1,42 +1,14 @@
 package dev.ccpocket.app.ui
 
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.interop.UIKitView
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import kotlinx.cinterop.ExperimentalForeignApi
-import platform.UIKit.UIColor
-import platform.UIKit.UIImage
-import platform.UIKit.UIImageView
-import platform.UIKit.UIViewContentMode
 
+/** Same custom-drawn [AttachImageIcon] as Android/desktop (Skia renders it natively on iOS too —
+ *  no UIKit interop needed). The generic system "photo" SF Symbol this replaced didn't match the
+ *  app's own rounded-frame/sun/mountain attach glyph, so iOS looked like the odd one out. */
 @Composable
-@OptIn(ExperimentalForeignApi::class)
 actual fun AttachImageGlyph(tint: Color, modifier: Modifier, contentDescription: String?) {
-    UIKitView(
-        factory = {
-            UIImageView().apply {
-                // SF Symbols arrive as template images, so UIImageView.tintColor controls state.
-                image = UIImage.systemImageNamed("photo")
-                contentMode = UIViewContentMode.UIViewContentModeScaleAspectFit
-            }
-        },
-        modifier = modifier.then(
-            if (contentDescription == null) Modifier else Modifier.semantics {
-                this.contentDescription = contentDescription
-            },
-        ),
-        update = { view ->
-            view.tintColor = tint.toUIColor()
-        },
-    )
+    Icon(AttachImageIcon, contentDescription, modifier, tint)
 }
-
-private fun Color.toUIColor() = UIColor(
-    red = red.toDouble(),
-    green = green.toDouble(),
-    blue = blue.toDouble(),
-    alpha = alpha.toDouble(),
-)
