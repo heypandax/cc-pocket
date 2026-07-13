@@ -310,7 +310,14 @@ private fun ConnectionGate(repo: PocketRepository, content: @Composable () -> Un
             stringResource(Res.string.conn_retry), { repo.retryConnection() }, onExit = { repo.disconnect() },
         )
         ConnPhase.ComputerOffline ->
-            if (repo.convoId.value != null) { StatusBanner(Tok.warn, stringResource(Res.string.conn_computer_offline_banner)); content() } // mid-chat: keep history
+            if (repo.convoId.value != null) {
+                // Keep transcript history usable, but give the offline banner real layout space.
+                // Emitting both directly into the parent's Box overlaid the banner on the chat header.
+                Column(Modifier.fillMaxSize()) {
+                    StatusBanner(Tok.warn, stringResource(Res.string.conn_computer_offline_banner))
+                    Box(Modifier.weight(1f)) { content() }
+                }
+            }
             else CenteredState(
                 Tok.warn,
                 stringResource(Res.string.conn_computer_offline_title),
@@ -344,7 +351,7 @@ private fun CenteredState(
             Text(hint, color = Tok.muted, fontSize = 12.sp, textAlign = TextAlign.Center)
         }
         Spacer(Modifier.height(24.dp))
-        Button(onPrimary, Modifier.fillMaxWidth()) { Text(primary) }
+        Button(onPrimary, Modifier.fillMaxWidth().widthIn(max = 360.dp).heightIn(min = 48.dp)) { Text(primary) }
         if (onExit != null) {
             Spacer(Modifier.height(8.dp))
             TextButton(onExit) { Text(stringResource(Res.string.exit), color = Tok.muted, fontSize = 12.sp) }
@@ -409,7 +416,7 @@ private fun EmptyDirectories(onRefresh: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         Text(stringResource(Res.string.dir_empty_body), color = Tok.tx2, fontSize = 13.sp, textAlign = TextAlign.Center, lineHeight = 19.sp)
         Spacer(Modifier.height(20.dp))
-        OutlinedButton(onRefresh) { Text(stringResource(Res.string.dir_refresh)) }
+        OutlinedButton(onRefresh, Modifier.heightIn(min = 48.dp)) { Text(stringResource(Res.string.dir_refresh)) }
     }
 }
 
