@@ -1287,6 +1287,13 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
     // stick to the bottom only while the user is there ("pinned"); scrolling up unpins and shows
     // the Jump-to-latest pill instead of yanking the viewport down on every streamed chunk.
     var pinned by rememberBottomPinned(listState)
+    // Snapshot the transcript when the user leaves the bottom. The latest assistant bubble grows in
+    // place while streaming (the list size does not change), so retain both count and tail identity:
+    // the jump affordance can honestly signal fresh activity in either case.
+    var unseenAnchor by remember(repo.convoId.value) { mutableStateOf<Pair<Int, ChatItem?>?>(null) }
+    LaunchedEffect(pinned) {
+        unseenAnchor = if (pinned) null else unseenAnchor ?: (repo.messages.size to repo.messages.lastOrNull())
+    }
     // keep the message list hidden until it's first parked at the bottom, so opening a session with
     // history doesn't flash the top then visibly scroll down. Resets per session (convoId); a short
     // grace reveals an empty/new session that has no history to position on.
@@ -1327,9 +1334,13 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
     LaunchedEffect(listState.isScrollInProgress) { if (listState.isScrollInProgress) focus.clearFocus() } // scrolling dismisses the keyboard
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            Row(Modifier.fillMaxWidth().background(Tok.surface).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().background(Tok.surface).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextButton({ repo.saveDraft(repo.workdir.value, input); repo.backToBrowse() }) { Text("←", color = Tok.tx2, fontSize = 18.sp) }
-                Column(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).clickable { showSessionInfo = true }.padding(vertical = 2.dp)) {
+                Column(
+                    Modifier.weight(1f).heightIn(min = 44.dp).clip(RoundedCornerShape(8.dp))
+                        .clickable { showSessionInfo = true }.padding(vertical = 2.dp),
+                    verticalArrangement = Arrangement.Center,
+                ) {
                     // session title leads (design); the generic "Chat" only before the first prompt names it
                     Text(
                         repo.chatTitle.value ?: stringResource(Res.string.chat_title),
@@ -1359,13 +1370,8 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                             folderName(repo.workdir.value), color = Tok.tx2, style = metaStyle,
                             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
                         )
-                        // the effective model: the real alias once known, else an "account default"
-                        // placeholder — never a blank gap. A pre-first-turn session (lazy start #61) whose
-                        // model the daemon couldn't eager-resolve shows the placeholder until the first turn's
-                        // init names the CLI/account default (issue #96)
-                        val modelLabel = modelAlias(repo.model.value).ifBlank { stringResource(Res.string.value_model_default) }
-                        Text("·", color = Tok.muted, style = metaStyle, modifier = Modifier.padding(horizontal = 3.dp))
-                        Text(modelLabel, color = Tok.muted, style = metaStyle, maxLines = 1)
+                        // Model/effort/mode already live in ComposerStatusBar. Repeating the model here
+                        // crowded the primary navigation row without adding a new decision.
                         AgentBadge(repo.sessionAgent.value) // shows only for Codex; Claude stays quiet
                     }
                 }
@@ -1385,7 +1391,7 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                     // mode switching moved into the ⋯ quick-actions sheet — the persistent badge was one
                     // more thing crowding the header for a setting touched a few times per session
                     Box(
-                        Modifier.size(32.dp).clip(CircleShape).clickable {
+                        Modifier.size(44.dp).clip(CircleShape).clickable {
                             quickActionSection = QuickActionSection.MAIN
                             showQuickActions = true
                         },
@@ -1453,7 +1459,14 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                 }
                 if (!pinned) {
                     val pillScope = rememberCoroutineScope()
-                    JumpToLatestPill(Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp)) {
+                    val anchor = unseenAnchor
+                    val newItems = (repo.messages.size - (anchor?.first ?: repo.messages.size)).coerceAtLeast(0)
+                    val hasFreshActivity = anchor != null && (newItems > 0 || anchor.second != repo.messages.lastOrNull())
+                    JumpToLatestPill(
+                        Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp),
+                        newItems = newItems,
+                        hasFreshActivity = hasFreshActivity,
+                    ) {
                         pillScope.launch {
                             val last = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
                             if (listState.layoutInfo.totalItemsCount > 0) listState.scrollToItem(last, Int.MAX_VALUE)
@@ -2037,16 +2050,25 @@ internal fun PulseDot(color: Color, size: Dp = 6.dp) {
 
 /** Floating pill over the message list when the user has scrolled away from the bottom. */
 @Composable
-private fun JumpToLatestPill(modifier: Modifier, onClick: () -> Unit) {
+private fun JumpToLatestPill(modifier: Modifier, newItems: Int, hasFreshActivity: Boolean, onClick: () -> Unit) {
     val shape = RoundedCornerShape(999.dp)
     Row(
         modifier.shadow(6.dp, shape).clip(shape).background(Tok.raised).border(1.dp, Tok.hair, shape)
-            .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 7.dp),
+            .clickable(onClick = onClick).heightIn(min = 44.dp).padding(horizontal = 14.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Icon(Icons.Rounded.KeyboardArrowDown, null, tint = Tok.tx2, modifier = Modifier.size(14.dp))
-        Text(stringResource(Res.string.jump_to_latest), color = Tok.tx2, fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
+        Text(
+            when {
+                newItems > 0 -> stringResource(Res.string.jump_to_latest_count, newItems)
+                hasFreshActivity -> stringResource(Res.string.jump_to_latest_activity)
+                else -> stringResource(Res.string.jump_to_latest)
+            },
+            color = if (hasFreshActivity) Tok.accent else Tok.tx2,
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 

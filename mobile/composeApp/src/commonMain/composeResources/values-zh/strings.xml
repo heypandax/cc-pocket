@@ -101,6 +101,8 @@
     <string name="code_copied">已复制</string>
     <string name="text_render_truncated">内容过长，已截断显示 · 全文约 %1$s 字符 · 复制仍为全文</string>
     <string name="jump_to_latest">回到最新</string>
+    <string name="jump_to_latest_activity">有新内容</string>
+    <string name="jump_to_latest_count">%1$d 条新内容 · 回到最新</string>
     <string name="observing_notice">👁 观察中 · 正在终端里运行</string>
     <string name="continue_here">在这里继续</string>
     <string name="add_message_hint">补充说明…</string>
