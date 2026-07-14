@@ -21,6 +21,7 @@ import dev.ccpocket.protocol.CloseSession
 import dev.ccpocket.protocol.DeleteSession
 import dev.ccpocket.protocol.CompactSession
 import dev.ccpocket.protocol.BranchSession
+import dev.ccpocket.protocol.SetSessionArchived
 import dev.ccpocket.protocol.Directories
 import dev.ccpocket.protocol.FetchAuthStatus
 import dev.ccpocket.protocol.FetchUsage
@@ -71,11 +72,15 @@ class RequestRouter(
             is ListDirectories -> sink.emit(Directories(dirs.listDirectories(frame.root, registry.busyCwds(), registry.liveByCwd())))
 
             is ListSessions -> {
-                val busy = registry.busySessionIds()
-                // merge every backend's resumable sessions for this dir (Claude ~/.claude/projects + Codex ~/.codex/sessions)
-                val items = registry.listSessions(frame.workdir)
-                    .map { if (it.sessionId in busy) it.copy(busy = true) else it }
-                sink.emit(Sessions(frame.workdir, items))
+                if (frame.archived) {
+                    sink.emit(Sessions(frame.workdir, registry.listArchivedSessions(frame.workdir), archived = true))
+                } else {
+                    val busy = registry.busySessionIds()
+                    // merge every backend's resumable sessions for this dir (Claude ~/.claude/projects + Codex ~/.codex/sessions)
+                    val items = registry.listSessions(frame.workdir)
+                        .map { if (it.sessionId in busy) it.copy(busy = true) else it }
+                    sink.emit(Sessions(frame.workdir, items))
+                }
             }
 
             is ListCursorModels -> scope.launch {
@@ -197,6 +202,20 @@ class RequestRouter(
                 val busy = registry.busySessionIds()
                 val items = registry.listSessions(frame.workdir).map { if (it.sessionId in busy) it.copy(busy = true) else it }
                 sink.emit(Sessions(frame.workdir, items))
+            }
+            is SetSessionArchived -> scope.launch {
+                val sid = frame.sessionId
+                val err = when {
+                    sid.isBlank() || sid.contains('/') || sid.contains('\\') || sid.contains("..") -> "bad_session_id"
+                    else -> registry.setSessionArchived(frame.workdir, sid, frame.archived)
+                }
+                if (err != null) {
+                    val message = if (err == "session_live") "session is running — close it before archiving"
+                    else "cannot ${if (frame.archived) "archive" else "restore"} session ($err)"
+                    sink.emit(PocketError(err.substringBefore(':'), message))
+                }
+                val items = if (frame.archived) registry.listSessions(frame.workdir) else registry.listArchivedSessions(frame.workdir)
+                sink.emit(Sessions(frame.workdir, items, archived = !frame.archived))
             }
             is CancelTurn -> registry.cancelTurn(frame)
             is CompactSession -> registry.compact(frame.convoId)

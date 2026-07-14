@@ -1196,6 +1196,7 @@ internal fun SessionsScreen(repo: PocketRepository) { // internal: driven end-to
     // Repo-owned so every entry point is guarded: entries disable — a double-tap can't open two fresh
     // sessions — and the repo clears it on SessionLive/PocketError (8s safety net).
     val starting = repo.opening.value
+    val archived = repo.sessionsArchived.value
     var showSettings by remember { mutableStateOf(false) }
     if (showSettings) { SettingsScreen(repo, onBack = { showSettings = false }); return } // full-screen, replaces this screen
     val savedScroll = remember(dir) { repo.sessionScrollPosition(dir) }
@@ -1221,7 +1222,7 @@ internal fun SessionsScreen(repo: PocketRepository) { // internal: driven end-to
                 }
             }
             val af = repo.agentFilter.value
-            val filtered = repo.sessions.filter {
+            val filtered = if (archived) repo.sessions.toList() else repo.sessions.filter {
                 when (af) {
                     "claude" -> (it.agent ?: AgentKind.CLAUDE) == AgentKind.CLAUDE
                     "codex" -> it.agent == AgentKind.CODEX
@@ -1235,8 +1236,27 @@ internal fun SessionsScreen(repo: PocketRepository) { // internal: driven end-to
                 state = sessionListState,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (af != "both") item { AgentFilterChip(af) { repo.setAgentFilter("both") } }
                 item {
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Tok.surface).padding(3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        listOf(false to Res.string.sessions_current, true to Res.string.sessions_archived).forEach { (value, label) ->
+                            val selected = archived == value
+                            Box(
+                                Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                                    .then(if (selected) Modifier.background(Tok.raised) else Modifier)
+                                    .clickable(enabled = !repo.sessionsRefreshing.value) { repo.showArchivedSessions(value) }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(stringResource(label), color = if (selected) Tok.tx else Tok.muted, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
+                if (!archived && af != "both") item { AgentFilterChip(af) { repo.setAgentFilter("both") } }
+                if (!archived) item {
                     // one tap starts right away with the persisted defaults (openSession's own fallbacks);
                     // the trailing chip shows those defaults and opens the full agent+mode picker instead
                     Row(
@@ -1267,13 +1287,26 @@ internal fun SessionsScreen(repo: PocketRepository) { // internal: driven end-to
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Tok.surface)
                             // delete rides a long-press (kept off the tap path); running sessions refuse daemon-side
                             .combinedClickable(
-                                onClick = { repo.openSession(dir, s.sessionId, title = s.title, agent = s.agent ?: AgentKind.CLAUDE) },
-                                onLongClick = { confirmDelete = s },
+                                onClick = {
+                                    if (archived) repo.setSessionArchived(dir, s.sessionId, false)
+                                    else repo.openSession(dir, s.sessionId, title = s.title, agent = s.agent ?: AgentKind.CLAUDE)
+                                },
+                                onLongClick = { if (!archived) confirmDelete = s },
                             ).padding(14.dp),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(s.title, color = Tok.tx, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                             AgentBadge(s.agent, gap = 8.dp) // shows only for Codex (so resume opens the right backend)
+                            if (s.agent == AgentKind.CODEX && !s.live && !s.busy) {
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    stringResource(if (archived) Res.string.session_restore_action else Res.string.session_archive_action),
+                                    color = Tok.accent, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable {
+                                        repo.setSessionArchived(dir, s.sessionId, !archived)
+                                    }.padding(horizontal = 7.dp, vertical = 4.dp),
+                                )
+                            }
                             if (s.live || s.busy) { // running, or idle with background work still going
                                 Spacer(Modifier.width(8.dp))
                                 PulseDot(Tok.ok)
@@ -1291,6 +1324,13 @@ internal fun SessionsScreen(repo: PocketRepository) { // internal: driven end-to
                             modifier = Modifier.padding(top = 3.dp),
                         )
                     }
+                }
+                if (archived && filtered.isEmpty() && !repo.sessionsRefreshing.value) item {
+                    Text(
+                        stringResource(Res.string.sessions_archived_empty), color = Tok.muted, fontSize = 13.sp,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 30.dp),
+                        textAlign = TextAlign.Center,
+                    )
                 }
             }
             }

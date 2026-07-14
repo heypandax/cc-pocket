@@ -12,10 +12,10 @@ import kotlinx.serialization.Serializable
 @SerialName("pocket/dirs.list")
 data class ListDirectories(val root: String? = null) : ToDaemon
 
-/** List resumable sessions for a working directory (reads .jsonl headers; no claude launch). */
+/** List resumable sessions for a working directory. [archived] is Codex-only; older peers default false. */
 @Serializable
 @SerialName("pocket/sessions.list")
-data class ListSessions(val workdir: String) : ToDaemon
+data class ListSessions(val workdir: String, val archived: Boolean = false) : ToDaemon
 
 /** Ask the daemon-host Cursor CLI for the models available to its signed-in account. */
 @Serializable
@@ -146,6 +146,15 @@ data class DeleteSession(
     val workdir: String,
     val sessionId: String,
     val agent: AgentKind = AgentKind.CLAUDE,
+) : ToDaemon
+
+/** Archive or restore one Codex thread through the official app-server. */
+@Serializable
+@SerialName("pocket/session.archive")
+data class SetSessionArchived(
+    val workdir: String,
+    val sessionId: String,
+    val archived: Boolean,
 ) : ToDaemon
 
 /** One chunk of a voice capture. Chunks of a recording share [captureId]; daemon reassembles by [idx]. */
@@ -333,7 +342,11 @@ data class Directories(val entries: List<DirectoryEntry>, val root: String? = nu
 
 @Serializable
 @SerialName("pocket/sessions")
-data class Sessions(val workdir: String, val items: List<SessionSummary>) : ToPhone
+data class Sessions(
+    val workdir: String,
+    val items: List<SessionSummary>,
+    val archived: Boolean = false,
+) : ToPhone
 
 /** Runtime Cursor model catalog. Empty + [error] means discovery failed; clients keep bundled fallbacks. */
 @Serializable

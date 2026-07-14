@@ -458,6 +458,11 @@
     <string name="session_delete_title">Delete conversation?</string>
     <string name="session_delete_confirm">“%1$s” and its history on the computer will be deleted. This cannot be undone.</string>
     <string name="session_delete_action">Delete</string>
+    <string name="sessions_current">Current</string>
+    <string name="sessions_archived">Archived</string>
+    <string name="session_archive_action">Archive</string>
+    <string name="session_restore_action">Restore</string>
+    <string name="sessions_archived_empty">No archived Codex conversations in this project</string>
 
     <!-- ── multi-agent (Claude / Codex / Cursor) ─────────────────── -->
     <string name="label_agent">Agent</string>

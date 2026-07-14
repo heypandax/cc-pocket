@@ -206,6 +206,26 @@ class SessionRegistry(
         backends.values.flatMap { runCatching { it.create().listSessions(workdir) }.getOrDefault(emptyList()) }
             .sortedByDescending { it.lastModified }
 
+    /** Archived threads are an official Codex concept; other backends are intentionally excluded. */
+    fun listArchivedSessions(workdir: String): List<SessionSummary> =
+        runCatching { dev.ccpocket.daemon.codex.CodexThreadArchiveClient.list(workdir) }.getOrDefault(emptyList())
+
+    suspend fun setSessionArchived(workdir: String, sessionId: String, archived: Boolean): String? {
+        val live = mutex.withLock {
+            convos.values.any { it.sessionId == sessionId || it.resumeAnchor == sessionId } ||
+                observes.values.any { it.isFor(sessionId) }
+        }
+        if (live) return "session_live"
+        val belongsToProject = if (archived) {
+            listSessions(workdir).any { it.agent == AgentKind.CODEX && it.sessionId == sessionId }
+        } else {
+            listArchivedSessions(workdir).any { it.sessionId == sessionId }
+        }
+        if (!belongsToProject) return "not_found"
+        return dev.ccpocket.daemon.codex.CodexThreadArchiveClient.setArchived(sessionId, archived)
+            ?.let { "archive_failed:$it" }
+    }
+
     /** Delete [sessionId]'s on-disk history via its backend. Refused ("session_live") while THIS daemon
      *  is driving that session — closing it first is the client's job. Returns null on success, else a
      *  short error code the router turns into a PocketError. */

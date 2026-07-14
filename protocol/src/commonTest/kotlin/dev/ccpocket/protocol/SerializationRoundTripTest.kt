@@ -221,6 +221,19 @@ class SerializationRoundTripTest {
     }
 
     @Test
+    fun archived_sessions_roundtrip_and_old_defaults() {
+        val request = Envelope(id = "archive-list", ts = 0, body = ListSessions("/repo", archived = true))
+        assertEquals(request, PocketJson.decodeFromString<Envelope>(PocketJson.encodeToString(request)))
+        val mutation = Envelope(id = "archive-one", ts = 0, body = SetSessionArchived("/repo", "thread-1", true))
+        assertEquals(mutation, PocketJson.decodeFromString<Envelope>(PocketJson.encodeToString(mutation)))
+        val response = Envelope(id = "archived", ts = 0, body = Sessions("/repo", emptyList(), archived = true))
+        assertEquals(response, PocketJson.decodeFromString<Envelope>(PocketJson.encodeToString(response)))
+
+        val old = """{"id":"sessions-old","ts":0,"to":"PEER","body":{"t":"pocket/sessions","workdir":"/repo","items":[]}}"""
+        assertEquals(false, (PocketJson.decodeFromString<Envelope>(old).body as Sessions).archived)
+    }
+
+    @Test
     fun usage_claude_limits_roundtrip_and_old_frames_default() {
         val limits = dev.ccpocket.protocol.ClaudeLimits(
             planType = "pro",

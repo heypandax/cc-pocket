@@ -458,6 +458,11 @@
     <string name="session_delete_title">删除对话？</string>
     <string name="session_delete_confirm">将删除“%1$s”及其在电脑上的历史记录，此操作无法撤销。</string>
     <string name="session_delete_action">删除</string>
+    <string name="sessions_current">当前</string>
+    <string name="sessions_archived">已归档</string>
+    <string name="session_archive_action">归档</string>
+    <string name="session_restore_action">恢复</string>
+    <string name="sessions_archived_empty">这个项目暂时没有已归档的 Codex 会话</string>
 
     <!-- ── 多智能体（Claude / Codex / Cursor） ───────────────────── -->
     <string name="label_agent">智能体</string>

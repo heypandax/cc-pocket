@@ -34,6 +34,7 @@ import dev.ccpocket.protocol.CommandList
 import dev.ccpocket.protocol.DeleteSession
 import dev.ccpocket.protocol.CompactSession
 import dev.ccpocket.protocol.BranchSession
+import dev.ccpocket.protocol.SetSessionArchived
 import dev.ccpocket.protocol.CursorModels
 import dev.ccpocket.protocol.AgencyAgent
 import dev.ccpocket.protocol.AgencyAgents
@@ -423,6 +424,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     val directoriesLoaded = mutableStateOf(false)
     val refreshing = mutableStateOf(false)
     val sessions = mutableStateListOf<SessionSummary>()
+    val sessionsArchived = mutableStateOf(false)
     var directoryScrollIndex = 0
     var directoryScrollOffset = 0
     private val sessionScrollPositions = mutableMapOf<String, Pair<Int, Int>>()
@@ -1054,7 +1056,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 if (observing.value) send(CloseSession(convo))
                 send(OpenSession(wd, sid, mode = mode.value, agent = sessionAgent.value ?: AgentKind.CLAUDE))
             }
-            dir != null -> send(ListSessions(dir))
+            dir != null -> send(ListSessions(dir, sessionsArchived.value))
             else -> {} // directory list already refreshed by launchTransport
         }
     }
@@ -1305,7 +1307,11 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                     },
                 ),
             )
-            is ListSessions -> handle(Sessions(frame.workdir, DemoData.sessions(frame.workdir)))
+            is ListSessions -> handle(Sessions(
+                frame.workdir,
+                if (frame.archived) emptyList() else DemoData.sessions(frame.workdir),
+                archived = frame.archived,
+            ))
             is OpenSession -> {
                 val cid = "demo-convo-${frame.resumeId ?: "new"}"
                 handle(SessionLive(cid, frame.workdir, frame.resumeId ?: DemoData.LIVE_SESSION_ID, mode = frame.mode, executing = false))
@@ -1375,8 +1381,11 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
             // reconcile) or one we asked to open (expectedSessionsDir: the project-tap navigation). An
             // UNSOLICITED Sessions — e.g. the daemon's reply to a project-card DeleteSession — must not
             // yank the phone onto that project's sessions screen.
-            is Sessions -> if (f.workdir == sessionsDir.value || f.workdir == expectedSessionsDir) {
+            is Sessions -> if ((f.workdir == sessionsDir.value || f.workdir == expectedSessionsDir) &&
+                (f.archived == sessionsArchived.value || f.archived == expectedSessionsArchived)) {
                 expectedSessionsDir = null
+                expectedSessionsArchived = null
+                sessionsArchived.value = f.archived
                 sessionsDir.value = f.workdir; replace(sessions, f.items); sessionsRefreshing.value = false
             }
             is Usage -> { usage.value = f; usageLoading.value = false }
@@ -1780,8 +1789,26 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
      *  consumed on arrival. Keeps unsolicited Sessions frames (delete reconciles for other dirs) from
      *  hijacking the screen. */
     private var expectedSessionsDir: String? = null
+    private var expectedSessionsArchived: Boolean? = null
 
-    fun listSessions(wd: String) = scope.launch { expectedSessionsDir = wd; send(ListSessions(wd)) }
+    fun listSessions(wd: String, archived: Boolean = false) = scope.launch {
+        expectedSessionsDir = wd
+        expectedSessionsArchived = archived
+        send(ListSessions(wd, archived))
+    }
+
+    fun showArchivedSessions(archived: Boolean) {
+        val dir = sessionsDir.value ?: return
+        sessionsRefreshing.value = true
+        expectedSessionsDir = dir
+        expectedSessionsArchived = archived
+        scope.launch { send(ListSessions(dir, archived)) }
+    }
+
+    fun setSessionArchived(wd: String, sessionId: String, archived: Boolean) = scope.launch {
+        sessions.removeAll { it.sessionId == sessionId }
+        runCatching { send(SetSessionArchived(wd, sessionId, archived)) }
+    }
 
     /** Delete a session's on-disk history. Optimistic removal — the daemon answers with the refreshed
      *  [Sessions] list for [wd] (or a [PocketError] naming why, e.g. it's still running), which reconciles
@@ -1808,7 +1835,8 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     fun refreshSessions(wd: String? = null) {
         val dir = wd ?: sessionsDir.value ?: return
         expectedSessionsDir = dir
-        refreshWithSpinner(sessionsRefreshing, ListSessions(dir))
+        expectedSessionsArchived = sessionsArchived.value
+        refreshWithSpinner(sessionsRefreshing, ListSessions(dir, sessionsArchived.value))
     }
     // startMode defaults to the persisted default mode (mirrors effort), so tapping a session straight from
     // the list applies it too — not just the new-session picker.
