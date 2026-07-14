@@ -113,6 +113,11 @@ data class CancelTurn(val convoId: String) : ToDaemon
 @SerialName("pocket/session.compact")
 data class CompactSession(val convoId: String) : ToDaemon
 
+/** Branch the live conversation at its current tail while preserving the original session. */
+@Serializable
+@SerialName("pocket/session.branch")
+data class BranchSession(val convoId: String) : ToDaemon
+
 /** Stop one background job (a backgrounded shell / sub-agent / monitor) from the phone's task panel
  *  (issue #80). [jobId] is the job's originating tool_use id — the [BackgroundJob.id] the daemon put on
  *  the wire. The daemon interrupts the agent's in-flight work for this conversation and marks that job

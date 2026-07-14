@@ -181,6 +181,9 @@ fun QuickActionsPopover(model: DesktopModel, onDismiss: () -> Unit) {
                     QaRow("Open terminal") { TerminalLauncher.open(model.terminalApp, model.chatWorkdir); onDismiss() }
                 }
                 QaRow("Compact context") { model.compactConversation(); onDismiss() }
+                if (model.chatAgent != AgentKind.CURSOR) {
+                    QaRow("Create conversation branch") { model.branchConversation(); onDismiss() }
+                }
                 QaRow(
                     if (clearArmed) "Clear chat — tap again" else "Clear chat", danger = true,
                 ) { if (clearArmed) { model.clearConversation(); onDismiss() } else clearArmed = true }

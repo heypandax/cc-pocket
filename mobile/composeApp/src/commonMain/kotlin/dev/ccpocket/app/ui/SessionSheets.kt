@@ -253,6 +253,9 @@ fun QuickActionsSheet(
                             chevron = true,
                         ) { sub = QuickActionSection.ACTIVITY }
                         ActionRow(stringResource(Res.string.qa_compact)) { repo.compactConversation(); onDismiss() }
+                        if (repo.sessionAgent.value != AgentKind.CURSOR) {
+                            ActionRow(stringResource(Res.string.qa_branch)) { repo.branchConversation(); onDismiss() }
+                        }
                         if (repo.hasSimplify()) ActionRow(stringResource(Res.string.qa_simplify)) { repo.sendPrompt("/simplify"); onDismiss() }
                         ActionRow(
                             stringResource(Res.string.qa_clear),

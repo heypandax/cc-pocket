@@ -215,6 +215,12 @@ class SerializationRoundTripTest {
     }
 
     @Test
+    fun branch_session_roundtrip() {
+        val frame = Envelope(id = "branch", ts = 0, body = BranchSession("convo-1"))
+        assertEquals(frame, PocketJson.decodeFromString<Envelope>(PocketJson.encodeToString(frame)))
+    }
+
+    @Test
     fun usage_claude_limits_roundtrip_and_old_frames_default() {
         val limits = dev.ccpocket.protocol.ClaudeLimits(
             planType = "pro",

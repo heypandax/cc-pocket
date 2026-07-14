@@ -52,6 +52,22 @@ class CodexBackendTest {
     }
 
     @Test
+    fun forked_resume_uses_native_thread_fork_request() = runBlocking {
+        val w = mutableListOf<String>()
+        val b = CodexBackend(null)
+        b.attach(
+            AgentIo(writeLine = { w += it }, emit = {}),
+            AgentSpec(Path.of("/repo"), resumeId = "source-thread", mode = PermissionMode.DEFAULT, forkSession = true),
+        )
+        b.parse(initResponse(1))
+        val request = w.last()
+        assertTrue("\"method\":\"thread/fork\"" in request, request)
+        assertTrue("\"threadId\":\"source-thread\"" in request, request)
+        val events = b.parse(threadStartResponse(2, "forked-thread"))
+        assertEquals("forked-thread", assertIs<AgentEvent.SessionInit>(events.single()).sessionId)
+    }
+
+    @Test
     fun first_prompt_buffers_until_thread_ready_then_turn_start() = runBlocking {
         val w = mutableListOf<String>()
         val b = CodexBackend(null)

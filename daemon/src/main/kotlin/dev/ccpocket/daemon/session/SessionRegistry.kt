@@ -327,6 +327,7 @@ class SessionRegistry(
         return true
     }
     suspend fun compact(convoId: String) = get(convoId)?.compact() ?: Unit
+    suspend fun branch(convoId: String) = get(convoId)?.branch() ?: Unit
     suspend fun verdict(v: PermissionVerdict) = get(v.convoId)?.submitVerdict(v) ?: Unit
     suspend fun switchDir(s: SwitchDirectory) = get(s.convoId)?.switchDirectory(Path.of(s.workdir)) ?: Unit
     suspend fun switchMode(s: SwitchMode) = get(s.convoId)?.switchMode(s.mode) ?: Unit

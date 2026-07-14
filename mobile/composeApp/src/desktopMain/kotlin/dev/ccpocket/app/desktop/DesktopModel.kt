@@ -302,6 +302,7 @@ interface DesktopModel {
     fun switchModel(name: String) {}
     fun switchEffort(level: String) {}
     fun compactConversation() {}
+    fun branchConversation() {}
     fun clearConversation() {}
     val cursorModels: List<dev.ccpocket.protocol.AgentModel> get() = emptyList()
     fun refreshCursorModels() {}

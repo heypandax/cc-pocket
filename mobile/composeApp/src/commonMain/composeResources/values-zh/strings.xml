@@ -436,6 +436,7 @@
     <string name="qa_clear">清空会话</string>
     <string name="qa_clear_hint">再次点击确认</string>
     <string name="qa_compact">压缩上下文</string>
+    <string name="qa_branch">创建会话分支</string>
     <string name="qa_simplify">简化</string>
 
     <!-- ── 后台任务 ──────────────────────────────────────────────── -->

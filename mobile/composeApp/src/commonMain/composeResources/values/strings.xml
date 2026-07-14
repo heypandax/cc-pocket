@@ -436,6 +436,7 @@
     <string name="qa_clear">Clear conversation</string>
     <string name="qa_clear_hint">Tap again to confirm</string>
     <string name="qa_compact">Compact context</string>
+    <string name="qa_branch">Create conversation branch</string>
     <string name="qa_simplify">Simplify</string>
 
     <!-- ── background tasks ──────────────────────────────────────── -->

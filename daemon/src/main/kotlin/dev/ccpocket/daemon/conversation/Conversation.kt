@@ -1048,6 +1048,47 @@ class Conversation(
         }
     }
 
+    /** Branch from the current tail without mutating the original transcript. The new provider session
+     * backfills its id through the normal SessionInit path; Claude may do that on the first new prompt. */
+    suspend fun branch() {
+        if (isBusy()) {
+            sink.emit(PocketError("session_busy", "wait for current work to finish before creating a branch", convoId))
+            return
+        }
+        if (backend.kind == AgentKind.CURSOR) {
+            sink.emit(PocketError("branch_unsupported", "Cursor Agent does not expose safe conversation branching", convoId))
+            return
+        }
+        val anchor = sessionId ?: openedResumeId
+        if (anchor == null) {
+            sink.emit(PocketError("session_missing", "send at least one message before creating a branch", convoId))
+            return
+        }
+        stopProcess()
+        sessionId = null
+        openedResumeId = anchor
+        openedWithFork = true
+        reemitLive = true
+        // Emit before starting the new pump: a fast Codex thread/fork response must be the final live frame,
+        // never followed by this transitional null state.
+        sink.emit(live(null))
+        val launched = runCatching {
+            launchProcess(AgentSpec(workdir, resumeId = anchor, model = model, mode = mode, effort = effort, forkSession = true))
+        }
+        if (launched.isFailure) {
+            // The original transcript is untouched. Restore it as the lazy-resume anchor so the next prompt
+            // continues safely instead of leaving the phone attached to a half-created branch.
+            sessionId = anchor
+            openedWithFork = false
+            reemitLive = false
+            sink.emit(live(anchor))
+            sink.emit(PocketError("branch_failed", "failed to create conversation branch (${launched.exceptionOrNull()?.message})", convoId))
+            return
+        }
+        // Claude mints the fork id only after its first prompt; until then the transitional live(null)
+        // above explicitly avoids claiming the original id is still writable.
+    }
+
     /**
      * Stop ONE background job from the phone's task panel (issue #80). The daemon's only lever over the
      * agent's work is the interrupt control (same primitive as [cancelTurn] / the composer ■) — it can't

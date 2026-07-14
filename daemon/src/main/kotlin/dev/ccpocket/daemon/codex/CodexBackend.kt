@@ -46,6 +46,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
     @Volatile private var resolvedExe: Path? = null // codex binary, resolved lazily on first launch
     @Volatile private var workdir: String = ""
     @Volatile private var resumeId: String? = null
+    @Volatile private var forkSession: Boolean = false
     @Volatile private var mode: PermissionMode = PermissionMode.DEFAULT
     @Volatile private var model: String? = null
     @Volatile private var effort: String? = null
@@ -81,6 +82,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         this.io = io
         this.workdir = spec.workdir.toString()
         this.resumeId = spec.resumeId
+        this.forkSession = spec.forkSession
         this.mode = spec.mode
         this.model = spec.model
         this.effort = spec.effort
@@ -130,7 +132,9 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
 
     private suspend fun openThread() {
         val rid = resumeId
-        threadOpenId = if (rid != null) {
+        threadOpenId = if (rid != null && forkSession) {
+            rpcRequest("thread/fork", buildJsonObject { put("threadId", rid); codexModel()?.let { put("model", it) } })
+        } else if (rid != null) {
             rpcRequest("thread/resume", buildJsonObject { put("threadId", rid); codexModel()?.let { put("model", it) } })
         } else {
             rpcRequest("thread/start", buildJsonObject {
