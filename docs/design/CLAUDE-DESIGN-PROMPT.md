@@ -1,70 +1,56 @@
-# cc-pocket —— claude.ai/design 提示词
+# Claude Design 中文提示词
 
-用法：打开 https://claude.ai/design，先粘贴「① 总体 + 风格」开场（它会先出一屏，通常是 Chat）；满意后用「② 各屏」逐屏补齐。生成后把截图存到本仓库 `docs/design/claude-version/`（命名如 `cd-01-chat.png`）或直接贴回对话给我，我来和 Stitch 版做并排对比。
+本文保存 CC Pocket 早期七屏原型使用的中文设计提示词。当前界面已经扩展到 Claude、Codex、Cursor 三后端，实际实现以 [UI 设计规范](./UI-DESIGN.md)和 Compose 代码为准。
 
-> 这套提示词与喂给 Stitch 的是**同一设计系统**（Calm Terminal Companion），这样两边可比的是「工具的设计能力」，而不是「输入差异」。完整规格见 [`UI-DESIGN.md`](./UI-DESIGN.md)。
+## 总体提示词
 
----
+设计一款名为“CC Pocket”的深色、开发者原生移动应用。它用于在手机上远程操控开发者电脑或服务器中的 Claude Code、OpenAI Codex 与 Cursor Agent。核心任务包括：新建或恢复会话、切换工作目录、查看流式输出，以及批准或拒绝工具权限请求。
 
-## ① 总体 + 风格（先粘这段开场）
+整体氛围安静、专注，像夜间使用的高质量 IDE 或终端，以少量赤陶色增加温度。强调克制和信息密度，保留足够留白，不要做成活泼的消费应用。
 
-```
-Design a dark, developer-native mobile app called "cc-pocket" — a phone remote control for Claude Code running on a developer's computer. Core jobs: resume or start a Claude session, switch the working directory, and approve/deny Claude's tool-permission prompts.
+### 深色设计系统
 
-Mood: calm, focused, like a premium IDE or terminal at night, warmed by a single ember of terracotta. Restraint over decoration; high information density with breathing room. NOT a playful consumer app.
+- 基础背景 `#0E0F11`，卡片/列表/输入区 `#16181B`，弹层 `#1E2125`，细边框 `#2A2E33`；
+- 主文字 `#ECEDEE`，次级文字 `#9BA1A6`，弱化文字 `#6B7177`；
+- 赤陶强调色 `#D97757` 只用于每屏唯一主操作、活动状态和流式光标；成功 `#4FB477`、警告 `#E0A93B`、危险 `#E5604D`；
+- 普通界面使用 UI 字体；文件路径、会话 ID、Git 分支、代码块、Token 和终端命令使用 JetBrains Mono；
+- 通过表面色阶与 1px 细边框建立层级，不使用明显投影；卡片圆角 12，底部弹层顶部圆角 20，胶囊圆角 999；
+- 使用 4pt 间距网格、16pt 屏幕边距，点击区域不小于 44pt。
 
-DESIGN SYSTEM (dark theme):
-- Base #0E0F11, surface (cards/rows/composer) #16181B, raised (sheets) #1E2125, hairline border #2A2E33.
-- Text #ECEDEE, secondary #9BA1A6, muted #6B7177.
-- Accent terracotta #D97757 — used SPARINGLY for the one primary action per screen, active states, and the streaming caret. Semantic: success #4FB477, warning #E0A93B, danger #E5604D.
-- Typography: Inter for UI; JetBrains Mono ONLY for file paths, session ids, git branches, code blocks, token counts, and terminal commands (this is what makes it feel developer-native).
-- Elevation via tonal stacking + 1px hairline borders, NOT drop shadows. Radius: 12 cards / 20 bottom-sheet top / 999 pills. 4pt spacing grid, 16pt screen margins, tap targets ≥44pt.
+## 七个核心页面
 
-It is a 7-screen app: Chat, Permission sheet, Session list, Directory picker, Pairing, Choose computer, Settings. Start by designing the Chat screen.
-```
+### 聊天页
 
----
+顶部显示返回、会话标题和低频菜单；其下显示电脑、工作目录与在线状态。正文包含用户消息、思考、Markdown 回复、代码块、工具事件、流式光标和 Token 信息。输入框上方显示模型、思考强度、执行模式和上下文用量；底部输入区支持附件、文本与发送/停止。
 
-## ② 各屏（逐屏粘贴，与 Stitch 同一批）
+### 权限审批弹层
 
-**Chat**
-```
-Chat — a developer's live conversation with Claude Code. Top: a slim connection bar with back chevron, session title "Refactor auth module", a small "default" permission-mode pill, and an overflow menu; under it a monospace line "Lidapeng-MacBook · ~/proj/app/cc-pocket" with a green online dot. Body: a user message shown full-width with a small "You" label (not a bubble): "add a unit test for the stream parser"; a collapsed "Thinking" row; an assistant markdown reply with a short paragraph, a 2-item bullet list, and a dark inset code block (language "kotlin", copy icon, monospace); a tool-event row: terminal icon + "Bash" + monospace "gradle :protocol:test" + a spinner; the assistant text is still streaming, ending in a blinking terracotta caret; a faint monospace token line "↑1.2k ↓340". A floating "↓ Jump to latest" pill. Bottom: a composer with "+" attach, a "Message Claude…" input, and a send button showing a square STOP glyph while generating.
-```
+在聊天页上覆盖底部弹层，突出工具名称、命令、工作目录、分支、倒计时、风险与影响范围。提供拒绝、允许一次和本会话记住等操作，高风险动作要求再次确认。
 
-**Permission sheet**
-```
-A permission-request bottom sheet over a dimmed Chat screen. The sheet (raised #1E2125, 20px top radius, hairline border): a grab handle; a shield icon + "Claude needs permission"; a large tool name "Run command · Bash"; an inset dark monospace card showing "rm -rf ./build && ./gradlew clean" with a "▾ expand" affordance; a monospace line "~/proj/app/cc-pocket · ⑂ main"; a circular countdown ring "0:23" in terracotta; a "Remember for this session" checkbox; two big buttons — "Deny" (danger outline, left) and "Allow" (filled terracotta, right). Reads in under 2 seconds.
-```
+### 会话列表
 
-**Session list**
-```
-Session list for a working directory. Top: connection bar "Lidapeng-MacBook · ~/proj/app/cc-pocket · ⑂ main" (monospace) with a green dot. A prominent "＋ New session" row in terracotta (the most eye-catching element). Then session cards, newest first; each card: bold title, one-line first-prompt preview (secondary), and a monospace metadata row "💬 12 · ⑂ main · 2h ago". Cards: "Refactor auth module / add a unit test for the stream parser / 💬 12 · ⑂ main · 2h ago"; "Fix stream parser test / the parser drops the last token on EOF / 💬 6 · ⑂ fix/parser · 5h ago"; "Add relay websocket client / scaffold the Ktor WS client with reconnect / 💬 23 · ⑂ feat/relay · yesterday"; "Wire up pairing flow / generate a 6-digit pairing code on the daemon / 💬 4 · ⑂ main · 2d ago".
-```
+显示当前目录和分支，突出新建会话入口；会话按时间排列，展示标题、首条请求摘要、消息数、分支和更新时间。返回聊天后应恢复之前的列表滚动位置。
 
-**Directory picker**
-```
-Directory picker (choose the working directory Claude runs in). Top: connection bar "Lidapeng-MacBook" + green dot. A "RECENTS" section: rows of folder icon + monospace path + terracotta "N sessions" pill + chevron — "~/proj/app/cc-pocket · 3 sessions", "~/proj/app/cc-dashboard · 8 sessions", "~/work/api-server · 1 session". A "BROWSE" section: a monospace breadcrumb "~ / proj / app" with tappable segments, then subdirectory rows (folder + monospace name + optional "N sessions" pill + chevron): "cc-pocket · 3 sessions", "cc-dashboard · 8 sessions", "analyse", "ReleaseAdmin · 2 sessions", "nanobanana". Bottom: a full-width "Use this directory" button (filled terracotta).
-```
+### 目录选择
 
-**Pairing**
-```
-Pairing / connect your computer. Title "Connect your computer" + subtitle "Pair this phone with the cc-pocket daemon on your computer." A large QR camera viewfinder with animated terracotta corner brackets. A divider "or enter the pairing code". A 6-digit segmented code input (monospace, one box per digit), partially filled "4 8 1 _ _ _" with a terracotta blinking caret in the 4th box. A helper line "Run  cc-pocket pair  on your computer to get a code." (monospace command). A primary "Connect" button (filled terracotta).
-```
+包含最近目录、面包屑浏览、子目录、会话数和“使用此目录”操作。路径使用等宽字体，列表支持搜索与层级返回。
 
-**Choose computer**
-```
-Choose a computer (daemon picker). Title "Choose a computer" + subtitle "Pick which computer to drive." Computer cards (surface #16181B, hairline border): OS glyph + hostname (headline) + online/offline dot with label + last-active time (monospace) + a one-line current working directory (monospace). Cards: "Lidapeng-MacBook" (Apple, green "online · active now", ~/proj/app/cc-pocket); "devbox-linux" (Linux, green "online · 3m ago", ~/src/relay); "win-desktop" (Windows, grey "offline · 2d ago", ~/code/api — this card dimmed).
-```
+### 设备配对
 
-**Settings**
-```
-Settings — a grouped list. Group "DEFAULT PERMISSION MODE": six selectable rows with a radio, "default" selected, each with a one-line description: default, acceptEdits, auto (terracotta lightning glyph), plan, dontAsk, bypass (warning triangle + amber tint). Group "PAIRED DEVICES": "This device · iPhone 15 Pro" (current) and "iPad Air · paired 3d ago" with a red "Revoke" button. Group "APPEARANCE": a segmented control System / Dark / Light (Dark selected, terracotta). Group "ABOUT": Version "0.1.0" (monospace), License "MIT", Daemon "ws://192.168.1.100:8765" (monospace).
-```
+包含二维码扫描、6 位配对码输入和连接按钮。第 6 位输入完成后自动收起键盘并连接，同时提供相机权限与错误恢复说明。
 
----
+### 电脑选择
 
-## 已落地
+以卡片展示系统图标、主机名、在线状态、最近活动时间和当前工作目录。离线设备弱化显示，多台电脑可快速切换。
 
-- 用上面这份 prompt 在 **claude.ai/design** 生成了 7 屏，经 **Handoff to Code** 导出到 [`claude-design-handoff/`](./claude-design-handoff/)（各屏 `.html/.jsx` + 设计对话）——项目保留的设计版本。
-- 与 Stitch 的历史选型对比已归档到 Obsidian `~/Desktop/Brain/20_Projects/cc-pocket-设计工具评估/`。
+### 设置
+
+设置默认 Agent、默认执行模式、默认思考强度、Token 用量、配对设备和版本信息。外观跟随手机系统，不再提供单独的外观选择项。
+
+## 当前实现补充
+
+后续版本增加了项目首页、中文专业 Agent、Cursor 动态模型目录、Codex 限额与重置、目标、原生代码审查、会话分支/归档、Skills、Plugins、MCP 与 Apps。设计新页面时必须沿用同一状态栏、弹层、颜色、间距和权限表达规则。
+
+## 归档位置
+
+Claude Design 导出说明和对话摘要位于 [`claude-design-handoff/`](./claude-design-handoff/)。旧 HTML/JSX 仅作为概念参考，不是生产实现依据。

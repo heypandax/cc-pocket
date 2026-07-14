@@ -1,25 +1,22 @@
-# CODING AGENTS: READ THIS FIRST
+# 编码 Agent：先阅读本说明
 
-This is a **handoff bundle** from Claude Design (claude.ai/design).
+这是从 Claude Design 导出的设计交接包。用户曾使用 AI 设计工具以 HTML/CSS/JS 制作界面原型，再导出到本仓库供开发实现。
 
-A user mocked up designs in HTML/CSS/JS using an AI design tool, then exported this bundle so a coding agent can implement the designs for real.
+## 使用顺序
 
-## What you should do — IMPORTANT
+1. 先阅读 `chats/` 中的中文设计摘要，理解用户目标和最终取舍。
+2. 再查看各页面目录中的说明和原型文件，并沿着 import 阅读共享组件、样式与脚本。
+3. 原型存在歧义时，在实现前向用户确认，不要自行扩大范围。
 
-**Read the chat transcripts first.** There are 1 chat transcript(s) in `cc-pocket/chats/`. The transcripts show the full back-and-forth between the user and the design assistant — they tell you **what the user actually wants** and **where they landed** after iterating. Don't skip them. The final HTML files are the output, but the chat is where the intent lives.
+## 原型的定位
 
-**Find the primary design file under `cc-pocket/project/` and read it top to bottom.** The chat transcripts will tell you which file the user was last iterating on. Then **follow its imports**: open every file it pulls in (shared components, CSS, scripts) so you understand how the pieces fit together before you start implementing.
+HTML/CSS/JS 文件只是设计原型，不是生产代码。开发者应使用目标代码库合适的技术（本项目为 Compose Multiplatform）重建视觉和交互，不要机械复制原型内部结构。
 
-**If anything is ambiguous, ask the user to confirm before you start implementing.** It's much cheaper to clarify scope up front than to build the wrong thing.
+除非用户明确要求，不要仅依靠浏览器截图理解原型；尺寸、颜色和布局规则应从源文件与当前设计规范中读取。旧原型与当前实现冲突时，以生产代码、中文字符串和 [UI 设计规范](../UI-DESIGN.md)为准。
 
-## About the design files
+## 目录内容
 
-The design medium is **HTML/CSS/JS** — these are prototypes, not production code. Your job is to **recreate them pixel-perfectly** in whatever technology makes sense for the target codebase (React, Vue, native, whatever fits). Match the visual output; don't copy the prototype's internal structure unless it happens to fit.
-
-**Don't render these files in a browser or take screenshots unless the user asks you to.** Everything you need — dimensions, colors, layout rules — is spelled out in the source. Read the HTML and CSS directly; a screenshot won't tell you anything they don't.
-
-## Bundle contents
-
-- `cc-pocket/README.md` — this file
-- `cc-pocket/chats/` — conversation transcripts (read these!)
-- `cc-pocket/project/` — the `cc-pocket` project files (HTML prototypes, assets, components)
+- `README.md`：本说明；
+- `chats/`：设计过程的中文归档摘要；
+- 其他子目录：各页面的交接说明；
+- 导出的 HTML/JSX 等原型资源可能位于未纳入本仓库的设计包中。

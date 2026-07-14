@@ -1,24 +1,24 @@
-# Provenance & clean-room statement
+# 来源与洁净室实现声明
 
-cc-pocket is an **independent, clean-room implementation**. It interoperates with Anthropic's public `claude` CLI surface; it does not derive from any other project's source.
+CC Pocket 是独立完成的洁净室实现。它与 Anthropic 公开的 `claude` CLI 接口互操作，但不派生自其他项目的源代码。
 
-## What we deliberately interoperate with (interface facts, not original expression)
+## 有意互操作的公开接口事实
 
-These are public Anthropic interface/format facts, required for interoperability, and are used freely:
+为实现兼容，项目使用以下公开接口与格式事实：
 
-- The `claude` CLI flags and their semantics (`-p`, `--output-format stream-json`, `--input-format stream-json`, `--permission-prompt-tool stdio`, `--replay-user-messages`, `--verbose`, `--permission-mode`, `--resume`, `--model`, `--append-system-prompt`).
-- The `stream-json` event shapes emitted on stdout (`system`/`assistant`/`user`/`result`/`control_request`/`control_cancel_request`).
-- The tool-permission handshake (`control_request` with `subtype:"can_use_tool"` ⇄ `control_response` with `behavior:"allow"|"deny"`).
-- The on-disk transcript layout `~/.claude/projects/<dir-key>/<sessionId>.jsonl` and its `dir-key` encoding.
+- `claude` CLI 参数及语义：`-p`、`--output-format stream-json`、`--input-format stream-json`、`--permission-prompt-tool stdio`、`--replay-user-messages`、`--verbose`、`--permission-mode`、`--resume`、`--model`、`--append-system-prompt`；
+- 标准输出中的 `stream-json` 事件类型：`system`、`assistant`、`user`、`result`、`control_request`、`control_cancel_request`；
+- 工具权限握手：`control_request` 的 `can_use_tool` 与 `control_response` 的 `allow`/`deny`；
+- 本地会话目录 `~/.claude/projects/<dir-key>/<sessionId>.jsonl` 及其目录编码方式。
 
-Common techniques are likewise used freely: setting the child's `cwd` to switch working directory, killing the process tree cleanly, filtering `CLAUDECODE` from the child environment, deriving a session title from the `.jsonl` head, and the general "device ↔ cloud-relay ↔ outbound-WS daemon" three-tier topology.
+设置子进程工作目录、清理进程树、过滤 `CLAUDECODE` 环境变量、从 JSONL 首部生成会话标题，以及“设备—云端 relay—外拨 daemon”三层架构，均属于常见工程技术。
 
-Legally, interoperability formats are protected under merger doctrine / *Google v. Oracle*; a different language plus clean-room separation reduces residual risk further.
+从法律角度，互操作格式通常受合并原则及相关判例保护；不同实现语言与洁净室隔离也进一步降低了残余风险。
 
-## What is original to cc-pocket
+## CC Pocket 的原创部分
 
-The **wire protocol is entirely our own**: `Envelope`, the sealed `Frame` hierarchy, every `pocket/*` message name, and the `classDiscriminator = "t"` serialization. These intentionally differ from any reference project's naming and structure.
+线路协议完全由本项目设计，包括 `Envelope`、密封的 `Frame` 层级、所有 `pocket/*` 消息名称，以及 `classDiscriminator = "t"` 的序列化约定。这些命名与结构均有意区别于其他项目。
 
-## Working rule for implementers
+## 实现规则
 
-All Anthropic-schema knowledge lives **only** in the daemon's `StreamParser`/`StreamWire` and `PermissionBridge`. When implementing, consult: this repo's design/mapping notes, the official Anthropic docs, and your own `claude --help` output. Do **not** read another project's non-protocol source while writing cc-pocket code.
+Anthropic schema 相关知识只允许存在于 daemon 的 `StreamParser`、`StreamWire` 和 `PermissionBridge`。实现时只能参考本仓库设计/映射说明、Anthropic 官方文档和本机 `claude --help` 输出。编写 CC Pocket 代码时，不得阅读其他项目的非协议源代码。

@@ -53,29 +53,29 @@ sequenceDiagram
 ## 3. 协议层（protocol/Messages.kt 新增）
 
 ```kotlin
-/** phone -> daemon: one chunk of a voice capture. Chunks of a capture share captureId. */
+/** 手机到 daemon：一段录音分块；同次录音共用 captureId。 */
 @Serializable @SerialName("pocket/audio.chunk")
 data class AudioChunk(
     val convoId: String,
-    val captureId: String,   // phone-generated uuid, one per recording
-    val idx: Int,            // 0-based; daemon reassembles in order
-    val last: Boolean,       // true on the final chunk → start transcription
-    val mediaType: String,   // "audio/mp4" (AAC m4a) | "audio/wav" (desktop PCM)
+    val captureId: String,   // 手机生成的 UUID，每次录音一个
+    val idx: Int,            // 从 0 开始，daemon 按顺序重组
+    val last: Boolean,       // 最后一块为 true，随后开始转写
+    val mediaType: String,   // "audio/mp4"（AAC m4a）或 "audio/wav"（桌面 PCM）
     val base64: String,
 ) : ToDaemon
 
-/** phone -> daemon: abandon a capture (user cancelled mid-upload). */
+/** 手机到 daemon：用户在上传途中取消录音。 */
 @Serializable @SerialName("pocket/audio.cancel")
 data class AudioCancel(val convoId: String, val captureId: String) : ToDaemon
 
-/** daemon -> phone: transcription result (ok=false carries a user-facing error). */
+/** daemon 到手机：转写结果；ok=false 时携带面向用户的错误。 */
 @Serializable @SerialName("pocket/transcript")
 data class Transcript(
     val convoId: String,
     val captureId: String,
     val text: String = "",
     val ok: Boolean = true,
-    val error: String? = null, // e.g. "whisper not installed — brew install whisper-cpp"
+    val error: String? = null, // 例如“未安装 whisper，请执行 brew install whisper-cpp”
 ) : ToPhone
 ```
 

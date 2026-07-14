@@ -1,56 +1,57 @@
-# Changelog
+# 版本更新记录
 
-## Unreleased
+## 尚未发布
 
-### Added
+### 新增
 
-- Codex native turn steering, context compaction, thread branching, archive/restore, Goals, and provider-native code review.
-- In-app Codex Skills, Marketplace Plugins, MCP server, and Apps management.
-- Codex account usage now exposes only provider-confirmed limit windows and supports account-provided reset credits/actions when available.
+- Codex 原生运行中追加指令、上下文压缩、会话分支、归档/恢复、目标和代码审查。
+- 在 App 内管理 Codex Skills、Marketplace Plugins、MCP 服务器和 Apps。
+- Codex 账号用量只展示提供方明确返回的限额窗口；账号提供重置次数时支持执行限额重置。
 
-### Changed
+### 调整
 
-- Model, reasoning effort, and execution mode live in the composer status bar and are no longer duplicated in the top-right quick-actions menu.
-- Added a GitHub-artifact-first Linux daemon upgrade guide; production servers no longer need to build the daemon from source.
+- 模型、思考强度和执行模式统一放在输入框上方，不再在右上角快捷菜单重复显示。
+- 新增以 GitHub artifact 为主的 Linux daemon 升级指南，生产服务器无需从源码构建。
+- 项目维护文档统一为简体中文。
 
 ## 1.3.5 — 2026-07-13
 
-Compared with 1.3.4, this release focuses on three-agent consistency, safer remote control, continuity, and mobile responsiveness.
+相较 1.3.4，本版本重点改善三个 Agent 的一致性、远程控制安全、会话连续性和移动端响应速度。
 
-### Added
+### 新增
 
-- Full Cursor Agent sessions, native history discovery, live account model discovery, model variants, usage accounting, and resume support alongside Claude and Codex.
-- Permission risk classification, affected-scope summaries, explicit dangerous-action confirmation, and an authorization audit trail.
-- A chronological activity timeline for approvals, denials, tool execution, background work, and task completion.
-- Codex account-limit snapshots in Token Usage, including weekly remaining allowance, reset time, plan, credits, and live refresh.
-- Cross-device takeover guidance, return-to-desktop summaries, and conversation reading-position continuity.
-- Chinese agency-agent completion in the `@` composer and clearer starter suggestions for empty sessions.
+- 完整支持 Cursor Agent 会话、原生历史发现、账号模型动态发现、模型 variant、用量统计和会话恢复。
+- 权限风险分级、影响范围摘要、高风险操作二次确认和授权审计记录。
+- 按时间排列审批、拒绝、工具执行、后台任务和完成事件。
+- 在 Token 用量中显示 Codex 官方账号限额快照、每周剩余、重置时间、套餐、Credits 和实时刷新状态。
+- 跨设备接管说明、返回电脑摘要和会话阅读位置连续性。
+- 输入框 `@` 中文专业 Agent 补全，以及更清晰的空会话建议。
 
-### Improved
+### 改进
 
-- Claude, Codex, and Cursor now use the same new-session autonomy ladder, card height, spacing, selection state, and full-auto warning.
-- The chat model and reasoning controls now match Happy's compact status bar: borderless 24dp labels open a 236dp radio-option panel above the composer.
-- Pairing completes automatically after the sixth digit, dismisses the numeric keyboard, and provides clearer camera/error recovery.
-- Chats restore the intended reading position, stay pinned correctly around keyboard changes, and keep approvals reachable.
-- Long streaming replies render at a controlled cadence to reduce recomposition load and UI stutter.
-- Project, offline, empty, attention, navigation, and status states have larger targets and clearer recovery actions.
-- Project avatars no longer contain generated letters; Codex uses OpenAI's official Blossom asset; iOS uses the clean native `photo` attachment symbol.
-- Desktop switching, recent-session persistence, notifications, prompt delivery, relay reconnects, and replay of long transcripts are more resilient.
+- Claude、Codex、Cursor 使用统一的新建会话自主等级、卡片高度、间距、选中状态和全自动警告。
+- 聊天模型和思考控制改为紧凑状态栏，在输入框上方打开单选面板。
+- 输入第 6 位配对码后自动连接、收起数字键盘，并提供更清晰的相机/错误恢复提示。
+- 聊天恢复正确阅读位置，键盘变化时保持底部定位，并确保审批卡片可操作。
+- 长回复以受控频率刷新，减少重组负担和界面卡顿。
+- 项目、离线、空状态、注意事项、导航和状态入口使用更大的点击区域与更清楚的恢复操作。
+- 项目头像不再使用生成字母；Codex 使用 OpenAI 官方 Blossom 图形，iOS 图片附件使用系统 `photo` 图标。
+- 桌面切换、最近会话持久化、通知、提示词投递、relay 重连和长会话回放更加稳定。
 
-### Fixed
+### 修复
 
-- Recent chat content being hidden by the keyboard or reopening at the top.
-- Prompt loss and duplicated/replayed output around reconnects, process restarts, and turn acknowledgements.
-- Cursor response duplication, model-ID handling, session listing, and picker loading behavior.
-- Codex weekly-limit presentation and portable reset-time calculation.
+- 最近聊天内容被键盘遮挡，或重新打开后跳到顶部。
+- 重连、进程重启和回合确认期间的提示词丢失、重复回复或重复回放。
+- Cursor 重复回复、模型 ID 传递、会话列表和模型选择器加载问题。
+- Codex 每周额度展示和跨平台重置时间计算。
 
-### Compatibility
+### 兼容性
 
-- App version: **1.3.5**.
-- Features listed in this 1.3.5 section require daemon **1.3.5 or newer**. Newer Codex integrations listed under Unreleased require the matching current App and daemon; do not downgrade a newer daemon to match the App marketing version.
+- App 版本：**1.3.5**。
+- 本节所列功能需要 daemon **1.3.5 或更高版本**。尚未发布部分的新 Codex 集成功能需要匹配的当前 App 与 daemon；不要为了匹配 App 营销版本而降级较新的 daemon。
 
 ## 1.3.4 — 2026-07-10
 
-- Stabilized Chinese IME input and composer clearing.
-- Kept long replies above the composer and improved background-task controls.
-- Refined usage charts, selectable diffs, soft wrapping, and effective-model feedback.
+- 稳定中文拼音输入和发送后的输入框清理。
+- 避免长回复被输入框遮挡，并改善后台任务控制。
+- 优化用量图表、可选择 diff、软换行和实际模型提示。

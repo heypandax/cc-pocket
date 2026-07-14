@@ -48,7 +48,7 @@
 | 设计内容 | 实现现状 | 判定 |
 |---|---|---|
 | Recents 列表 + 「N sessions」橙色 pill | 扁平项目列表 + `history` 文字徽章 | **偏差（P1 对齐）**：协议已有 `hasSessions`，但会话数需要协议加字段；v1 先把 `history` 徽章视觉对齐设计的 pill 样式即可 |
-| Browse 文件系统（面包屑钻取 + Use this directory） | 无（daemon 只下发配置目录 + recents 的扁平列表） | **设计多余（P2）**：需要协议新增任意目录浏览帧，v1 不做。设计稿标注 P2 |
+| 浏览文件系统（面包屑钻取 + 使用此目录） | 无（daemon 只下发配置目录和最近目录的扁平列表） | **设计多余（P2）**：需要协议新增任意目录浏览帧，v1 不做。设计稿标注 P2 |
 | 顶部连接条（电脑名 + 绿点 + Switch） | 无 | Switch 依赖 Computers（P2）；**电脑名 + 连接状态点为实现遗漏（P1）**，落在 Chat/Sessions 头部统一补（见 §2.5） |
 | 实现新增：「Open Sessions」live 分区、筛选框、下拉刷新、Exit | 设计稿无 | **实现超出设计** → 已补设计稿（SUPPLEMENT §7） |
 
@@ -58,8 +58,8 @@
 |---|---|---|
 | 卡片第二行：首条 prompt 预览 | **实现遗漏（P1，零成本）** | 协议 `SessionSummary.firstPrompt` 已有数据，UI 没渲染 |
 | 「2h ago / yesterday」相对时间 | **实现遗漏（P1，零成本）** | `SessionSummary.lastModified` 已有数据 |
-| New session 副标题「Start Claude in ~/…」 | **实现遗漏（P1，零成本）** | 纯文案行 |
-| active 徽章橙色脉冲点 | 实现为 `● running` 静态绿点 | **偏差（P1 对齐）**：视觉细节，统一成设计的脉冲样式 |
+| 新建会话副标题“在 ~/… 中启动 Claude” | **实现遗漏（P1，零成本）** | 纯文案行 |
+| 活动徽章橙色脉冲点 | 实现为“● 运行中”静态绿点 | **偏差（P1 对齐）**：视觉细节，统一成设计的脉冲样式 |
 | 右上 Settings 齿轮 | **暂缓（随最小 Settings 一起，P1）** | 依赖 §2.1 的最小 Settings 落地 |
 | 顶部连接条 | 同 §2.5 | — |
 
@@ -69,7 +69,7 @@
 |---|---|---|
 | 头部显示**会话标题**（非固定「Chat」） | **实现遗漏（P1）** | 列表侧已有 title，打开会话时带过去即可；新会话用首条 prompt 截断 |
 | 头部连接条（绿点 + 电脑名 + 路径） | **实现遗漏（P1）** | 设计原则 #5「始终能看到连的哪台电脑·哪个目录」；实现只有路径。电脑名可用 daemon 握手信息 |
-| Thinking 折叠行（「Thought for 5s」，点开看推理） | **实现遗漏（P1，偏 bug）** | 现在 `appendChunk` 把 `StreamPiece.Thinking` 直接拼进正文，思考内容和回答混在一起。协议已区分，UI 该分开渲染 |
+| 思考折叠行（“思考了 5 秒”，点开看推理） | **实现遗漏（P1，偏 bug）** | 现在 `appendChunk` 把 `StreamPiece.Thinking` 直接拼进正文，思考内容和回答混在一起。协议已区分，UI 该分开渲染 |
 | 代码块：语言标签 + 复制按钮 | **实现遗漏（P1）** | `Markdown.kt` 目前是裸等宽块；移动端「复制代码」是高频操作 |
 | Jump to latest 悬浮按钮 | **实现遗漏（P1）** | 实现是强制贴底滚动，用户上翻历史时新消息会把视口拽走；设计的方案更对 |
 | 底部 token 统计（↑1.2k ↓340） | **实现遗漏（P2）** | 协议 `TurnDone.usage` 已有数据，UI 没显示 |
@@ -110,7 +110,7 @@
 
 1. 重连横幅与断线重试（Connection lost — reconnecting…）
 2. 观察模式条（👁 Observing · running in a terminal + Continue here）
-3. 斜杠命令自动补全菜单（built-in / user / project / skill）
+3. 斜杠命令自动补全菜单（内置 / 用户 / 项目 / 技能）
 4. 已配对主屏 ConnectScreen（Paired · Connect / Unpair）
 5. 新建会话模式选择弹层（StartSessionModeSheet）
 6. 配对屏实现增项（粘贴 pair 链接、Advanced · direct LAN、状态行）

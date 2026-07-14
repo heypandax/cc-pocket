@@ -1,60 +1,62 @@
-# Contributing to cc-pocket
+# 为 CC Pocket 贡献代码
 
-Issues and PRs are welcome, in English or Chinese. This file collects everything a fresh clone needs that isn't obvious from the code.
+欢迎提交 Issue 和 Pull Request。仓库维护文档统一使用中文；代码标识、命令和必要的官方产品名保持原样。
 
-## Modules at a glance
+## 模块概览
 
-| Module | What | Runs where |
+| 模块 | 作用 | 运行位置 |
 |---|---|---|
-| `:protocol` | Shared wire protocol + E2E crypto (`pocket/*` frames) — single source of truth | KMP: JVM · Android · iOS |
-| `:daemon` | Drives `claude` / `codex` as subprocesses, dials out to the relay | Your computer (JVM) |
-| `:relay` | Zero-knowledge broker: pairing, ciphertext routing, rate limiting | Cloud (JVM) |
-| `:mobile:composeApp` | The app (phone + desktop), Compose Multiplatform | Android · iOS · desktop |
-| `iosApp/` | Xcode shell around the KMP framework (xcodegen from `project.yml`) | iOS |
+| `:protocol` | 共享线路协议与端到端加密，是 `pocket/*` 帧的唯一事实来源 | KMP：JVM、Android、iOS |
+| `:daemon` | 启动 `claude`、`codex`、`cursor-agent` 子进程并连接 relay | 用户电脑或服务器（JVM） |
+| `:relay` | 零知识中继：配对、密文路由和限流 | 云端（JVM） |
+| `:mobile:composeApp` | 手机和桌面客户端 | Android、iOS、桌面端 |
+| `iosApp/` | KMP framework 的 Xcode 宿主，由 `project.yml` 生成 | iOS |
 
-## Build prerequisites
+## 构建前置条件
 
-1. **JDK 17** — any distribution. The build resolves the exact toolchain itself (foojay resolver in `settings.gradle.kts`); you just need *a* JDK on `PATH`/`JAVA_HOME` to launch `./gradlew`.
-2. **Android SDK** — set `ANDROID_HOME` or `local.properties` with `sdk.dir=...`. Needed even for JVM-only tasks: the Android modules are configured at Gradle configuration time.
-3. **Firebase placeholder** — the real client configs are gitignored; copy the committed template once:
+1. **JDK 17**：任意发行版均可。Gradle 会解析精确工具链，本机只需让一个 JDK 出现在 `PATH` 或 `JAVA_HOME` 中。
+2. **Android SDK**：设置 `ANDROID_HOME`，或在 `local.properties` 写入 `sdk.dir=...`。即使只执行 JVM 任务，Gradle 配置阶段也会读取 Android 模块。
+3. **Firebase 占位文件**：真实配置不会提交到 Git。首次构建时执行：
+
    ```bash
    cp mobile/composeApp/google-services.json.template mobile/composeApp/google-services.json
+   cp iosApp/iosApp/GoogleService-Info.plist.template iosApp/iosApp/GoogleService-Info.plist
    ```
-   For iOS additionally: `cp iosApp/iosApp/GoogleService-Info.plist.template iosApp/iosApp/GoogleService-Info.plist` (see `docs/ios-device.md`, step 0).
-4. For daemon end-to-end runs: at least one installed and authenticated CLI: `claude`, `codex`, or `cursor-agent`. Tests that exercise a real provider consume that account's quota.
 
-## Running tests
+4. daemon 端到端测试至少需要一种已安装并登录的 CLI：`claude`、`codex` 或 `cursor-agent`。调用真实提供方的测试会消耗对应账号额度。
+
+## 执行测试
 
 ```bash
-bash scripts/check-all.sh      # protocol + daemon + relay + mobile desktop suites — run before a PR
-bash scripts/relay-smoke.sh    # optional: in-memory relay E2E smoke (fake claude, no network)
-./gradlew :protocol:jvmTest --tests "dev.ccpocket.protocol.e2e.*"   # crypto channel proofs
+bash scripts/check-all.sh
+bash scripts/relay-smoke.sh
+./gradlew :protocol:jvmTest --tests "dev.ccpocket.protocol.e2e.*"
 ```
 
-CI (`.github/workflows/ci.yml`) runs the protocol/daemon/relay suites and compiles the desktop target on every PR. The mobile UI/screenshot tests only run locally — they need a real Skia renderer.
+提交 PR 前运行 `scripts/check-all.sh`。CI 会测试 protocol、daemon、relay 并编译桌面目标。移动端 UI/截图测试需要真实 Skia 渲染器，因此只在本地执行。
 
-Manual smoke of the daemon against a real `claude`: `./gradlew :daemon:run --args="test-client"` (see `docs/RUN.md`).
+使用真实 Claude 手动冒烟测试 daemon：`./gradlew :daemon:run --args="test-client"`，详见 [运行文档](docs/RUN.md)。
 
-## Things that bite
+## 容易踩坑的地方
 
-- **Wire compatibility**: the daemon and the apps ship and update on independent schedules. Anything serialized in `:protocol` (frames, models, routes) must stay backward-compatible — additive changes with defaults, no renames/retypes. Say in your PR how an old peer handles the change.
-- **Two READMEs**: Chinese `README.md` is the default landing page; English `README.en.md` is maintained in lockstep. Touch one → check both.
-- **claude CLI drift**: the daemon depends on three subtle stream-json behaviors (mid-turn message queueing/injection, `AskUserQuestion` answer shape). After bumping your local claude, `python3 scripts/probe-claude-wire.py` regression-checks them (uses real quota).
-- **xcodegen**: `iosApp/iosApp.xcodeproj` is generated from `iosApp/project.yml`. Persist project changes in the yml, not in Xcode.
+- **线路兼容性**：daemon 与 App 独立发版。`:protocol` 中的帧、模型和路由必须向后兼容；只能新增带默认值的字段，不能随意改名或改类型。PR 中要说明旧端如何处理新字段。
+- **中文文档**：`README.md` 是默认首页，所有维护文档使用中文。`README.en.md` 仅保留中文入口说明。
+- **Claude CLI 漂移**：daemon 依赖中途消息注入和 `AskUserQuestion` 回答形状等细节。升级 Claude CLI 后执行 `python3 scripts/probe-claude-wire.py`；该脚本会使用真实额度。
+- **xcodegen**：`iosApp/iosApp.xcodeproj` 由 `iosApp/project.yml` 生成。需要持久化的工程改动应写入 YAML，而不是只在 Xcode 中修改。
 
-## Scripts: contributor-relevant vs maintainer-only
+## 脚本范围
 
-Useful to everyone: `check-all.sh`, `relay-smoke.sh`, `install.sh` / `install.ps1` (end-user installers), `probe-claude-wire.py`.
+所有贡献者可使用：`check-all.sh`、`relay-smoke.sh`、`install.sh`、`install.ps1`、`probe-claude-wire.py`。
 
-Maintainer-only (need release credentials, signing identities, the production relay, or a specific paired device — they will just fail elsewhere): `release-*.sh`, `release-windows.ps1`, `notary-setup.sh`, `redeploy-relay.sh`, `provision-relay-push.sh`, `relay-smoke-prod.sh` (defaults to the production relay; `--relay` your own), `ios-fir.sh`, `install-pandaa.sh`, `update-local-daemon*.sh`. Details in `scripts/README.md`.
+以下脚本只供维护者使用，需要发布凭据、签名身份、生产 relay 或指定设备：`release-*.sh`、`release-windows.ps1`、`notary-setup.sh`、`redeploy-relay.sh`、`provision-relay-push.sh`、`relay-smoke-prod.sh`、`ios-fir.sh`、`install-pandaa.sh`、`update-local-daemon*.sh`。详见 [脚本文档](scripts/README.md)。
 
-Production Linux daemon upgrades should use the `daemon-artifact` workflow and the [artifact deployment guide](docs/DAEMON-DEPLOYMENT.md). Do not build in place on a resource-constrained production host.
+生产 Linux daemon 应使用 `daemon-artifact` 工作流和 [artifact 部署指南](docs/DAEMON-DEPLOYMENT.md)升级，不要在资源紧张的生产服务器现场构建。
 
-## Reporting
+## 反馈渠道
 
-- Bugs / features: use the issue templates — daemon version (`cc-pocket-daemon status`), computer OS, and client platform make most reports diagnosable in one round.
-- Security: **privately** via [GitHub security advisories](https://github.com/ac54u-mobile/cc-pocket/security/advisories/new) — see `docs/SECURITY.md` for the threat model and scope.
+- Bug 或功能建议：使用 Issue 模板，并附上 daemon 版本（`cc-pocket-daemon status`）、电脑系统和客户端平台。
+- 安全问题：通过 [GitHub 私密安全公告](https://github.com/ac54u-mobile/cc-pocket/security/advisories/new)报告，威胁模型见 [安全文档](docs/SECURITY.md)。
 
-## License
+## 许可证
 
-MIT. By contributing you agree your contributions are licensed under it.
+项目使用 MIT 许可证。提交贡献即表示同意按该许可证授权。

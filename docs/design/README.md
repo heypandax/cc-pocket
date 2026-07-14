@@ -7,8 +7,8 @@ cc-pocket 移动端设计资料，**统一采用 claude.ai/design**。Stitch 的
 | 文件 / 目录 | 说明 |
 |---|---|
 | `UI-DESIGN.md` | 设计规格：设计系统 ／ 7 屏逐屏 ／ 组件 ／ 状态 ／ 无障碍 ＋ i18n ／ §10 可粘贴生成 prompt |
-| `CLAUDE-DESIGN-PROMPT.md` | 喂给 claude.ai/design 的开场 + 逐屏 prompt（生成本设计所用） |
-| `claude-design-handoff/` | **设计版本本体** —— claude.ai/design 的 Handoff bundle：7 屏 `.html/.jsx` + 设计对话 `chats/` + `README`（coding agent 落地指引） |
+| `CLAUDE-DESIGN-PROMPT.md` | 提供给 claude.ai/design 的中文开场与逐屏提示词 |
+| `claude-design-handoff/` | **设计版本本体**：七屏原型、中文设计对话摘要和编码 Agent 落地指引 |
 
 ## 设计系统速记
 

@@ -1,6 +1,6 @@
 # cc-pocket 移动端界面设计文档（UI/UX Design Spec）
 
-> 用途：这是一份给 **AI 设计工具**（Stitch / v0 / Figma Make 等）的设计输入（design brief）。结构上前半部分是给人读的产品/系统约束，**第 10 章「AI 设计工具 Brief」是可直接粘贴的生成提示**。
+> 用途：这是一份提供给 **AI 设计工具**（Stitch、v0、Figma Make 等）的设计输入。前半部分是面向人的产品/系统约束，**第 10 章是可直接粘贴的中文生成提示词**。
 > 关键可调项已用 ⚙️ 标注——视觉风格、配色基调这类主观选择，你可以一句话让我改，结构性内容（屏/组件/状态）与风格无关、不受影响。
 
 ---
@@ -127,7 +127,7 @@ flowchart TD
 
 ---
 
-## 5. 逐屏规格（Screen-by-screen）
+## 5. 逐屏规格
 
 > 每屏给出：**目的 · 布局 · 组件 · 状态 · 交互 · 边界**。布局描述按从上到下的视觉顺序，方便 AI 工具还原。
 
@@ -280,73 +280,53 @@ flowchart TD
 
 ## 10. 给 AI 设计工具的 Brief（可直接粘贴）
 
-> 用法：先粘贴「设计系统摘要」设定全局风格，再按优先级逐屏粘贴 prompt 生成。Prompt 用英文（多数 AI 设计工具英文效果最好），已内嵌上面的 token。
+> 用法：先粘贴「设计系统摘要」设定全局风格，再按优先级逐屏粘贴提示词生成。仓库文档统一使用中文。
 
 ### 10.1 设计系统摘要（先喂这段）
 
 ```
-Design a mobile app called "cc-pocket" — a developer remote-control for Claude Code running on a computer. Audience: software developers. Mood: calm, focused, developer-native; like a well-made terminal/IDE companion, NOT a playful consumer app.
+设计一款名为 CC Pocket 的开发者远程控制移动应用，用于操控电脑上的 Claude Code、Codex 与 Cursor Agent。整体安静、专注、开发者原生，像精心制作的终端或 IDE 伴侣，不要做成活泼的消费应用。
 
-THEME: Dark-first, with a light variant. 
-Dark colors: base #0E0F11, surface #16181B, raised #1E2125, hairline border #2A2E33, text primary #ECEDEE, secondary #9BA1A6, muted #6B7177. 
-Accent (terracotta/clay) #D97757 for primary actions, active states, streaming cursor. 
-Semantic: success #4FB477, warning #E0A93B, danger #E5604D, info #5B9BD5.
-Light colors: base #FAF9F7 (warm cream), surface #FFFFFF, accent #C75A38.
+以深色为主并提供浅色变体。深色使用 #0E0F11、#16181B、#1E2125 和 #2A2E33 分层；赤陶色 #D97757 只用于主操作、活动状态和流式光标。成功、警告、危险、信息分别使用 #4FB477、#E0A93B、#E5604D、#5B9BD5。
 
-TYPOGRAPHY: System sans (SF Pro / Roboto) for UI. Monospace (SF Mono / JetBrains Mono) ONLY for file paths, session ids, git branches, code, token counts. Sizes: title 22 semibold, headline 17 semibold, body 15, callout 14 medium, caption 12, mono 13.
-
-SHAPE: radius sm 8 / md 12 / lg 16 / sheet top 20 / pill 999. Spacing on a 4pt grid (4/8/12/16/24/32), 16pt screen margins. Dark mode expresses elevation via hairline borders + slight surface lift, minimal shadows. Tap targets ≥44pt. Line icons, 1.5pt stroke.
+普通界面使用系统无衬线字体；路径、会话 ID、Git 分支、代码和 Token 使用等宽字体。遵循 4pt 网格、16pt 屏幕边距、细边框层级和至少 44pt 的点击区域。
 ```
 
 ### 10.2 逐屏 Prompt（按生成优先级）
 
 **① Chat（最高优先，最能定调）**
 ```
-Screen: Chat. A messaging-style conversation with Claude. 
-Top: a slim connection bar — back chevron, session title, a small permission-mode badge on the right (e.g. "default" grey, or "auto" with a lightning glyph in terracotta), and an overflow menu. 
-Body: a scrolling message stream. Assistant messages are left-aligned markdown: paragraphs, bullet lists, and dark code blocks with a language label + copy button (monospace, horizontally scrollable). The streaming assistant message ends with a blinking terracotta caret. Include one collapsed "💭 Thinking" row. Include one tool-event row: an icon + tool name "Bash" + a monospace command preview + a spinner. User messages are full-width with a subtle "You" label (not a chat bubble). A faint token-usage caption "↑1.2k ↓340" in monospace after a completed turn. 
-A floating "↓ scroll to bottom" pill near the bottom. 
-Bottom: a composer — multiline input, a "+" attach on the left, and a send button that becomes a square "stop" button while generating. Respect the safe area. Dark theme.
+聊天页：顶部是返回、会话标题、状态和低频菜单；正文是可滚动消息流，支持 Markdown、代码块、思考折叠、工具事件、流式光标和 Token 信息。用户消息与 Agent 回复要有清楚层级。底部输入区支持多行文本、附件和发送/停止，并遵守安全区。模型、思考强度、执行模式和上下文用量放在输入框上方。
 ```
 
 **② PermissionSheet（关键安全屏）**
 ```
-Screen: Permission request bottom sheet over the Chat screen (scrim behind). 
-Contents top-to-bottom: a grab handle; a shield icon with "Claude needs permission"; a large tool name "Run command · Bash"; a dark monospace preview card showing the command, expandable; a small monospace line showing the target directory and git branch; a circular countdown ring (30s) in terracotta turning amber as it nears zero; two big buttons at the bottom — "Deny" (danger outline, left) and "Allow" (filled terracotta, right). A small "Remember for this session" checkbox above the buttons. Dark theme, high clarity, reads in under 2 seconds.
+权限请求底部弹层：依次显示抓手、盾牌图标、权限说明、工具名称、可展开命令预览、目标目录和 Git 分支、倒计时、本会话记住选项，以及拒绝/允许按钮。危险操作必须醒目，信息应在两秒内读懂。
 ```
 
 **③ SessionList（会话列表）**
 ```
-Screen: Session list for a working directory. 
-Top: connection bar showing computer name · directory (monospace, truncated) · current git branch. 
-Below: a prominent "＋ New session" row in terracotta (the most eye-catching element). 
-Then a list of session cards, newest first. Each card: a bold title; a one-line first-prompt preview in secondary text; a monospace metadata row "💬 12 · ⑂ main · 2h ago". 
-Show a skeleton-loading variant and an empty variant (no sessions → only the New session row plus a friendly hint). Dark theme.
+会话列表：顶部显示电脑、目录和当前 Git 分支；突出“新建会话”入口。会话按最新优先排列，每项包含标题、首条请求摘要、消息数、分支和相对时间，并设计骨架加载、空状态和归档状态。
 ```
 
 **④ DirectoryPicker（选目录）**
 ```
-Screen: Directory picker. 
-Top: connection bar (computer name). 
-A "Recents" section pinned at top (up to 5 rows). 
-Then "Browse": a breadcrumb of the current path (monospace, each segment tappable) and a list of subdirectory rows. Each row: folder icon + directory name (monospace) + an optional terracotta badge "3 sessions" when the directory has Claude history + a chevron. 
-Bottom: a "Use this directory" button. Include a loading skeleton. Dark theme.
+目录选择：顶部显示电脑名称；先展示最近目录，再用可点击面包屑和子目录列表浏览。每行包含文件夹、等宽目录名、可选会话数和箭头，底部提供“使用此目录”，并包含加载状态。
 ```
 
 **⑤ Pairing（配对）**
 ```
-Screen: Pairing / connect your computer. 
-A title "Connect your computer" and subtitle. A large QR-code camera viewfinder with animated corner brackets (primary action). A divider "or enter the pairing code". A 6-digit segmented OTP input (monospace, one box per digit). A helper line: "Run `cc-pocket pair` on your computer to get a code." A primary "Connect" button. Show an error state where the OTP boxes shake in danger color for an expired code. Dark theme.
+配对页：显示连接说明、二维码相机取景框、6 位配对码输入和连接按钮。提示用户在电脑执行 `cc-pocket-daemon pair`。过期或错误时让输入框以危险色轻微抖动，并给出可恢复说明。
 ```
 
 **⑥ DaemonPicker（选电脑，多机时）**
 ```
-Screen: Choose computer. A title "Choose a computer" and a list of computer cards. Each card: hostname (e.g. "Lidapeng-MacBook"), an OS glyph, an online/offline status dot (green/grey), last-active time in monospace, and a preview of the current/last working directory. Offline cards are dimmed. Dark theme.
+电脑选择：以卡片展示主机名、系统图标、在线/离线状态、最近活动时间和当前或最近工作目录；离线卡片弱化显示。
 ```
 
 **⑦ Settings / 设备管理**
 ```
-Screen: Settings, a grouped list. Group "Default permission mode" (six options: default, acceptEdits, auto, plan, dontAsk, bypass — bypass shown with a warning icon). Group "Paired devices" (this device + others, each with a red "Revoke" action). Group "Appearance" (System / Dark / Light). Group "About" (version, MIT license, daemon connection info). Dark theme.
+设置页：使用分组列表展示默认 Agent、默认执行模式、默认思考强度、Token 用量、已配对设备和关于信息。高风险模式带警告；外观始终跟随手机系统，不提供独立外观选项。
 ```
 
 ### 10.3 生成顺序建议

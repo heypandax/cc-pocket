@@ -47,14 +47,14 @@ cd marketing/preview
 
 ## 6 个分镜（字幕在 `render_assets.py` 的 `TEXT` 里改）
 
-| 时间 | 画面 | 字幕(en) |
+| 时间 | 画面 | 英文版字幕的中文含义 |
 |------|------|----------|
-| 0–3s | 连接 → 端到端加密 | Your AI coding agent, now in your pocket. |
-| 3–8s | 项目列表，点开 running 会话 | See what's running on your computer. |
-| 8–13s | 流式输出 + 工具调用 | Stream progress in real time. |
-| 13–17s | 危险命令审批卡 → Allow once | Approve sensitive actions from anywhere. |
-| 17–24s | 斜杠命令 + 语音 | Send prompts, screenshots, and voice. |
-| 24–30s | 任务完成推送 + Logo | Your computer keeps working. You stay in control. |
+| 0–3s | 连接 → 端到端加密 | 你的 AI 编程 Agent，现在就在口袋里。 |
+| 3–8s | 项目列表，点开运行中会话 | 随时查看电脑上正在运行的任务。 |
+| 8–13s | 流式输出 + 工具调用 | 实时查看工作进度。 |
+| 13–17s | 危险命令审批卡 → 允许一次 | 随时随地审批敏感操作。 |
+| 17–24s | 斜杠命令 + 语音 | 发送提示词、截图和语音。 |
+| 24–30s | 任务完成推送 + Logo | 电脑继续工作，一切由你掌控。 |
 
 ## 文件
 

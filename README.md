@@ -3,7 +3,7 @@
 [![CI](https://github.com/ac54u-mobile/cc-pocket/actions/workflows/ci.yml/badge.svg)](https://github.com/ac54u-mobile/cc-pocket/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**简体中文** | [English](README.en.md)
+**简体中文** | [中文文档说明](README.en.md)
 
 CC Pocket 是一个可自托管的远程智能编程客户端：在 iPhone、Android 或桌面 App 上，操控你自己电脑/服务器里的 **Claude Code、OpenAI Codex 和 Cursor Agent**。项目目录、原生历史会话、权限审批、模型选择、图片、流式回复和文件改动都集中在同一套界面中。
 
