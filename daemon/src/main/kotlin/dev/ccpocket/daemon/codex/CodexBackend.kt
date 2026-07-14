@@ -27,6 +27,7 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -53,7 +54,10 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
 
     @Volatile private var threadId: String? = null
     @Volatile private var currentTurnId: String? = null
+    @Volatile private var turnStartPending = false
     private var pendingPrompt: Prompt? = null // buffered first turn (guarded by [bootstrap])
+    private val pendingSteers = ConcurrentHashMap<Long, Prompt>()
+    private val queuedAfterTurn = ConcurrentLinkedQueue<Prompt>()
 
     // JSON-RPC id correlation: which of our outstanding requests this id belongs to
     @Volatile private var initializeId: Long = -1
@@ -87,8 +91,9 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         this.model = spec.model
         this.effort = spec.effort
         // reset per-process protocol state (this runs on every (re)launch)
-        threadId = null; currentTurnId = null
+        threadId = null; currentTurnId = null; turnStartPending = false
         bootstrap.withLock { pendingPrompt = null }
+        pendingSteers.clear(); queuedAfterTurn.clear()
         lastAgentText = null; lastUsage = Usage(); usageSeen = false
         deltaSeen.clear(); fileChangePaths.clear(); fileChangeDiffs.clear(); pendingApprovals.clear()
         // kick off the handshake — initialized + thread open happen when the response lands (see handleResponse)
@@ -110,7 +115,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
                 method != null && idEl != null -> handleServerRequest(method, idEl, root.obj("params"))
                 method != null -> handleNotification(method, root.obj("params"))
                 root.containsKey("result") -> handleResponse(idEl, root["result"])
-                root.containsKey("error") -> { log.warn("codex error: ${root["error"]}"); emptyList() }
+                root.containsKey("error") -> handleError(idEl, root.obj("error"))
                 else -> emptyList()
             }
         }.getOrElse { log.warn("codex parse failed: ${it.message}"); emptyList() }
@@ -126,8 +131,25 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
                 emptyList()
             }
             threadOpenId -> onThreadReady(result as? JsonObject)
-            else -> emptyList()
+            else -> {
+                (idEl as? JsonPrimitive)?.longOrNull?.let(pendingSteers::remove)
+                emptyList()
+            }
         }
+    }
+
+    private suspend fun handleError(idEl: JsonElement?, error: JsonObject?): List<AgentEvent> {
+        val id = (idEl as? JsonPrimitive)?.longOrNull
+        val steered = id?.let(pendingSteers::remove)
+        if (steered != null) {
+            // Manual compact/review turns can reject same-turn steering. Preserve the user's message and
+            // start it as the next turn once the active turn settles; never silently discard it.
+            queuedAfterTurn.add(steered)
+            startQueuedIfIdle()
+            return emptyList()
+        }
+        log.warn("codex error: $error")
+        return emptyList()
     }
 
     private suspend fun openThread() {
@@ -165,7 +187,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
             "thread/started" -> { // backup path: usually the thread/start RESULT lands first
                 if (threadId == null) onThreadReady(buildJsonObject { params.obj("thread")?.let { put("thread", it) } }) else emptyList()
             }
-            "turn/started" -> { currentTurnId = params.obj("turn")?.str("id"); emptyList() }
+            "turn/started" -> { currentTurnId = params.obj("turn")?.str("id"); turnStartPending = false; emptyList() }
             "item/agentMessage/delta" -> params.str("delta")?.let { d ->
                 params.str("itemId")?.let { deltaSeen.add(it) }
                 listOf(AgentEvent.AssistantText(d))
@@ -240,7 +262,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         }
     }
 
-    private fun onTurnCompleted(turn: JsonObject?): List<AgentEvent> {
+    private suspend fun onTurnCompleted(turn: JsonObject?): List<AgentEvent> {
         val status = turn?.str("status")
         val u = lastUsage
         val ev = AgentEvent.TurnResult(
@@ -251,8 +273,10 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         )
         lastAgentText = null
         currentTurnId = null
+        turnStartPending = false
         deltaSeen.clear()
         fileChangePaths.clear(); fileChangeDiffs.clear() // approvals for this turn are resolved by now — don't accumulate
+        startQueuedIfIdle()
         return listOf(ev)
     }
 
@@ -306,11 +330,26 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         val ready = bootstrap.withLock {
             if (threadId == null) { pendingPrompt = Prompt(text, images); false } else true
         }
-        if (ready) writeTurnStart(text, images)
+        if (!ready) return
+        val prompt = Prompt(text, images)
+        val tid = threadId ?: return
+        val turn = currentTurnId
+        when {
+            turn != null -> {
+                rpcRequest("turn/steer", buildJsonObject {
+                    put("threadId", tid)
+                    put("expectedTurnId", turn)
+                    putJsonArray("input") { addJsonObject { put("type", "text"); put("text", text) } }
+                }) { id -> pendingSteers[id] = prompt }
+            }
+            turnStartPending -> queuedAfterTurn.add(prompt)
+            else -> writeTurnStart(text, images)
+        }
     }
 
     private suspend fun writeTurnStart(text: String, images: List<ImageData>) {
         val tid = threadId ?: return
+        turnStartPending = true
         rpcRequest("turn/start", buildJsonObject {
             put("threadId", tid)
             putJsonArray("input") {
@@ -323,6 +362,12 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
             codexModel()?.let { put("model", it) }
             effort?.let { put("effort", codexEffort(it)) }
         })
+    }
+
+    private suspend fun startQueuedIfIdle() {
+        if (currentTurnId != null || turnStartPending) return
+        val next = queuedAfterTurn.poll() ?: return
+        writeTurnStart(next.text, next.images)
     }
 
     override suspend fun interrupt() {
@@ -408,8 +453,9 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
 
     // ---- JSON-RPC plumbing ----
 
-    private suspend fun rpcRequest(method: String, params: JsonObject?): Long {
+    private suspend fun rpcRequest(method: String, params: JsonObject?, beforeWrite: (Long) -> Unit = {}): Long {
         val id = idSeq.getAndIncrement()
+        beforeWrite(id)
         write(buildJsonObject {
             put("id", id)
             put("method", method)

@@ -87,6 +87,31 @@ class CodexBackendTest {
     }
 
     @Test
+    fun prompt_during_active_turn_uses_turn_steer() = runBlocking {
+        val w = mutableListOf<String>()
+        val b = ready(w)
+        b.parse("""{"method":"turn/started","params":{"threadId":"thr-1","turn":{"id":"turn-1"}}}""")
+        b.sendPrompt("focus on tests", emptyList())
+        val steer = w.last()
+        assertTrue("\"method\":\"turn/steer\"" in steer, steer)
+        assertTrue("\"expectedTurnId\":\"turn-1\"" in steer, steer)
+        assertTrue("focus on tests" in steer, steer)
+    }
+
+    @Test
+    fun rejected_steer_is_replayed_as_next_turn_after_completion() = runBlocking {
+        val w = mutableListOf<String>()
+        val b = ready(w)
+        b.parse("""{"method":"turn/started","params":{"threadId":"thr-1","turn":{"id":"turn-1"}}}""")
+        b.sendPrompt("do this next", emptyList()) // request id 3
+        b.parse("""{"id":3,"error":{"code":-32602,"message":"active turn is not steerable"}}""")
+        b.parse("""{"method":"turn/completed","params":{"threadId":"thr-1","turn":{"id":"turn-1","status":"completed"}}}""")
+        val next = w.last()
+        assertTrue("\"method\":\"turn/start\"" in next, next)
+        assertTrue("do this next" in next, next)
+    }
+
+    @Test
     fun agent_message_delta_streams_as_text() = runBlocking {
         val w = mutableListOf<String>()
         val b = ready(w)
