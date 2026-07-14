@@ -32,6 +32,7 @@ import dev.ccpocket.protocol.ClearAllowRule
 import dev.ccpocket.protocol.CloseSession
 import dev.ccpocket.protocol.CommandList
 import dev.ccpocket.protocol.DeleteSession
+import dev.ccpocket.protocol.CompactSession
 import dev.ccpocket.protocol.CursorModels
 import dev.ccpocket.protocol.AgencyAgent
 import dev.ccpocket.protocol.AgencyAgents
@@ -1752,6 +1753,11 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     fun fetchUsage(days: Int = 7) {
         usageLoading.value = true
         scope.launch { send(FetchUsage(days)) }
+    }
+
+    fun compactConversation() {
+        val id = convoId.value ?: return
+        scope.launch { send(CompactSession(id)) }
     }
 
     /** Called only after the destructive confirmation dialog. A stable random key makes one tap one spend. */

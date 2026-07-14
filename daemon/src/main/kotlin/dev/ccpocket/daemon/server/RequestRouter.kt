@@ -19,6 +19,7 @@ import dev.ccpocket.protocol.CancelTurn
 import dev.ccpocket.protocol.ClearAllowRule
 import dev.ccpocket.protocol.CloseSession
 import dev.ccpocket.protocol.DeleteSession
+import dev.ccpocket.protocol.CompactSession
 import dev.ccpocket.protocol.Directories
 import dev.ccpocket.protocol.FetchAuthStatus
 import dev.ccpocket.protocol.FetchUsage
@@ -197,6 +198,7 @@ class RequestRouter(
                 sink.emit(Sessions(frame.workdir, items))
             }
             is CancelTurn -> registry.cancelTurn(frame)
+            is CompactSession -> registry.compact(frame.convoId)
             // task panel "stop" (issue #80): interrupt the agent's work for this job + settle its row killed
             is StopBackgroundJob -> registry.stopBackgroundJob(frame)
 

@@ -107,6 +107,12 @@ data class ClearAllowRule(val convoId: String, val rule: String? = null) : ToDae
 @SerialName("pocket/turn.cancel")
 data class CancelTurn(val convoId: String) : ToDaemon
 
+/** Compact the live conversation's context. Codex uses native thread/compact/start; other backends
+ * retain their supported /compact command path. */
+@Serializable
+@SerialName("pocket/session.compact")
+data class CompactSession(val convoId: String) : ToDaemon
+
 /** Stop one background job (a backgrounded shell / sub-agent / monitor) from the phone's task panel
  *  (issue #80). [jobId] is the job's originating tool_use id — the [BackgroundJob.id] the daemon put on
  *  the wire. The daemon interrupts the agent's in-flight work for this conversation and marks that job

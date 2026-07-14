@@ -620,7 +620,7 @@ class RepoDesktopModel(
     override fun switchMode(m: PermissionMode) = repo.switchMode(m)
     override fun switchModel(name: String) = repo.switchModel(name)
     override fun switchEffort(level: String) = repo.switchEffort(level)
-    override fun compactConversation() { repo.sendPrompt("/compact") }
+    override fun compactConversation() { repo.compactConversation() }
     override fun clearConversation() = repo.clearConversation()
     override val cursorModels: List<dev.ccpocket.protocol.AgentModel> get() = repo.cursorModels
     override fun refreshCursorModels() = repo.refreshCursorModels()

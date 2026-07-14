@@ -327,6 +327,12 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         rpcRequest("turn/interrupt", buildJsonObject { put("threadId", tid); put("turnId", turn) })
     }
 
+    override suspend fun compact(): Boolean {
+        val tid = threadId ?: return false
+        rpcRequest("thread/compact/start", buildJsonObject { put("threadId", tid) })
+        return true
+    }
+
     override suspend fun respondPermission(
         askId: String,
         allow: Boolean,

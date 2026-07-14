@@ -1033,6 +1033,21 @@ class Conversation(
         requestInterrupt()
     }
 
+    /** Use the app-server's native compactor when available. Claude and older providers keep the
+     * existing slash-command behavior, so this protocol addition is backwards compatible. */
+    suspend fun compact() {
+        if (executing) {
+            sink.emit(PocketError("session_busy", "wait for the current turn to finish before compacting", convoId))
+            return
+        }
+        if (backend.compact()) {
+            lastActivityMs = System.currentTimeMillis()
+            reply("✓ Context compaction started.")
+        } else {
+            sendPrompt("/compact")
+        }
+    }
+
     /**
      * Stop ONE background job from the phone's task panel (issue #80). The daemon's only lever over the
      * agent's work is the interrupt control (same primitive as [cancelTurn] / the composer ■) — it can't

@@ -42,6 +42,16 @@ class CodexBackendTest {
     }
 
     @Test
+    fun compact_uses_native_thread_compact_request() = runBlocking {
+        val w = mutableListOf<String>()
+        val b = ready(w)
+        assertTrue(b.compact())
+        val request = w.last()
+        assertTrue("\"method\":\"thread/compact/start\"" in request, request)
+        assertTrue("\"threadId\":\"thr-1\"" in request, request)
+    }
+
+    @Test
     fun first_prompt_buffers_until_thread_ready_then_turn_start() = runBlocking {
         val w = mutableListOf<String>()
         val b = CodexBackend(null)

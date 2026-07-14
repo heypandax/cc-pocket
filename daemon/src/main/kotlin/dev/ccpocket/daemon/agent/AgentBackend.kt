@@ -44,6 +44,10 @@ interface AgentBackend {
     /** Encode + write an interrupt for the in-flight turn; no-op if the process isn't ready. */
     suspend fun interrupt()
 
+    /** Start provider-native context compaction. True when accepted; false lets Conversation use the
+     * backend's compatible /compact prompt path. */
+    suspend fun compact(): Boolean = false
+
     /** Write a permission decision for [askId] (an [AgentEvent.ControlRequest.requestId]).
      *  [remember] maps to a session-scoped "always allow" (Codex acceptForSession). */
     suspend fun respondPermission(

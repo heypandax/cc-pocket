@@ -252,7 +252,7 @@ fun QuickActionsSheet(
                             value = repo.activityEvents.size.takeIf { it > 0 }?.toString(),
                             chevron = true,
                         ) { sub = QuickActionSection.ACTIVITY }
-                        ActionRow(stringResource(Res.string.qa_compact)) { repo.sendPrompt("/compact"); onDismiss() }
+                        ActionRow(stringResource(Res.string.qa_compact)) { repo.compactConversation(); onDismiss() }
                         if (repo.hasSimplify()) ActionRow(stringResource(Res.string.qa_simplify)) { repo.sendPrompt("/simplify"); onDismiss() }
                         ActionRow(
                             stringResource(Res.string.qa_clear),
