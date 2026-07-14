@@ -283,7 +283,12 @@ private fun Populated(u: Usage, resetBusy: Boolean, resetOutcome: String?, reset
  *  Two indicator dots below make the second page discoverable. Each page keeps its own unavailable pane. */
 @Composable
 private fun LimitsPager(
-    codex: CodexLimits?, claude: ClaudeLimits?, resetBusy: Boolean, resetOutcome: String?, resetError: String?, onReset: () -> Unit,
+    codex: CodexLimits?,
+    claude: ClaudeLimits?,
+    resetBusy: Boolean = false,
+    resetOutcome: String? = null,
+    resetError: String? = null,
+    onReset: () -> Unit = {},
 ) {
     val pager = rememberPagerState { 2 }
     Column(Modifier.fillMaxWidth()) {
