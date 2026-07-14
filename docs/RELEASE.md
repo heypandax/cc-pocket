@@ -1,5 +1,7 @@
 # 发布电脑端（cc-pocket daemon）
 
+> Linux 服务器的日常升级优先使用 GitHub Actions `daemon-artifact`，不要在生产服务器现场执行 Gradle。安装与回滚见 [DAEMON-DEPLOYMENT.md](./DAEMON-DEPLOYMENT.md)。本页其余内容主要面向正式多平台发行、签名和 App Store 流程。
+
 电脑端发布的**只有 daemon**（用户 Mac 上跑、连本地 `claude` CLI、外拨到你托管的 relay）。relay（`wss://pocket.ark-nexus.cc`）是你的服务，用户不部署。分发走 **Homebrew tap**，artifact **自带 JRE**（用户不用装 Java）并经 **Apple 公证**（双击零警告）。
 
 用户最终体验：
@@ -167,6 +169,10 @@ MSI 在 `windows-latest` runner 上构建（jpackage 不能跨平台出包，且
 # 发布 iOS App（App Store）
 
 移动端 iOS app（`com.panda.ccpocket`）走 **App Store**，与 daemon 完全独立。**关键结论：不需要 App Store Connect API key / Issuer ID**——签名和上传都靠 Xcode 已登录账号的自动签名（cloud-managed distribution）。
+
+## TrollStore 测试包（GitHub Actions）
+
+只需要未签名测试包时，打开 **Actions → ios-trollstore → Run workflow**。成功后从该次运行的 Artifacts 下载 `cc-pocket-…-trollstore.ipa`，在支持 TrollStore 的设备上安装。此工作流不需要 App Store Connect 登录或 Apple 发布证书，也不会上传 App Store；覆盖安装通常会保留数据，但重要会话/配对信息仍应先备份。
 
 ## 前提（一次性）
 

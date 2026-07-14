@@ -21,7 +21,7 @@ Issues and PRs are welcome, in English or Chinese. This file collects everything
    cp mobile/composeApp/google-services.json.template mobile/composeApp/google-services.json
    ```
    For iOS additionally: `cp iosApp/iosApp/GoogleService-Info.plist.template iosApp/iosApp/GoogleService-Info.plist` (see `docs/ios-device.md`, step 0).
-4. For daemon end-to-end runs: an installed, logged-in `claude` CLI ([Claude Code](https://claude.com/claude-code)).
+4. For daemon end-to-end runs: at least one installed and authenticated CLI: `claude`, `codex`, or `cursor-agent`. Tests that exercise a real provider consume that account's quota.
 
 ## Running tests
 
@@ -47,6 +47,8 @@ Manual smoke of the daemon against a real `claude`: `./gradlew :daemon:run --arg
 Useful to everyone: `check-all.sh`, `relay-smoke.sh`, `install.sh` / `install.ps1` (end-user installers), `probe-claude-wire.py`.
 
 Maintainer-only (need release credentials, signing identities, the production relay, or a specific paired device — they will just fail elsewhere): `release-*.sh`, `release-windows.ps1`, `notary-setup.sh`, `redeploy-relay.sh`, `provision-relay-push.sh`, `relay-smoke-prod.sh` (defaults to the production relay; `--relay` your own), `ios-fir.sh`, `install-pandaa.sh`, `update-local-daemon*.sh`. Details in `scripts/README.md`.
+
+Production Linux daemon upgrades should use the `daemon-artifact` workflow and the [artifact deployment guide](docs/DAEMON-DEPLOYMENT.md). Do not build in place on a resource-constrained production host.
 
 ## Reporting
 

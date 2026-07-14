@@ -55,9 +55,11 @@ quit
 
 **Codex 与 Cursor 后端**：daemon 除了 Claude Code，也能驱动 OpenAI Codex 和 Cursor Agent。它会自动探测 PATH 上的 `codex` 与 `cursor-agent`；自定义路径分别使用 `--codex-bin <path>`、`--cursor-bin <path>`。后端由客户端在新建会话时选择，一个会话始终绑定一个后端。Cursor 使用 daemon 主机上的登录态与账户额度，模型目录来自 `cursor-agent --list-models`。
 
-**Codex 限额**：设置 → Token 用量会读取 `~/.codex/sessions` 最近一次 `rate_limits` 快照，显示当前可用的每周窗口、重置时间、套餐和 Credits。若尚无快照，先运行一次 Codex 或在 Codex CLI 输入 `/status`。账户最终数据可在浏览器打开 <https://chatgpt.com/codex/cloud/settings/usage> 核对；CC Pocket 不收集 ChatGPT 账号或密码。
+**Codex 限额**：设置 → Token 用量读取 Codex 官方本机快照，只显示快照明确返回的窗口、重置时间、套餐、Credits 和可用重置次数。官方只返回每周窗口时不会虚构 5 小时窗口。若尚无快照，先运行一次 Codex 或在 Codex CLI 输入 `/status`。账户最终数据可在浏览器打开 <https://chatgpt.com/codex/cloud/settings/usage> 核对；CC Pocket 不收集 ChatGPT 账号或密码。
 
-**1.3.5 新会话默认值**：全新安装使用 Claude + `default`；之后读取 App Settings 中持久化的默认 Agent 与模式。Claude、Codex、Cursor 在客户端共用相同的四级模式 UI，daemon 再按后端翻译成对应 approval/sandbox 参数。
+**新会话默认值**：全新安装使用 Claude + `default`；之后读取 App Settings 中持久化的默认 Agent 与模式。Claude、Codex、Cursor 在客户端共用相同的四级模式 UI，daemon 再按后端翻译成对应 approval/sandbox 参数。
+
+**生产服务器升级**：不要在资源紧张的服务器现场运行 Gradle。使用 GitHub Actions 的 `daemon-artifact` 产物替换并重启，步骤见 [DAEMON-DEPLOYMENT.md](./DAEMON-DEPLOYMENT.md)。
 
 ---
 

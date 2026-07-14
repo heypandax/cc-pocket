@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Codex native turn steering, context compaction, thread branching, archive/restore, Goals, and provider-native code review.
+- In-app Codex Skills, Marketplace Plugins, MCP server, and Apps management.
+- Codex account usage now exposes only provider-confirmed limit windows and supports account-provided reset credits/actions when available.
+
+### Changed
+
+- Model, reasoning effort, and execution mode live in the composer status bar and are no longer duplicated in the top-right quick-actions menu.
+- Added a GitHub-artifact-first Linux daemon upgrade guide; production servers no longer need to build the daemon from source.
+
 ## 1.3.5 — 2026-07-13
 
 Compared with 1.3.4, this release focuses on three-agent consistency, safer remote control, continuity, and mobile responsiveness.
@@ -34,7 +47,7 @@ Compared with 1.3.4, this release focuses on three-agent consistency, safer remo
 ### Compatibility
 
 - App version: **1.3.5**.
-- Daemon-backed additions require daemon **1.3.5 or newer**. A newer installed daemon such as **1.3.18** already satisfies this requirement and must not be downgraded.
+- Features listed in this 1.3.5 section require daemon **1.3.5 or newer**. Newer Codex integrations listed under Unreleased require the matching current App and daemon; do not downgrade a newer daemon to match the App marketing version.
 
 ## 1.3.4 — 2026-07-10
 

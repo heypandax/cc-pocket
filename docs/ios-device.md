@@ -47,6 +47,8 @@ cp iosApp/iosApp/GoogleService-Info.plist.template iosApp/iosApp/GoogleService-I
 
 ## 三、让真机 App 连上电脑的 daemon
 
+以下源码命令只用于本地开发。生产电脑/服务器请安装发行包或 GitHub Actions 的 daemon artifact，并注册为单实例服务；Linux 升级见 [DAEMON-DEPLOYMENT.md](./DAEMON-DEPLOYMENT.md)。
+
 ### 推荐：经云端 relay（任意网络，端到端加密）
 
 不限同一 Wi-Fi、不碰防火墙；daemon 外拨连 relay，手机也连 relay，两端 Noise 端到端加密，relay 只见密文（见 `docs/SECURITY.md`）。

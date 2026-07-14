@@ -9,13 +9,14 @@ CC Pocket is a self-hosted remote client for driving **Claude Code**, **OpenAI C
 
 This repository is the `ac54u-mobile` edition. It extends the upstream project with Cursor Agent support, live Cursor account model discovery, three-backend session management, a redesigned mobile project/chat experience, and unsigned iOS packages for TrollStore.
 
-## What's new in 1.3.5
+## Current highlights
 
 - One consistent new-session mode UI for Claude, Codex, and Cursor. Fresh installs start with **Claude + Default**; saved defaults are reused afterward.
 - Approval risk/impact details and a chronological audit trail for decisions, tools, and completion.
 - Cross-device handoff and reading-position restoration; reopened chats return to where they belong.
 - Automatic six-digit pairing, smoother long replies, and keyboard-safe recent messages.
-- Codex limit snapshots, the official OpenAI Blossom mark, and a native iOS photo attachment symbol.
+- Codex usage/reset support, Goals, native review, thread branching/archive, Skills, Plugins, MCP, and Apps.
+- Official OpenAI Blossom and Cursor marks, plus a native iOS photo attachment symbol.
 
 See the full [changelog](CHANGELOG.md).
 
@@ -30,6 +31,9 @@ See the full [changelog](CHANGELOG.md).
 - Stream answers, thinking, tool activity, background jobs, approvals, and context usage.
 - Review approval risk, affected scope, authorization history, and a chronological activity timeline.
 - Send image attachments, use voice dictation, slash commands, and `@file` completion.
+- Type `@` to choose Chinese specialist agents and attach their role instructions to the task.
+- Use Codex native steering, compaction, Goals, review, thread branching, and archive/restore.
+- Manage Codex Skills, Marketplace Plugins, MCP servers, and Apps from the session UI.
 - Browse changed files, inspect highlighted diffs, and open a remote terminal.
 - Pair multiple computers and move between active sessions from one phone.
 - Route only end-to-end encrypted frames through the relay.
@@ -110,6 +114,8 @@ daemon/build/install/cc-pocket-daemon/bin/cc-pocket-daemon pair
 
 For a relay deployment and a persistent daemon service, follow [daemon operations](docs/RUN.md) and [relay deployment](deploy/README.md). Supply your own relay URL; this repository does not promise a public hosted relay.
 
+For production Linux hosts, install the GitHub Actions daemon artifact instead of running Gradle on a low-memory server. See [daemon artifact deployment](docs/DAEMON-DEPLOYMENT.md).
+
 ## Cursor Agent setup
 
 1. Install Cursor/Cursor Agent on the daemon host.
@@ -118,6 +124,20 @@ For a relay deployment and a persistent daemon service, follow [daemon operation
 4. Pair the app, create a session, and choose **Cursor**.
 
 Ultra does not mean every model has unlimited quota. First-party and API-backed model pools may reach their limits independently; CC Pocket surfaces the error returned by Cursor.
+
+## Codex controls
+
+In a running Codex session:
+
+- Use the composer status bar for model, reasoning effort, execution mode, and context usage. These controls are no longer duplicated in the top-right menu.
+- Open **⋯ → Goal** to set an objective, optional token budget, and goal status.
+- Open **⋯ → Code review** for uncommitted changes, a base branch, a commit SHA, or custom review instructions.
+- Open **⋯ → Skills & plugins** to manage Codex Skills and Marketplace Plugins.
+- Open **⋯ → MCP & Apps** to inspect MCP status, reload configuration, start browser OAuth, and open official App connection pages.
+- Use session actions to branch a thread or archive/restore a Codex conversation.
+- Open **Settings → Token usage** for provider-confirmed Codex limit windows and reset credits/actions when the account exposes them. CC Pocket does not invent missing windows.
+
+See the [Chinese user guide](docs/USAGE.md) for the full workflow.
 
 ## iOS and TrollStore
 
@@ -143,6 +163,7 @@ Secrets, signing identities, Firebase credentials, and deployment hosts are inte
 
 - [User guide](docs/USAGE.md)
 - [Daemon operation and testing](docs/RUN.md)
+- [Daemon artifact deployment](docs/DAEMON-DEPLOYMENT.md)
 - [Security model](docs/SECURITY.md)
 - [iOS device build/install](docs/ios-device.md)
 - [Release process](docs/RELEASE.md)

@@ -1,12 +1,12 @@
 # CLAUDE.md — cc-pocket
 
-手机 App 通过零知识 E2E relay 驱动本机 Claude Code 的伴侣工具。组成：`mobile/`（Compose Multiplatform App）、`daemon/`（本机 Kotlin/JVM 守护进程）、`relay/`（云端 Ktor 中转，源站地址在 `.env` 的 `RELAY_HOST`，Cloudflare 前置 `pocket.ark-nexus.cc`）、`protocol/`（共享 wire 协议）。
+手机 App 通过零知识 E2E relay 驱动主机上的 Claude Code、OpenAI Codex 与 Cursor Agent。组成：`mobile/`（Compose Multiplatform App）、`daemon/`（主机 Kotlin/JVM 守护进程）、`relay/`（云端 Ktor 中转，源站地址在 `.env` 的 `RELAY_HOST`）、`protocol/`（共享 wire 协议）。
 
 ## ⚠️ 本机 daemon 操作铁律（最重要，先读这一段）
 
 **症状**：手机连不上 / 卡死 / 状态乱跳 / 会话疯狂 fork。**根因几乎总是「同时跑了两个 daemon」**——它们抢同一个 relay 账号 + 端口 8799，互相 `kill -9`，谁都稳不住。
 
-### 改完 daemon 代码要更新本机 daemon —— 只用这一条命令
+### macOS 开发机更新本机 daemon
 
 ```bash
 cd ~/Desktop/Project/app/cc-pocket
@@ -14,6 +14,8 @@ bash scripts/update-local-daemon.sh
 ```
 
 它幂等地：构建 `installDist` → 装到可执行位置 `~/Library/Application Support/cc-pocket/` → **杀干净所有现存 daemon + 清 8799** → `service-install` 注册单实例 → 校验「进程数=1 且 relay-socket≥1」，不达标就报错退出。
+
+这条脚本只用于有完整开发环境的 macOS 开发机。Linux 生产服务器必须优先安装 GitHub Actions 的 `daemon-artifact`，不要在服务器执行 Gradle；见 `docs/DAEMON-DEPLOYMENT.md`。
 
 **在 cc-pocket 驱动的 claude 会话里（手机/桌面 App 开的会话）不要直接跑上面这条**——bootout 会连坐杀掉会话本身（exit 137）。改用：
 
