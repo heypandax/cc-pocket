@@ -229,22 +229,6 @@ fun QuickActionsSheet(
                 QuickActionSection.MAIN -> {
                     Text(stringResource(Res.string.quick_actions_title), color = Tok.tx, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        ActionRow(stringResource(Res.string.qa_model), value = modelAlias(repo.model.value).ifBlank { stringResource(Res.string.value_default) }, chevron = true) { sub = QuickActionSection.MODEL }
-                        val cursorVariant = if (repo.sessionAgent.value == AgentKind.CURSOR) {
-                            cursorModelForVariant(repo.cursorModels, repo.model.value)?.variants?.firstOrNull { it.id == repo.model.value }
-                        } else null
-                        ActionRow(
-                            stringResource(Res.string.label_effort),
-                            value = cursorVariant?.name ?: repo.effort.value ?: stringResource(Res.string.value_default),
-                            chevron = true,
-                        ) { sub = QuickActionSection.EFFORT }
-                        // the permission-mode switch lives here now (was a persistent header badge — one
-                        // more thing crowding the top bar for a setting touched a few times per session)
-                        ActionRow(
-                            stringResource(Res.string.label_mode),
-                            value = (MODE_BY[repo.mode.value]?.short ?: MODES[0].short).let { stringResource(it) },
-                            chevron = true,
-                        ) { onMode(); onDismiss() }
                         ActionRow(stringResource(Res.string.terminal_open)) { onTerminal(); onDismiss() }
                         ActionRow(stringResource(Res.string.qa_files)) { onFiles(); onDismiss() }
                         ActionRow(
