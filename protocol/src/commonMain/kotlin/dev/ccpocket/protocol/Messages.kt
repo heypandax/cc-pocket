@@ -118,6 +118,17 @@ data class CompactSession(val convoId: String) : ToDaemon
 @SerialName("pocket/session.branch")
 data class BranchSession(val convoId: String) : ToDaemon
 
+/** Create/update or clear the official goal on a live Codex thread. */
+@Serializable
+@SerialName("pocket/codex.goal.set")
+data class SetCodexGoal(
+    val convoId: String,
+    val objective: String? = null,
+    val status: String? = null,
+    val tokenBudget: Long? = null,
+    val clear: Boolean = false,
+) : ToDaemon
+
 /** Stop one background job (a backgrounded shell / sub-agent / monitor) from the phone's task panel
  *  (issue #80). [jobId] is the job's originating tool_use id — the [BackgroundJob.id] the daemon put on
  *  the wire. The daemon interrupts the agent's in-flight work for this conversation and marks that job
@@ -404,6 +415,14 @@ data class Usage(
 data class CodexLimitResetResult(
     val outcome: String,
     val limits: CodexLimits? = null,
+    val error: String? = null,
+) : ToPhone
+
+@Serializable
+@SerialName("pocket/codex.goal")
+data class CodexGoalState(
+    val convoId: String,
+    val goal: CodexGoal? = null,
     val error: String? = null,
 ) : ToPhone
 

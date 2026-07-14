@@ -265,6 +265,19 @@ data class CodexAccountUsage(
     val capturedAt: Long? = null,
 )
 
+/** Official persistent goal attached to one Codex thread. Times are Unix seconds. */
+@Serializable
+data class CodexGoal(
+    val threadId: String,
+    val objective: String,
+    val status: String = "active",
+    val tokenBudget: Long? = null,
+    val tokensUsed: Long = 0,
+    val timeUsedSeconds: Long = 0,
+    val createdAt: Long = 0,
+    val updatedAt: Long = 0,
+)
+
 /** One Claude allowance window (5-hour session or weekly) from the account's OAuth usage endpoint. */
 @Serializable
 data class ClaudeLimitWindow(

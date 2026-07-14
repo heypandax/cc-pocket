@@ -203,7 +203,7 @@ private fun Hairline() = Box(Modifier.fillMaxWidth().height(1.dp).background(Tok
 // ════════════════════════════════════════════════════════════════════
 //  Quick actions: switch model / effort, compact, clear, simplify
 // ════════════════════════════════════════════════════════════════════
-enum class QuickActionSection { MAIN, MODEL, EFFORT, ACTIVITY }
+enum class QuickActionSection { MAIN, MODEL, EFFORT, ACTIVITY, GOAL }
 
 @Composable
 fun QuickActionsSheet(
@@ -256,6 +256,18 @@ fun QuickActionsSheet(
                         if (repo.sessionAgent.value != AgentKind.CURSOR) {
                             ActionRow(stringResource(Res.string.qa_branch)) { repo.branchConversation(); onDismiss() }
                         }
+                        if (repo.sessionAgent.value == AgentKind.CODEX) {
+                            ActionRow(
+                                stringResource(Res.string.qa_goal),
+                                value = when (repo.codexGoal.value?.status) {
+                                    null -> null
+                                    "paused" -> stringResource(Res.string.goal_paused)
+                                    "complete" -> stringResource(Res.string.goal_complete)
+                                    else -> stringResource(Res.string.goal_active)
+                                },
+                                chevron = true,
+                            ) { sub = QuickActionSection.GOAL }
+                        }
                         if (repo.hasSimplify()) ActionRow(stringResource(Res.string.qa_simplify)) { repo.sendPrompt("/simplify"); onDismiss() }
                         ActionRow(
                             stringResource(Res.string.qa_clear),
@@ -289,9 +301,69 @@ fun QuickActionsSheet(
                     }
                 }
                 QuickActionSection.ACTIVITY -> ActivityView(repo, onBack = { sub = QuickActionSection.MAIN })
+                QuickActionSection.GOAL -> GoalEditor(repo, onBack = { sub = QuickActionSection.MAIN }, onDone = onDismiss)
             }
         }
     }
+}
+
+@Composable
+private fun GoalEditor(repo: PocketRepository, onBack: () -> Unit, onDone: () -> Unit) {
+    val current = repo.codexGoal.value
+    var objective by remember(current?.updatedAt) { mutableStateOf(current?.objective.orEmpty()) }
+    var budget by remember(current?.updatedAt) { mutableStateOf(current?.tokenBudget?.toString().orEmpty()) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("‹ ", color = Tok.tx2, fontSize = 18.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 4.dp))
+        Text(stringResource(Res.string.goal_title), color = Tok.tx, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    }
+    current?.let { goal ->
+        Text(
+            stringResource(Res.string.goal_usage, formatTokens(goal.tokensUsed), goalElapsed(goal.timeUsedSeconds)),
+            color = Tok.muted, fontSize = 11.5.sp, modifier = Modifier.padding(top = 5.dp),
+        )
+        Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("active" to Res.string.goal_active, "paused" to Res.string.goal_paused, "complete" to Res.string.goal_complete).forEach { (status, label) ->
+                val selected = goal.status == status
+                Text(
+                    stringResource(label), color = if (selected) Tok.base else Tok.tx2, fontSize = 11.5.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(999.dp))
+                        .background(if (selected) Tok.accent else Tok.surface)
+                        .clickable { repo.updateCodexGoalStatus(status) }.padding(horizontal = 10.dp, vertical = 6.dp),
+                )
+            }
+        }
+    }
+    repo.codexGoalError.value?.let {
+        Text(it, color = Tok.danger, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+    }
+    OutlinedTextField(
+        value = objective,
+        onValueChange = { objective = it },
+        label = { Text(stringResource(Res.string.goal_objective)) },
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        minLines = 3,
+    )
+    OutlinedTextField(
+        value = budget,
+        onValueChange = { budget = it.filter(Char::isDigit).take(12) },
+        label = { Text(stringResource(Res.string.goal_budget)) },
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        singleLine = true,
+    )
+    Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.End) {
+        if (current != null) TextButton(onClick = { repo.clearCodexGoal(); onDone() }) {
+            Text(stringResource(Res.string.goal_clear), color = Tok.danger)
+        }
+        TextButton(onClick = {
+            if (objective.isNotBlank()) { repo.setCodexGoal(objective, budget.toLongOrNull()); onDone() }
+        }) { Text(stringResource(Res.string.goal_save), color = if (objective.isBlank()) Tok.muted else Tok.accent) }
+    }
+}
+
+private fun goalElapsed(seconds: Long): String = when {
+    seconds >= 3600 -> "${seconds / 3600}h ${(seconds % 3600) / 60}m"
+    seconds >= 60 -> "${seconds / 60}m"
+    else -> "${seconds}s"
 }
 
 @Composable

@@ -715,6 +715,8 @@ class Conversation(
                     }
                     is AgentEvent.ControlRequest -> b.onControlRequest(ev)
                     is AgentEvent.ControlCancel -> b.onCancel(ev)
+                    is AgentEvent.GoalChanged -> sink.emit(dev.ccpocket.protocol.CodexGoalState(convoId, ev.goal))
+                    is AgentEvent.GoalError -> sink.emit(dev.ccpocket.protocol.CodexGoalState(convoId, error = ev.message))
                     // the CLI's consumption receipt (issue #122): a top-level user replay proves the
                     // matching prompt reached the model — settle its ledger entry. A parent-tagged
                     // replay is a sub-agent's inner user line, never one of ours.
@@ -1087,6 +1089,25 @@ class Conversation(
         }
         // Claude mints the fork id only after its first prompt; until then the transitional live(null)
         // above explicitly avoids claiming the original id is still writable.
+    }
+
+    suspend fun setGoal(objective: String?, status: String?, tokenBudget: Long?, clear: Boolean) {
+        if (backend.kind != AgentKind.CODEX) {
+            sink.emit(PocketError("goal_unavailable", "Codex goal is unavailable until the thread is ready", convoId))
+            return
+        }
+        if (proc == null) {
+            val launched = runCatching {
+                launchProcess(AgentSpec(workdir, resumeId = sessionId ?: openedResumeId, model = model, mode = mode, effort = effort, forkSession = openedWithFork))
+            }
+            if (launched.isFailure) {
+                sink.emit(PocketError("goal_unavailable", "failed to start Codex for goal update (${launched.exceptionOrNull()?.message})", convoId))
+                return
+            }
+        }
+        if (!backend.setGoal(objective, status, tokenBudget, clear)) {
+            sink.emit(PocketError("goal_unavailable", "Codex goal is unavailable until the thread is ready", convoId))
+        }
     }
 
     /**

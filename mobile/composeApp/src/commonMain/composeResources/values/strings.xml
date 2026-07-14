@@ -437,6 +437,16 @@
     <string name="qa_clear_hint">Tap again to confirm</string>
     <string name="qa_compact">Compact context</string>
     <string name="qa_branch">Create conversation branch</string>
+    <string name="qa_goal">Goal</string>
+    <string name="goal_title">Codex goal</string>
+    <string name="goal_objective">Objective</string>
+    <string name="goal_budget">Token budget (optional)</string>
+    <string name="goal_save">Save goal</string>
+    <string name="goal_clear">Clear goal</string>
+    <string name="goal_active">Active</string>
+    <string name="goal_paused">Paused</string>
+    <string name="goal_complete">Complete</string>
+    <string name="goal_usage">%1$s tokens used · %2$s elapsed</string>
     <string name="qa_simplify">Simplify</string>
 
     <!-- ── background tasks ──────────────────────────────────────── -->

@@ -58,10 +58,14 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
     private var pendingPrompt: Prompt? = null // buffered first turn (guarded by [bootstrap])
     private val pendingSteers = ConcurrentHashMap<Long, Prompt>()
     private val queuedAfterTurn = ConcurrentLinkedQueue<Prompt>()
+    private var pendingGoal: GoalUpdate? = null
 
     // JSON-RPC id correlation: which of our outstanding requests this id belongs to
     @Volatile private var initializeId: Long = -1
     @Volatile private var threadOpenId: Long = -1
+    @Volatile private var goalGetId: Long = -1
+    private val goalSetIds = ConcurrentHashMap.newKeySet<Long>()
+    private val goalClearIds = ConcurrentHashMap.newKeySet<Long>()
 
     // a turn's running state, reset on turn/completed
     @Volatile private var lastAgentText: String? = null
@@ -73,6 +77,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
     private val pendingApprovals = ConcurrentHashMap<String, JsonElement>() // askId → original JSON-RPC id (preserve type for the response)
 
     private data class Prompt(val text: String, val images: List<ImageData>)
+    private data class GoalUpdate(val objective: String?, val status: String?, val tokenBudget: Long?, val clear: Boolean)
     private data class Usage(val input: Long = 0, val output: Long = 0, val cached: Long = 0)
 
     override val kind: AgentKind = AgentKind.CODEX
@@ -94,6 +99,8 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         threadId = null; currentTurnId = null; turnStartPending = false
         bootstrap.withLock { pendingPrompt = null }
         pendingSteers.clear(); queuedAfterTurn.clear()
+        pendingGoal = null
+        goalGetId = -1; goalSetIds.clear(); goalClearIds.clear()
         lastAgentText = null; lastUsage = Usage(); usageSeen = false
         deltaSeen.clear(); fileChangePaths.clear(); fileChangeDiffs.clear(); pendingApprovals.clear()
         // kick off the handshake — initialized + thread open happen when the response lands (see handleResponse)
@@ -124,15 +131,23 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
     // ---- inbound: responses to our requests ----
 
     private suspend fun handleResponse(idEl: JsonElement?, result: JsonElement?): List<AgentEvent> {
-        return when ((idEl as? JsonPrimitive)?.longOrNull) {
-            initializeId -> {
+        val responseId = (idEl as? JsonPrimitive)?.longOrNull
+        return when {
+            responseId == initializeId -> {
                 rpcNotify("initialized", null)
                 openThread()
                 emptyList()
             }
-            threadOpenId -> onThreadReady(result as? JsonObject)
+            responseId == threadOpenId -> onThreadReady(result as? JsonObject)
+            responseId == goalGetId -> listOf(AgentEvent.GoalChanged((result as? JsonObject)?.obj("goal")?.goal()))
+            responseId != null && goalSetIds.remove(responseId) -> {
+                listOf(AgentEvent.GoalChanged((result as? JsonObject)?.obj("goal")?.goal()))
+            }
+            responseId != null && goalClearIds.remove(responseId) -> {
+                listOf(AgentEvent.GoalChanged(null))
+            }
             else -> {
-                (idEl as? JsonPrimitive)?.longOrNull?.let(pendingSteers::remove)
+                responseId?.let(pendingSteers::remove)
                 emptyList()
             }
         }
@@ -147,6 +162,9 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
             queuedAfterTurn.add(steered)
             startQueuedIfIdle()
             return emptyList()
+        }
+        if (id == goalGetId || (id != null && (goalSetIds.remove(id) || goalClearIds.remove(id)))) {
+            return listOf(AgentEvent.GoalError(error?.str("message") ?: "unknown error"))
         }
         log.warn("codex error: $error")
         return emptyList()
@@ -176,6 +194,8 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
             pendingPrompt.also { pendingPrompt = null }
         }
         flush?.let { writeTurnStart(it.text, it.images) }
+        goalGetId = rpcRequest("thread/goal/get", buildJsonObject { put("threadId", tid) })
+        pendingGoal?.also { pendingGoal = null }?.let { setGoal(it.objective, it.status, it.tokenBudget, it.clear) }
         return listOf(AgentEvent.SessionInit(sessionId = tid, cwd = workdir, model = result.str("model")))
     }
 
@@ -206,6 +226,8 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
                 emptyList()
             }
             "turn/completed" -> onTurnCompleted(params.obj("turn"))
+            "thread/goal/updated" -> listOf(AgentEvent.GoalChanged(params.obj("goal")?.goal()))
+            "thread/goal/cleared" -> listOf(AgentEvent.GoalChanged(null))
             "error" -> {
                 val msg = params.obj("error")?.str("message") ?: "codex error"
                 // turn/completed (status=failed) still follows and clears `executing`; surface the text now
@@ -382,6 +404,25 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         return true
     }
 
+    override suspend fun setGoal(objective: String?, status: String?, tokenBudget: Long?, clear: Boolean): Boolean {
+        val tid = threadId
+        if (tid == null) {
+            pendingGoal = GoalUpdate(objective, status, tokenBudget, clear)
+            return true
+        }
+        if (clear) {
+            rpcRequest("thread/goal/clear", buildJsonObject { put("threadId", tid) }) { goalClearIds.add(it) }
+        } else {
+            rpcRequest("thread/goal/set", buildJsonObject {
+                put("threadId", tid)
+                objective?.let { put("objective", it) }
+                status?.let { put("status", it) }
+                tokenBudget?.let { put("tokenBudget", it) }
+            }) { goalSetIds.add(it) }
+        }
+        return true
+    }
+
     override suspend fun respondPermission(
         askId: String,
         allow: Boolean,
@@ -450,6 +491,21 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
 
     /** cc-pocket's effort ladder includes "max"; codex's top tier is "xhigh" — map it so the turn isn't rejected. */
     private fun codexEffort(e: String): String = if (e == "max") "xhigh" else e
+
+    private fun JsonObject.goal(): dev.ccpocket.protocol.CodexGoal? {
+        val tid = str("threadId") ?: return null
+        val objective = str("objective") ?: return null
+        return dev.ccpocket.protocol.CodexGoal(
+            threadId = tid,
+            objective = objective,
+            status = str("status") ?: "active",
+            tokenBudget = long("tokenBudget"),
+            tokensUsed = long("tokensUsed") ?: 0,
+            timeUsedSeconds = long("timeUsedSeconds") ?: 0,
+            createdAt = long("createdAt") ?: 0,
+            updatedAt = long("updatedAt") ?: 0,
+        )
+    }
 
     // ---- JSON-RPC plumbing ----
 

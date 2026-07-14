@@ -103,8 +103,8 @@ class CodexBackendTest {
         val w = mutableListOf<String>()
         val b = ready(w)
         b.parse("""{"method":"turn/started","params":{"threadId":"thr-1","turn":{"id":"turn-1"}}}""")
-        b.sendPrompt("do this next", emptyList()) // request id 3
-        b.parse("""{"id":3,"error":{"code":-32602,"message":"active turn is not steerable"}}""")
+        b.sendPrompt("do this next", emptyList()) // goal/get is id 3; steer is id 4
+        b.parse("""{"id":4,"error":{"code":-32602,"message":"active turn is not steerable"}}""")
         b.parse("""{"method":"turn/completed","params":{"threadId":"thr-1","turn":{"id":"turn-1","status":"completed"}}}""")
         val next = w.last()
         assertTrue("\"method\":\"turn/start\"" in next, next)
@@ -117,6 +117,24 @@ class CodexBackendTest {
         val b = ready(w)
         val ev = b.parse("""{"method":"item/agentMessage/delta","params":{"threadId":"thr-1","turnId":"t1","itemId":"i1","delta":"Hi"}}""")
         assertEquals(AgentEvent.AssistantText("Hi"), ev.single())
+    }
+
+    @Test
+    fun thread_goal_is_loaded_and_updates_use_official_rpc() = runBlocking {
+        val w = mutableListOf<String>()
+        val b = ready(w)
+        assertTrue("\"method\":\"thread/goal/get\"" in w.last(), w.last())
+        val loaded = b.parse(
+            """{"id":3,"result":{"goal":{"threadId":"thr-1","objective":"Ship","status":"active","tokenBudget":1000,"tokensUsed":120,"timeUsedSeconds":30,"createdAt":1,"updatedAt":2}}}""",
+        )
+        val goal = assertIs<AgentEvent.GoalChanged>(loaded.single()).goal
+        assertEquals("Ship", goal?.objective)
+        assertEquals(120, goal?.tokensUsed)
+
+        assertTrue(b.setGoal("Test", "paused", 2000, clear = false))
+        val request = w.last()
+        assertTrue("\"method\":\"thread/goal/set\"" in request, request)
+        assertTrue("\"tokenBudget\":2000" in request, request)
     }
 
     @Test

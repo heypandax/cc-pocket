@@ -437,6 +437,16 @@
     <string name="qa_clear_hint">再次点击确认</string>
     <string name="qa_compact">压缩上下文</string>
     <string name="qa_branch">创建会话分支</string>
+    <string name="qa_goal">目标</string>
+    <string name="goal_title">Codex 目标</string>
+    <string name="goal_objective">目标内容</string>
+    <string name="goal_budget">Token 预算（可选）</string>
+    <string name="goal_save">保存目标</string>
+    <string name="goal_clear">清除目标</string>
+    <string name="goal_active">进行中</string>
+    <string name="goal_paused">已暂停</string>
+    <string name="goal_complete">已完成</string>
+    <string name="goal_usage">已用 %1$s tokens · 已运行 %2$s</string>
     <string name="qa_simplify">简化</string>
 
     <!-- ── 后台任务 ──────────────────────────────────────────────── -->

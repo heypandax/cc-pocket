@@ -48,6 +48,9 @@ interface AgentBackend {
      * backend's compatible /compact prompt path. */
     suspend fun compact(): Boolean = false
 
+    /** Update or clear the provider's persistent thread goal. False means unsupported/not ready. */
+    suspend fun setGoal(objective: String?, status: String?, tokenBudget: Long?, clear: Boolean): Boolean = false
+
     /** Write a permission decision for [askId] (an [AgentEvent.ControlRequest.requestId]).
      *  [remember] maps to a session-scoped "always allow" (Codex acceptForSession). */
     suspend fun respondPermission(

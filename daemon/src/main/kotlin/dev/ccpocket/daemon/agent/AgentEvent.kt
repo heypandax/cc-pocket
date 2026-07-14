@@ -69,6 +69,10 @@ sealed interface AgentEvent {
     data class ControlRequest(val requestId: String, val toolName: String, val input: JsonObject?, val diff: String? = null) : AgentEvent
     data class ControlCancel(val requestId: String) : AgentEvent
 
+    /** Official thread goal changed or was cleared (Codex app-server). */
+    data class GoalChanged(val goal: dev.ccpocket.protocol.CodexGoal?) : AgentEvent
+    data class GoalError(val message: String) : AgentEvent
+
     /** a known-but-uninteresting line (hook_*, rate_limit_event, serverRequest/resolved, ...). */
     data class Ignored(val type: String?) : AgentEvent
 

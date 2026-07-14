@@ -35,6 +35,9 @@ import dev.ccpocket.protocol.DeleteSession
 import dev.ccpocket.protocol.CompactSession
 import dev.ccpocket.protocol.BranchSession
 import dev.ccpocket.protocol.SetSessionArchived
+import dev.ccpocket.protocol.SetCodexGoal
+import dev.ccpocket.protocol.CodexGoal
+import dev.ccpocket.protocol.CodexGoalState
 import dev.ccpocket.protocol.CursorModels
 import dev.ccpocket.protocol.AgencyAgent
 import dev.ccpocket.protocol.AgencyAgents
@@ -444,6 +447,8 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     val pendingImages = mutableStateListOf<PendingImage>() // photos staged in the composer (pre-send)
     private var pendingIdSeq = 0L
     val convoId = mutableStateOf<String?>(null)
+    val codexGoal = mutableStateOf<CodexGoal?>(null)
+    val codexGoalError = mutableStateOf<String?>(null)
     val workdir = mutableStateOf<String?>(null)
     val chatTitle = mutableStateOf<String?>(null)            // session title for the chat header (client-side)
     private var thinkStartMs: Long? = null                   // first Thinking chunk of the in-progress block
@@ -1395,6 +1400,10 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 codexResetError.value = f.error
                 f.limits?.let { limits -> usage.value = usage.value?.copy(codexLimits = limits) }
             }
+            is CodexGoalState -> if (f.convoId == convoId.value) {
+                codexGoal.value = f.goal
+                codexGoalError.value = f.error
+            }
             is AuthState -> authState.value = f
             is PushPrefs -> pushPrefs.value = f.enabled
             is VoiceAgentStatus -> voiceAgent.value = f
@@ -1775,6 +1784,22 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         scope.launch { send(BranchSession(id)) }
     }
 
+    fun setCodexGoal(objective: String, tokenBudget: Long?) {
+        val id = convoId.value ?: return
+        scope.launch { send(SetCodexGoal(id, objective = objective.trim(), status = "active", tokenBudget = tokenBudget)) }
+    }
+
+    fun clearCodexGoal() {
+        val id = convoId.value ?: return
+        scope.launch { send(SetCodexGoal(id, clear = true)) }
+    }
+
+    fun updateCodexGoalStatus(status: String) {
+        val id = convoId.value ?: return
+        val goal = codexGoal.value ?: return
+        scope.launch { send(SetCodexGoal(id, objective = goal.objective, status = status, tokenBudget = goal.tokenBudget)) }
+    }
+
     /** Called only after the destructive confirmation dialog. A stable random key makes one tap one spend. */
     fun consumeCodexLimitReset() {
         if (codexResetting.value) return
@@ -1842,6 +1867,8 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     // the list applies it too — not just the new-session picker.
     fun openSession(wd: String, resumeId: String? = null, startMode: PermissionMode = defaultMode.value, title: String? = null, agent: AgentKind = defaultAgent.value) = scope.launch {
         opening.value = true // held until the daemon answers (SessionLive/PocketError) — 8s net below
+        codexGoal.value = null
+        codexGoalError.value = null
         openTimedOut.value = false
         promptPending = false // the pending marker belongs to the previous conversation's transcript
         promptWatchdog?.cancel(); promptWatchdog = null; sendStalled.value = false // and so does its receipt deadline
@@ -2476,6 +2503,8 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
             dir?.let { send(ListSessions(it)) }
         }
         convoId.value = null
+        codexGoal.value = null
+        codexGoalError.value = null
         chatTitle.value = null
         messages.clear(); activityEvents.clear()
         pendingImages.clear()
