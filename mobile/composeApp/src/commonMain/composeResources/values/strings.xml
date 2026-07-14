@@ -337,6 +337,14 @@
     <string name="usage_codex_reset_no_credit">No reset credits are currently available.</string>
     <string name="usage_codex_reset_already">This reset request was already completed; no second reset was consumed.</string>
     <string name="usage_codex_reset_error">Reset failed: %1$s</string>
+    <string name="usage_codex_account_title">Official Codex account usage</string>
+    <string name="usage_codex_account_source">Live from the signed-in Codex account</string>
+    <string name="usage_codex_lifetime">Lifetime tokens</string>
+    <string name="usage_codex_current_streak">Current streak</string>
+    <string name="usage_codex_longest_streak">Longest streak</string>
+    <string name="usage_codex_peak_day">Peak day</string>
+    <string name="usage_codex_longest_turn">Longest turn</string>
+    <string name="usage_codex_days">%1$d days</string>
     <string name="usage_claude_limits">Claude limits</string>
     <string name="usage_claude_plan">Claude %1$s</string>
     <string name="usage_claude_session">5-hour limit</string>

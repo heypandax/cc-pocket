@@ -337,6 +337,14 @@
     <string name="usage_codex_reset_no_credit">当前没有可用的限额重置次数。</string>
     <string name="usage_codex_reset_already">该次重置请求已经完成，没有重复消耗次数。</string>
     <string name="usage_codex_reset_error">重置失败：%1$s</string>
+    <string name="usage_codex_account_title">Codex 官方账号用量</string>
+    <string name="usage_codex_account_source">实时读取当前已登录的 Codex 账号</string>
+    <string name="usage_codex_lifetime">累计 Tokens</string>
+    <string name="usage_codex_current_streak">当前连续使用</string>
+    <string name="usage_codex_longest_streak">最长连续使用</string>
+    <string name="usage_codex_peak_day">单日峰值</string>
+    <string name="usage_codex_longest_turn">最长单次运行</string>
+    <string name="usage_codex_days">%1$d 天</string>
     <string name="usage_claude_limits">Claude 限额</string>
     <string name="usage_claude_plan">Claude %1$s</string>
     <string name="usage_claude_session">5 小时限额</string>

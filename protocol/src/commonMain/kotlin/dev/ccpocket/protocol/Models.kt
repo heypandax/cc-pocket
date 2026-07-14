@@ -243,6 +243,28 @@ data class CodexLimits(
     val resetCreditsAvailable: Long? = null,
 )
 
+/** Account-wide Codex usage summary returned by the signed-in Codex app-server. */
+@Serializable
+data class CodexAccountUsageSummary(
+    val lifetimeTokens: Long? = null,
+    val currentStreakDays: Long? = null,
+    val longestStreakDays: Long? = null,
+    val peakDailyTokens: Long? = null,
+    val longestRunningTurnSec: Long? = null,
+)
+
+/** One official account-usage day. [startDate] is the server's ISO date. */
+@Serializable
+data class CodexAccountUsageDay(val startDate: String, val tokens: Long)
+
+/** Official account-level Codex usage, separate from CC Pocket's local transcript aggregation. */
+@Serializable
+data class CodexAccountUsage(
+    val summary: CodexAccountUsageSummary = CodexAccountUsageSummary(),
+    val dailyUsageBuckets: List<CodexAccountUsageDay> = emptyList(),
+    val capturedAt: Long? = null,
+)
+
 /** One Claude allowance window (5-hour session or weekly) from the account's OAuth usage endpoint. */
 @Serializable
 data class ClaudeLimitWindow(

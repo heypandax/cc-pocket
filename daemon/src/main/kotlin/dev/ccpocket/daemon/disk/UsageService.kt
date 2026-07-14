@@ -46,6 +46,7 @@ object UsageService {
         journal: List<UsageJournal.Entry> = runCatching { UsageJournal.read() }.getOrDefault(emptyList()),
         liveCodexLimits: CodexLimits? = null,
         liveClaudeLimits: dev.ccpocket.protocol.ClaudeLimits? = null,
+        liveCodexAccountUsage: dev.ccpocket.protocol.CodexAccountUsage? = null,
     ): Usage {
         val span = days.coerceIn(1, 90)
         val today = LocalDate.now(zone)
@@ -199,6 +200,7 @@ object UsageService {
                 capturedAt = latestCodexLimitsAt?.toEpochMilli() ?: latestCodexLimits?.capturedAt,
             ),
             claudeLimits = liveClaudeLimits,
+            codexAccountUsage = liveCodexAccountUsage,
         )
     }
 

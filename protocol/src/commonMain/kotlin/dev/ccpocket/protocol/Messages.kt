@@ -369,6 +369,8 @@ data class Usage(
     val hours: List<UsageDay>? = null,
     val codexLimits: CodexLimits? = null,
     val claudeLimits: ClaudeLimits? = null,
+    /** Signed-in Codex account totals from app-server; absent with older daemons/unsupported accounts. */
+    val codexAccountUsage: CodexAccountUsage? = null,
 ) : ToPhone
 
 /** Result of an explicit Codex limit-reset attempt. Outcomes mirror Codex app-server:

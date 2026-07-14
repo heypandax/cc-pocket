@@ -86,6 +86,14 @@ import dev.ccpocket.app.resources.usage_codex_reset_nothing
 import dev.ccpocket.app.resources.usage_codex_reset_no_credit
 import dev.ccpocket.app.resources.usage_codex_reset_already
 import dev.ccpocket.app.resources.usage_codex_reset_error
+import dev.ccpocket.app.resources.usage_codex_account_title
+import dev.ccpocket.app.resources.usage_codex_account_source
+import dev.ccpocket.app.resources.usage_codex_lifetime
+import dev.ccpocket.app.resources.usage_codex_current_streak
+import dev.ccpocket.app.resources.usage_codex_longest_streak
+import dev.ccpocket.app.resources.usage_codex_peak_day
+import dev.ccpocket.app.resources.usage_codex_longest_turn
+import dev.ccpocket.app.resources.usage_codex_days
 import dev.ccpocket.app.resources.usage_cost
 import dev.ccpocket.app.resources.usage_empty
 import dev.ccpocket.app.resources.usage_empty_hint
@@ -117,6 +125,7 @@ import dev.ccpocket.app.theme.Tok
 import dev.ccpocket.protocol.AgentKind
 import dev.ccpocket.protocol.ClaudeLimits
 import dev.ccpocket.protocol.CodexLimits
+import dev.ccpocket.protocol.CodexAccountUsage
 import dev.ccpocket.protocol.Usage
 import dev.ccpocket.protocol.UsageDay
 import dev.ccpocket.protocol.UsageModel
@@ -193,7 +202,7 @@ fun UsageScreen(repo: PocketRepository, onBack: () -> Unit) {
         }
 
         when {
-            u != null && (u.tokensToday > 0 || u.models.isNotEmpty() || u.days.any { it.tokens > 0 } || u.codexLimits != null || u.claudeLimits != null) ->
+            u != null && (u.tokensToday > 0 || u.models.isNotEmpty() || u.days.any { it.tokens > 0 } || u.codexLimits != null || u.claudeLimits != null || u.codexAccountUsage != null) ->
                 Populated(u, repo.codexResetting.value, repo.codexResetOutcome.value, repo.codexResetError.value) { showResetConfirm = true }
             u != null -> Empty(u.days.size)
             !connected || timedOut -> Offline()
@@ -245,6 +254,11 @@ private fun Populated(u: Usage, resetBusy: Boolean, resetOutcome: String?, reset
         Spacer(Modifier.height(10.dp))
         LimitsPager(u.codexLimits, u.claudeLimits, resetBusy, resetOutcome, resetError, onReset)
 
+        u.codexAccountUsage?.let {
+            Spacer(Modifier.height(10.dp))
+            CodexAccountUsageCard(it)
+        }
+
         // The three metrics the daemon only knows for TODAY.
         // is unmistakable even while the hero above reads a wider window. A missing sub-metric shows a labeled
         // "not available yet" placeholder — never a bare "—".
@@ -276,6 +290,47 @@ private fun Populated(u: Usage, resetBusy: Boolean, resetOutcome: String?, reset
             for (m in u.models) ModelRow(m, max)
         }
         Spacer(Modifier.height(20.dp))
+    }
+}
+
+@Composable
+private fun CodexAccountUsageCard(usage: CodexAccountUsage) {
+    val summary = usage.summary
+    val stats = listOfNotNull(
+        summary.lifetimeTokens?.let { stringResource(Res.string.usage_codex_lifetime) to formatTokens(it) },
+        summary.currentStreakDays?.let { stringResource(Res.string.usage_codex_current_streak) to stringResource(Res.string.usage_codex_days, it) },
+        summary.longestStreakDays?.let { stringResource(Res.string.usage_codex_longest_streak) to stringResource(Res.string.usage_codex_days, it) },
+        summary.peakDailyTokens?.let { stringResource(Res.string.usage_codex_peak_day) to formatTokens(it) },
+        summary.longestRunningTurnSec?.let { stringResource(Res.string.usage_codex_longest_turn) to formatDuration(it) },
+    )
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Tok.surface)
+            .border(1.dp, Tok.hair, RoundedCornerShape(14.dp)).padding(horizontal = 16.dp, vertical = 15.dp),
+        verticalArrangement = Arrangement.spacedBy(11.dp),
+    ) {
+        Text(stringResource(Res.string.usage_codex_account_title), color = Tok.tx, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(Res.string.usage_codex_account_source), color = Tok.muted, fontSize = 11.5.sp)
+        stats.chunked(2).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                row.forEach { (label, value) ->
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(label, color = Tok.tx2, fontSize = 11.5.sp)
+                        Text(value, color = Tok.tx, fontFamily = FontFamily.Monospace, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+private fun formatDuration(seconds: Long): String {
+    val hours = seconds / 3600
+    val minutes = (seconds % 3600) / 60
+    return when {
+        hours > 0 -> "${hours}h ${minutes}m"
+        minutes > 0 -> "${minutes}m"
+        else -> "${seconds}s"
     }
 }
 

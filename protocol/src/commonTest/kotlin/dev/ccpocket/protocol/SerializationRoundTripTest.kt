@@ -178,6 +178,20 @@ class SerializationRoundTripTest {
     }
 
     @Test
+    fun usage_codex_account_totals_roundtrip_and_old_frames_default() {
+        val official = CodexAccountUsage(
+            summary = CodexAccountUsageSummary(lifetimeTokens = 12_345, currentStreakDays = 4, peakDailyTokens = 900),
+            dailyUsageBuckets = listOf(CodexAccountUsageDay("2026-07-13", 900)),
+            capturedAt = 1_700_000_000_000,
+        )
+        val frame = Envelope(id = "official-usage", ts = 0, body = Usage(codexAccountUsage = official))
+        assertEquals(frame, PocketJson.decodeFromString<Envelope>(PocketJson.encodeToString(frame)))
+
+        val old = """{"id":"old-usage","ts":0,"to":"PEER","body":{"t":"pocket/usage","days":[],"models":[]}}"""
+        assertEquals(null, (PocketJson.decodeFromString<Envelope>(old).body as Usage).codexAccountUsage)
+    }
+
+    @Test
     fun codex_limit_reset_request_and_result_roundtrip() {
         val request = Envelope(id = "reset-1", ts = 0, body = ConsumeCodexLimitReset("attempt-key"))
         val requestJson = PocketJson.encodeToString(request)

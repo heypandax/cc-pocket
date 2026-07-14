@@ -1,11 +1,15 @@
 package dev.ccpocket.daemon.codex
 
 import dev.ccpocket.protocol.CodexCredits
+import dev.ccpocket.protocol.CodexAccountUsage
+import dev.ccpocket.protocol.CodexAccountUsageDay
+import dev.ccpocket.protocol.CodexAccountUsageSummary
 import dev.ccpocket.protocol.CodexLimitWindow
 import dev.ccpocket.protocol.CodexLimits
 import dev.ccpocket.protocol.CodexLimitResetResult
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -17,20 +21,31 @@ import java.util.concurrent.TimeUnit
 
 /** Reads the authenticated account's current limits from Codex app-server instead of stale rollout files. */
 object CodexRateLimitsClient {
+    data class AccountSnapshot(val limits: CodexLimits?, val usage: CodexAccountUsage?)
+
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
     @Volatile private var cached: CodexLimits? = null
+    @Volatile private var cachedUsage: CodexAccountUsage? = null
     @Volatile private var cachedAt = 0L
 
+    fun read(): CodexLimits? = readAccountSnapshot().limits
+
+    /** Reads limits and official account totals in one short-lived app-server connection. */
     @Synchronized
-    fun read(): CodexLimits? {
+    fun readAccountSnapshot(): AccountSnapshot {
         val now = System.currentTimeMillis()
-        if (now - cachedAt < 8_000) return cached
+        if (now - cachedAt < 8_000) return AccountSnapshot(cached, cachedUsage)
         val fresh = runCatching { query(now) }.getOrNull()
-        if (fresh != null) { cached = fresh; cachedAt = now }
-        return fresh ?: cached?.takeIf { now - cachedAt < 60_000 }
+        if (fresh != null) {
+            if (fresh.limits != null) cached = fresh.limits
+            if (fresh.usage != null) cachedUsage = fresh.usage
+            if (fresh.limits != null || fresh.usage != null) cachedAt = now
+        }
+        val usable = now - cachedAt < 60_000
+        return AccountSnapshot(if (usable) cached else null, if (usable) cachedUsage else null)
     }
 
-    private fun query(now: Long): CodexLimits? {
+    private fun query(now: Long): AccountSnapshot {
         val exe = CodexLauncher.resolveExecutable().toString()
         val process = ProcessBuilder(exe, "app-server").start()
         return try {
@@ -42,8 +57,11 @@ object CodexRateLimitsClient {
             writer.write("""{"method":"initialized","params":null}"""); writer.newLine()
             writer.write("""{"id":2,"method":"account/rateLimits/read","params":null}""")
             writer.newLine(); writer.flush()
-            val result = readResponse(reader, 2)?.get("result") as? JsonObject ?: return null
-            parseResult(result, now)
+            val limits = (readResponse(reader, 2)?.get("result") as? JsonObject)?.let { parseResult(it, now) }
+            writer.write("""{"id":3,"method":"account/usage/read","params":null}""")
+            writer.newLine(); writer.flush()
+            val usage = (readResponse(reader, 3)?.get("result") as? JsonObject)?.let { parseUsage(it, now) }
+            AccountSnapshot(limits, usage)
         } finally {
             runCatching { process.outputStream.close() }
             process.destroy()
@@ -92,6 +110,27 @@ object CodexRateLimitsClient {
         return parse(snapshot, now, resets)
     }
 
+    private fun parseUsage(result: JsonObject, now: Long): CodexAccountUsage {
+        val summary = result.obj("summary")
+        val days = (result["dailyUsageBuckets"] as? JsonArray).orEmpty().mapNotNull { element ->
+            val day = element as? JsonObject ?: return@mapNotNull null
+            val date = day.str("startDate") ?: return@mapNotNull null
+            val tokens = (day["tokens"] as? JsonPrimitive)?.longOrNull ?: return@mapNotNull null
+            CodexAccountUsageDay(date, tokens)
+        }
+        return CodexAccountUsage(
+            summary = CodexAccountUsageSummary(
+                lifetimeTokens = summary.long("lifetimeTokens"),
+                currentStreakDays = summary.long("currentStreakDays"),
+                longestStreakDays = summary.long("longestStreakDays"),
+                peakDailyTokens = summary.long("peakDailyTokens"),
+                longestRunningTurnSec = summary.long("longestRunningTurnSec"),
+            ),
+            dailyUsageBuckets = days,
+            capturedAt = now,
+        )
+    }
+
     private fun readResponse(reader: java.io.BufferedReader, id: Long): JsonObject? =
         CompletableFuture.supplyAsync {
             while (true) {
@@ -124,5 +163,6 @@ object CodexRateLimitsClient {
     }
     private fun JsonObject.obj(k: String) = get(k) as? JsonObject
     private fun JsonObject.str(k: String) = (get(k) as? JsonPrimitive)?.contentOrNull
+    private fun JsonObject?.long(k: String) = (this?.get(k) as? JsonPrimitive)?.longOrNull
     private fun JsonObject.bool(k: String) = (get(k) as? JsonPrimitive)?.booleanOrNull ?: false
 }

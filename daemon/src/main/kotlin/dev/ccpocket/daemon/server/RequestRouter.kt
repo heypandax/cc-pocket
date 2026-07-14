@@ -87,10 +87,12 @@ class RequestRouter(
 
             // heavy transcript scan → off the inbound pump so it can't wedge the socket
             is FetchUsage -> scope.launch {
+                val codexAccount = dev.ccpocket.daemon.codex.CodexRateLimitsClient.readAccountSnapshot()
                 sink.emit(UsageService.aggregate(
                     frame.days,
-                    liveCodexLimits = dev.ccpocket.daemon.codex.CodexRateLimitsClient.read(),
+                    liveCodexLimits = codexAccount.limits,
                     liveClaudeLimits = dev.ccpocket.daemon.claude.ClaudeRateLimitsClient.read(),
+                    liveCodexAccountUsage = codexAccount.usage,
                 ))
             }
 
