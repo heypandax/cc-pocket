@@ -22,6 +22,7 @@ import dev.ccpocket.protocol.DeleteSession
 import dev.ccpocket.protocol.Directories
 import dev.ccpocket.protocol.FetchAuthStatus
 import dev.ccpocket.protocol.FetchUsage
+import dev.ccpocket.protocol.ConsumeCodexLimitReset
 import dev.ccpocket.protocol.Frame
 import dev.ccpocket.protocol.ListDirectories
 import dev.ccpocket.protocol.ListCursorModels
@@ -91,6 +92,12 @@ class RequestRouter(
                     liveCodexLimits = dev.ccpocket.daemon.codex.CodexRateLimitsClient.read(),
                     liveClaudeLimits = dev.ccpocket.daemon.claude.ClaudeRateLimitsClient.read(),
                 ))
+            }
+
+            // Spending a reset credit is an explicit, user-confirmed mutation. The phone supplies a stable
+            // idempotency key so a relay retry cannot consume twice; the result includes the refreshed limits.
+            is ConsumeCodexLimitReset -> scope.launch {
+                sink.emit(dev.ccpocket.daemon.codex.CodexRateLimitsClient.consume(frame.idempotencyKey))
             }
 
             // both re-scan the transcript from disk (issue #36) → same off-pump rule as FetchUsage

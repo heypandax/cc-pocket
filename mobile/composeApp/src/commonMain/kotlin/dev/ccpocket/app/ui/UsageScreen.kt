@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -73,6 +74,18 @@ import dev.ccpocket.app.resources.usage_codex_snapshot
 import dev.ccpocket.app.resources.usage_codex_dashboard_hint
 import dev.ccpocket.app.resources.usage_codex_no_snapshot
 import dev.ccpocket.app.resources.usage_codex_remaining
+import dev.ccpocket.app.resources.usage_codex_reset_credits
+import dev.ccpocket.app.resources.usage_codex_reset_action
+import dev.ccpocket.app.resources.usage_codex_reset_confirm_title
+import dev.ccpocket.app.resources.usage_codex_reset_confirm_body
+import dev.ccpocket.app.resources.usage_codex_reset_cancel
+import dev.ccpocket.app.resources.usage_codex_reset_confirm
+import dev.ccpocket.app.resources.usage_codex_reset_working
+import dev.ccpocket.app.resources.usage_codex_reset_success
+import dev.ccpocket.app.resources.usage_codex_reset_nothing
+import dev.ccpocket.app.resources.usage_codex_reset_no_credit
+import dev.ccpocket.app.resources.usage_codex_reset_already
+import dev.ccpocket.app.resources.usage_codex_reset_error
 import dev.ccpocket.app.resources.usage_cost
 import dev.ccpocket.app.resources.usage_empty
 import dev.ccpocket.app.resources.usage_empty_hint
@@ -131,6 +144,7 @@ fun UsageScreen(repo: PocketRepository, onBack: () -> Unit) {
     var days by remember { mutableStateOf(1) } // default to "Today"
     var timedOut by remember { mutableStateOf(false) }
     var refreshGeneration by remember { mutableStateOf(0) }
+    var showResetConfirm by remember { mutableStateOf(false) }
     LaunchedEffect(days, refreshGeneration) {
         timedOut = false
         var first = true
@@ -179,16 +193,33 @@ fun UsageScreen(repo: PocketRepository, onBack: () -> Unit) {
         }
 
         when {
-            u != null && (u.tokensToday > 0 || u.models.isNotEmpty() || u.days.any { it.tokens > 0 } || u.codexLimits != null || u.claudeLimits != null) -> Populated(u)
+            u != null && (u.tokensToday > 0 || u.models.isNotEmpty() || u.days.any { it.tokens > 0 } || u.codexLimits != null || u.claudeLimits != null) ->
+                Populated(u, repo.codexResetting.value, repo.codexResetOutcome.value, repo.codexResetError.value) { showResetConfirm = true }
             u != null -> Empty(u.days.size)
             !connected || timedOut -> Offline()
             else -> Loading()
         }
     }
+
+    if (showResetConfirm) {
+        AlertDialog(
+            onDismissRequest = { showResetConfirm = false },
+            title = { Text(stringResource(Res.string.usage_codex_reset_confirm_title)) },
+            text = { Text(stringResource(Res.string.usage_codex_reset_confirm_body)) },
+            dismissButton = {
+                TextButton(onClick = { showResetConfirm = false }) { Text(stringResource(Res.string.usage_codex_reset_cancel)) }
+            },
+            confirmButton = {
+                TextButton(onClick = { showResetConfirm = false; repo.consumeCodexLimitReset() }) {
+                    Text(stringResource(Res.string.usage_codex_reset_confirm), color = Tok.warn)
+                }
+            },
+        )
+    }
 }
 
 @Composable
-private fun Populated(u: Usage) {
+private fun Populated(u: Usage, resetBusy: Boolean, resetOutcome: String?, resetError: String?, onReset: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         // Range-scoped headline: the Tokens hero is the WINDOW total (== the sum of the trend it sits above),
         // so the top number and the chart never contradict, and switching Today/7d/30d visibly changes it.
@@ -212,7 +243,7 @@ private fun Populated(u: Usage) {
         HeroCard(windowTokens, scope, periodCaption(u), deltaPct, zeroToday)
 
         Spacer(Modifier.height(10.dp))
-        LimitsPager(u.codexLimits, u.claudeLimits)
+        LimitsPager(u.codexLimits, u.claudeLimits, resetBusy, resetOutcome, resetError, onReset)
 
         // The three metrics the daemon only knows for TODAY.
         // is unmistakable even while the hero above reads a wider window. A missing sub-metric shows a labeled
@@ -251,12 +282,14 @@ private fun Populated(u: Usage) {
 /** The limits area: Codex on the first page (unchanged look), swipe right-to-left for the Claude page.
  *  Two indicator dots below make the second page discoverable. Each page keeps its own unavailable pane. */
 @Composable
-private fun LimitsPager(codex: CodexLimits?, claude: ClaudeLimits?) {
+private fun LimitsPager(
+    codex: CodexLimits?, claude: ClaudeLimits?, resetBusy: Boolean, resetOutcome: String?, resetError: String?, onReset: () -> Unit,
+) {
     val pager = rememberPagerState { 2 }
     Column(Modifier.fillMaxWidth()) {
         HorizontalPager(pager, pageSpacing = 10.dp, verticalAlignment = Alignment.Top) { page ->
             when (page) {
-                0 -> codex?.let { CodexLimitsCard(it) } ?: CodexLimitsUnavailableCard()
+                0 -> codex?.let { CodexLimitsCard(it, resetBusy, resetOutcome, resetError, onReset) } ?: CodexLimitsUnavailableCard()
                 else -> claude?.let { ClaudeLimitsCard(it) } ?: ClaudeLimitsUnavailableCard()
             }
         }
@@ -339,7 +372,9 @@ private fun CodexLimitsUnavailableCard() {
 }
 
 @Composable
-private fun CodexLimitsCard(limits: CodexLimits) {
+private fun CodexLimitsCard(
+    limits: CodexLimits, resetBusy: Boolean, resetOutcome: String?, resetError: String?, onReset: () -> Unit,
+) {
     // Codex may return a weekly-only account as `primary` (not `secondary`). Classify by duration;
     // primary/secondary describe ordering, not a permanent 5h/week meaning.
     val weekly = listOfNotNull(limits.primary, limits.secondary)
@@ -382,6 +417,36 @@ private fun CodexLimitsCard(limits: CodexLimits) {
                 else -> null
             }
             text?.let { Text(it, color = Tok.tx2, fontSize = 12.sp) }
+        }
+        limits.resetCreditsAvailable?.let { count ->
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(Tok.raised.copy(alpha = 0.55f))
+                    .border(1.dp, Tok.hair, RoundedCornerShape(11.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(Res.string.usage_codex_reset_credits, count), color = Tok.tx, fontSize = 12.5.sp, modifier = Modifier.weight(1f))
+                    Text(
+                        stringResource(if (resetBusy) Res.string.usage_codex_reset_working else Res.string.usage_codex_reset_action),
+                        color = if (count > 0 && !resetBusy) Tok.codex else Tok.muted,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clip(RoundedCornerShape(999.dp))
+                            .background(if (count > 0 && !resetBusy) Tok.codex.copy(alpha = 0.13f) else Tok.surface)
+                            .clickable(enabled = count > 0 && !resetBusy, onClick = onReset)
+                            .padding(horizontal = 11.dp, vertical = 6.dp),
+                    )
+                }
+                val resultText = when (resetOutcome) {
+                    "reset" -> stringResource(Res.string.usage_codex_reset_success)
+                    "nothingToReset" -> stringResource(Res.string.usage_codex_reset_nothing)
+                    "noCredit" -> stringResource(Res.string.usage_codex_reset_no_credit)
+                    "alreadyRedeemed" -> stringResource(Res.string.usage_codex_reset_already)
+                    "error" -> stringResource(Res.string.usage_codex_reset_error, resetError ?: "")
+                    else -> null
+                }
+                resultText?.let { Text(it, color = if (resetOutcome == "reset") Tok.codex else Tok.tx2, fontSize = 11.5.sp, lineHeight = 17.sp) }
+            }
         }
         if ((weekly?.usedPercent ?: 0.0) >= 100.0) {
             Text(stringResource(Res.string.usage_codex_rate_limited), color = Tok.warn, fontSize = 12.sp, fontWeight = FontWeight.Medium)

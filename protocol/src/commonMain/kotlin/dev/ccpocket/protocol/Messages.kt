@@ -32,6 +32,12 @@ data object ListAgencyAgents : ToDaemon
 @SerialName("pocket/usage.fetch")
 data class FetchUsage(val days: Int = 7) : ToDaemon
 
+/** Consume one official Codex rate-limit reset credit. [idempotencyKey] identifies one user-confirmed
+ * attempt so transport retries cannot spend a second credit. */
+@Serializable
+@SerialName("pocket/codex.limitReset.consume")
+data class ConsumeCodexLimitReset(val idempotencyKey: String) : ToDaemon
+
 /** Open a session: resume (resumeId != null) or start new (resumeId == null). */
 @Serializable
 @SerialName("pocket/session.open")
@@ -363,6 +369,16 @@ data class Usage(
     val hours: List<UsageDay>? = null,
     val codexLimits: CodexLimits? = null,
     val claudeLimits: ClaudeLimits? = null,
+) : ToPhone
+
+/** Result of an explicit Codex limit-reset attempt. Outcomes mirror Codex app-server:
+ * reset / nothingToReset / noCredit / alreadyRedeemed; error is local transport/protocol failure. */
+@Serializable
+@SerialName("pocket/codex.limitReset.result")
+data class CodexLimitResetResult(
+    val outcome: String,
+    val limits: CodexLimits? = null,
+    val error: String? = null,
 ) : ToPhone
 
 /**

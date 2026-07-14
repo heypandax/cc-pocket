@@ -84,6 +84,8 @@ import dev.ccpocket.protocol.AuthLogout
 import dev.ccpocket.protocol.AuthState
 import dev.ccpocket.protocol.FetchAuthStatus
 import dev.ccpocket.protocol.FetchUsage
+import dev.ccpocket.protocol.ConsumeCodexLimitReset
+import dev.ccpocket.protocol.CodexLimitResetResult
 import dev.ccpocket.protocol.Sessions
 import dev.ccpocket.protocol.Usage
 import dev.ccpocket.protocol.StreamPiece
@@ -1376,6 +1378,12 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 sessionsDir.value = f.workdir; replace(sessions, f.items); sessionsRefreshing.value = false
             }
             is Usage -> { usage.value = f; usageLoading.value = false }
+            is CodexLimitResetResult -> {
+                codexResetting.value = false
+                codexResetOutcome.value = f.outcome
+                codexResetError.value = f.error
+                f.limits?.let { limits -> usage.value = usage.value?.copy(codexLimits = limits) }
+            }
             is AuthState -> authState.value = f
             is PushPrefs -> pushPrefs.value = f.enabled
             is VoiceAgentStatus -> voiceAgent.value = f
@@ -1736,11 +1744,24 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     /** Token-usage dashboard (issue #26): the latest daemon-aggregated snapshot + a fetch-in-flight flag. */
     val usage = mutableStateOf<Usage?>(null)
     val usageLoading = mutableStateOf(false)
+    val codexResetting = mutableStateOf(false)
+    val codexResetOutcome = mutableStateOf<String?>(null)
+    val codexResetError = mutableStateOf<String?>(null)
 
     /** Ask the daemon to aggregate usage over the last [days] local days; the reply lands in [usage]. */
     fun fetchUsage(days: Int = 7) {
         usageLoading.value = true
         scope.launch { send(FetchUsage(days)) }
+    }
+
+    /** Called only after the destructive confirmation dialog. A stable random key makes one tap one spend. */
+    fun consumeCodexLimitReset() {
+        if (codexResetting.value) return
+        codexResetting.value = true
+        codexResetOutcome.value = null
+        codexResetError.value = null
+        val key = Random.nextBytes(16).joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
+        scope.launch { send(ConsumeCodexLimitReset(key)) }
     }
 
     /** The dir whose Sessions reply should open the sessions screen — set by [listSessions] navigation,

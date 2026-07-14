@@ -164,6 +164,7 @@ class SerializationRoundTripTest {
             primary = dev.ccpocket.protocol.CodexLimitWindow(34.0, 300, 1783853218),
             secondary = dev.ccpocket.protocol.CodexLimitWindow(12.0, 10080, 1784367236),
             capturedAt = 1_700_000_000_000,
+            resetCreditsAvailable = 2,
         )
         val u = Usage(days = listOf(UsageDay("Mon", 1)), codexLimits = limits)
         val json = PocketJson.encodeToString(Envelope(id = "u4", ts = 0, body = u))
@@ -174,6 +175,23 @@ class SerializationRoundTripTest {
         val old = """{"id":"u5","ts":0,"to":"PEER","body":{"t":"pocket/usage","days":[{"label":"Mon","tokens":100}],
             "models":[],"tokensToday":100,"requestsToday":2}}"""
         assertEquals(null, (PocketJson.decodeFromString<Envelope>(old).body as Usage).codexLimits)
+    }
+
+    @Test
+    fun codex_limit_reset_request_and_result_roundtrip() {
+        val request = Envelope(id = "reset-1", ts = 0, body = ConsumeCodexLimitReset("attempt-key"))
+        val requestJson = PocketJson.encodeToString(request)
+        assertTrue("pocket/codex.limitReset.consume" in requestJson, requestJson)
+        assertEquals(request, PocketJson.decodeFromString<Envelope>(requestJson))
+
+        val limits = CodexLimits(planType = "plus", resetCreditsAvailable = 1)
+        val result = Envelope(id = "reset-2", ts = 0, body = CodexLimitResetResult("reset", limits))
+        assertEquals(result, PocketJson.decodeFromString<Envelope>(PocketJson.encodeToString(result)))
+
+        // Older daemon payloads omit the new count and remain compatible.
+        val oldLimits = """{"id":"reset-old","ts":0,"to":"PEER","body":{"t":"pocket/usage","codexLimits":{"planType":"plus"}}}"""
+        val old = (PocketJson.decodeFromString<Envelope>(oldLimits).body as Usage).codexLimits
+        assertEquals(null, old?.resetCreditsAvailable)
     }
 
     @Test

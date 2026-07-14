@@ -3,6 +3,7 @@ package dev.ccpocket.daemon.codex
 import dev.ccpocket.protocol.CodexCredits
 import dev.ccpocket.protocol.CodexLimitWindow
 import dev.ccpocket.protocol.CodexLimits
+import dev.ccpocket.protocol.CodexLimitResetResult
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -42,14 +43,53 @@ object CodexRateLimitsClient {
             writer.write("""{"id":2,"method":"account/rateLimits/read","params":null}""")
             writer.newLine(); writer.flush()
             val result = readResponse(reader, 2)?.get("result") as? JsonObject ?: return null
-            val byId = result.obj("rateLimitsByLimitId")
-            val snapshot = byId?.obj("codex") ?: result.obj("rateLimits") ?: return null
-            parse(snapshot, now)
+            parseResult(result, now)
         } finally {
             runCatching { process.outputStream.close() }
             process.destroy()
             if (!process.waitFor(500, TimeUnit.MILLISECONDS)) process.destroyForcibly()
         }
+    }
+
+    /** Spend one official reset credit. Callers must obtain an explicit user confirmation first. */
+    @Synchronized
+    fun consume(idempotencyKey: String): CodexLimitResetResult {
+        val exe = CodexLauncher.resolveExecutable().toString()
+        val process = ProcessBuilder(exe, "app-server").start()
+        return try {
+            val writer = process.outputStream.bufferedWriter()
+            val reader = process.inputStream.bufferedReader()
+            writer.write("""{"id":1,"method":"initialize","params":{"clientInfo":{"name":"cc-pocket-usage","version":"1.0"},"capabilities":{"experimentalApi":true}}}""")
+            writer.newLine(); writer.flush()
+            readResponse(reader, 1)
+            writer.write("""{"method":"initialized","params":null}"""); writer.newLine()
+            writer.write("""{"id":2,"method":"account/rateLimitResetCredit/consume","params":{"idempotencyKey":"$idempotencyKey"}}""")
+            writer.newLine(); writer.flush()
+            val consumed = readResponse(reader, 2) ?: return CodexLimitResetResult("error", error = "no response")
+            val rpcError = consumed.obj("error")
+            if (rpcError != null) return CodexLimitResetResult("error", error = rpcError.str("message") ?: "reset failed")
+            val outcome = consumed.obj("result")?.str("outcome") ?: return CodexLimitResetResult("error", error = "missing outcome")
+
+            writer.write("""{"id":3,"method":"account/rateLimits/read","params":null}""")
+            writer.newLine(); writer.flush()
+            val refreshed = readResponse(reader, 3)?.obj("result")?.let { parseResult(it, System.currentTimeMillis()) }
+            if (refreshed != null) { cached = refreshed; cachedAt = System.currentTimeMillis() } else cachedAt = 0L
+            CodexLimitResetResult(outcome, refreshed)
+        } catch (t: Throwable) {
+            CodexLimitResetResult("error", error = t.message ?: "reset failed")
+        } finally {
+            runCatching { process.outputStream.close() }
+            process.destroy()
+            if (!process.waitFor(500, TimeUnit.MILLISECONDS)) process.destroyForcibly()
+        }
+    }
+
+    private fun parseResult(result: JsonObject, now: Long): CodexLimits? {
+        val byId = result.obj("rateLimitsByLimitId")
+        val snapshot = byId?.obj("codex") ?: result.obj("rateLimits") ?: return null
+        val resets = result.obj("rateLimitResetCredits")?.get("availableCount")
+            ?.let { it as? JsonPrimitive }?.longOrNull
+        return parse(snapshot, now, resets)
     }
 
     private fun readResponse(reader: java.io.BufferedReader, id: Long): JsonObject? =
@@ -62,7 +102,7 @@ object CodexRateLimitsClient {
             @Suppress("UNREACHABLE_CODE") null
         }.get(8, TimeUnit.SECONDS)
 
-    private fun parse(s: JsonObject, now: Long): CodexLimits {
+    private fun parse(s: JsonObject, now: Long, resetCreditsAvailable: Long?): CodexLimits {
         val primary = s.obj("primary")?.window()
         val secondary = s.obj("secondary")?.window()
         val credits = s.obj("credits")?.let {
@@ -72,6 +112,7 @@ object CodexRateLimitsClient {
             planType = s.str("planType"), primary = primary, secondary = secondary, credits = credits,
             rateLimitReached = s["rateLimitReachedType"] != null && s["rateLimitReachedType"] !is JsonNull,
             capturedAt = now,
+            resetCreditsAvailable = resetCreditsAvailable,
         )
     }
 

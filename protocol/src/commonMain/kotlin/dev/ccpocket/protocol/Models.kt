@@ -238,6 +238,9 @@ data class CodexLimits(
     val credits: CodexCredits? = null,
     val rateLimitReached: Boolean = false,
     val capturedAt: Long? = null, // millis when this snapshot was read from disk
+    /** Official one-shot rate-limit reset credits currently available; null means this Codex version/account
+     * did not report the feature. This is separate from purchased ChatGPT credits. */
+    val resetCreditsAvailable: Long? = null,
 )
 
 /** One Claude allowance window (5-hour session or weekly) from the account's OAuth usage endpoint. */
