@@ -72,6 +72,9 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
     private val reviewStartIds = ConcurrentHashMap.newKeySet<Long>()
     private val skillsListIds = ConcurrentHashMap.newKeySet<Long>()
     private val skillWriteIds = ConcurrentHashMap.newKeySet<Long>()
+    private val pluginListIds = ConcurrentHashMap.newKeySet<Long>()
+    private val pluginInstallIds = ConcurrentHashMap.newKeySet<Long>()
+    private val pluginUninstallIds = ConcurrentHashMap.newKeySet<Long>()
 
     // a turn's running state, reset on turn/completed
     @Volatile private var lastAgentText: String? = null
@@ -109,12 +112,15 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         pendingGoal = null
         pendingReview = null
         goalGetId = -1; goalSetIds.clear(); goalClearIds.clear(); reviewStartIds.clear(); skillsListIds.clear(); skillWriteIds.clear()
+        pluginListIds.clear(); pluginInstallIds.clear(); pluginUninstallIds.clear()
         lastAgentText = null; lastUsage = Usage(); usageSeen = false
         deltaSeen.clear(); fileChangePaths.clear(); fileChangeDiffs.clear(); pendingApprovals.clear()
         // kick off the handshake — initialized + thread open happen when the response lands (see handleResponse)
         initializeId = rpcRequest("initialize", buildJsonObject {
             putJsonObject("clientInfo") { put("name", "cc-pocket"); put("version", CLIENT_VERSION) }
-            putJsonObject("capabilities") { put("experimentalApi", false) }
+            // Skills/plugins are current app-server APIs but some response fields are still marked
+            // experimental. Opt in explicitly so Codex rejects neither those methods nor their metadata.
+            putJsonObject("capabilities") { put("experimentalApi", true) }
         })
     }
 
@@ -164,6 +170,16 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
                 listSkills(forceReload = true)
                 emptyList()
             }
+            responseId != null && pluginListIds.remove(responseId) -> listOf(pluginsEvent(result as? JsonObject))
+            responseId != null && pluginInstallIds.remove(responseId) -> {
+                val authCount = ((result as? JsonObject)?.get("appsNeedingAuth") as? JsonArray)?.size ?: 0
+                listPlugins()
+                listOf(AgentEvent.PluginsChanged(notice = if (authCount > 0) "$authCount app connection(s) require authorization" else "Plugin installed"))
+            }
+            responseId != null && pluginUninstallIds.remove(responseId) -> {
+                listPlugins()
+                listOf(AgentEvent.PluginsChanged(notice = "Plugin uninstalled"))
+            }
             else -> {
                 responseId?.let(pendingSteers::remove)
                 emptyList()
@@ -190,6 +206,9 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         }
         if (id != null && (skillsListIds.remove(id) || skillWriteIds.remove(id))) {
             return listOf(AgentEvent.SkillsChanged(emptyList(), error?.str("message") ?: "skills request failed"))
+        }
+        if (id != null && (pluginListIds.remove(id) || pluginInstallIds.remove(id) || pluginUninstallIds.remove(id))) {
+            return listOf(AgentEvent.PluginsChanged(error = error?.str("message") ?: "plugin request failed"))
         }
         log.warn("codex error: $error")
         return emptyList()
@@ -507,6 +526,59 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
             )
         }
         return AgentEvent.SkillsChanged(skills, errors?.joinToString("\n")?.takeIf { it.isNotBlank() })
+    }
+
+    override suspend fun listPlugins(): Boolean {
+        if (threadId == null) return false
+        rpcRequest("plugin/list", buildJsonObject { putJsonArray("cwds") { add(JsonPrimitive(workdir)) } }) { pluginListIds.add(it) }
+        return true
+    }
+
+    override suspend fun setPluginInstalled(
+        pluginId: String,
+        pluginName: String,
+        marketplace: String,
+        marketplacePath: String?,
+        installed: Boolean,
+    ): Boolean {
+        if (threadId == null || pluginId.isBlank() || pluginName.isBlank()) return false
+        if (installed) {
+            rpcRequest("plugin/install", buildJsonObject {
+                put("pluginName", pluginName)
+                if (marketplacePath != null) put("marketplacePath", marketplacePath) else put("remoteMarketplaceName", marketplace)
+            }) { pluginInstallIds.add(it) }
+        } else {
+            rpcRequest("plugin/uninstall", buildJsonObject { put("pluginId", pluginId) }) { pluginUninstallIds.add(it) }
+        }
+        return true
+    }
+
+    private fun pluginsEvent(result: JsonObject?): AgentEvent.PluginsChanged {
+        val plugins = mutableListOf<dev.ccpocket.protocol.CodexPlugin>()
+        (result?.get("marketplaces") as? JsonArray).orEmpty().forEach marketLoop@ { rawMarket ->
+            val market = rawMarket as? JsonObject ?: return@marketLoop
+            val marketName = market.str("name") ?: return@marketLoop
+            val marketPath = market.str("path")
+            (market["plugins"] as? JsonArray).orEmpty().forEach pluginLoop@ { rawPlugin ->
+                val p = rawPlugin as? JsonObject ?: return@pluginLoop
+                val ui = p.obj("interface")
+                plugins += dev.ccpocket.protocol.CodexPlugin(
+                    id = p.str("id") ?: return@pluginLoop,
+                    name = p.str("name") ?: return@pluginLoop,
+                    marketplace = marketName,
+                    marketplacePath = marketPath,
+                    displayName = ui?.str("displayName"),
+                    description = ui?.str("shortDescription") ?: ui?.str("longDescription"),
+                    installed = (p["installed"] as? JsonPrimitive)?.booleanOrNull ?: false,
+                    enabled = (p["enabled"] as? JsonPrimitive)?.booleanOrNull ?: false,
+                    installPolicy = p.str("installPolicy") ?: "AVAILABLE",
+                    availability = p.str("availability") ?: "AVAILABLE",
+                    version = p.str("localVersion") ?: p.str("version"),
+                )
+            }
+        }
+        val errors = (result?.get("marketplaceLoadErrors") as? JsonArray)?.mapNotNull { (it as? JsonObject)?.str("message") }
+        return AgentEvent.PluginsChanged(plugins, errors?.joinToString("\n")?.takeIf(String::isNotBlank))
     }
 
     override suspend fun respondPermission(

@@ -723,6 +723,7 @@ class Conversation(
                         sink.emit(live(sessionId))
                     }
                     is AgentEvent.SkillsChanged -> sink.emit(dev.ccpocket.protocol.CodexSkillsState(convoId, ev.skills, error = ev.error))
+                    is AgentEvent.PluginsChanged -> sink.emit(dev.ccpocket.protocol.CodexPluginsState(convoId, ev.plugins, error = ev.error, notice = ev.notice))
                     // the CLI's consumption receipt (issue #122): a top-level user replay proves the
                     // matching prompt reached the model — settle its ledger entry. A parent-tagged
                     // replay is a sub-agent's inner user line, never one of ours.
@@ -1154,6 +1155,18 @@ class Conversation(
     suspend fun setSkillEnabled(path: String, enabled: Boolean) {
         if (backend.kind != AgentKind.CODEX || !backend.setSkillEnabled(path, enabled)) {
             sink.emit(dev.ccpocket.protocol.CodexSkillsState(convoId, error = "Unable to update this Codex skill"))
+        }
+    }
+
+    suspend fun listPlugins() {
+        if (backend.kind != AgentKind.CODEX || proc == null || !backend.listPlugins()) {
+            sink.emit(dev.ccpocket.protocol.CodexPluginsState(convoId, error = "Codex plugins are available after the thread has started"))
+        } else sink.emit(dev.ccpocket.protocol.CodexPluginsState(convoId, loading = true))
+    }
+
+    suspend fun setPluginInstalled(frame: dev.ccpocket.protocol.SetCodexPluginInstalled) {
+        if (backend.kind != AgentKind.CODEX || !backend.setPluginInstalled(frame.pluginId, frame.pluginName, frame.marketplace, frame.marketplacePath, frame.installed)) {
+            sink.emit(dev.ccpocket.protocol.CodexPluginsState(convoId, error = "Unable to update this Codex plugin"))
         }
     }
 

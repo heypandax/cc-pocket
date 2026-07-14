@@ -177,6 +177,20 @@ class CodexBackendTest {
     }
 
     @Test
+    fun plugins_list_install_and_uninstall_use_official_rpc() = runBlocking {
+        val w = mutableListOf<String>()
+        val b = ready(w)
+        assertTrue(b.listPlugins())
+        assertTrue("\"method\":\"plugin/list\"" in w.last(), w.last())
+        val events = b.parse("""{"id":4,"result":{"marketplaces":[{"name":"official","plugins":[{"id":"p1","name":"reviewer","installed":false,"enabled":false,"installPolicy":"AVAILABLE","authPolicy":"ON_USE","source":{"type":"remote"},"interface":{"displayName":"Reviewer","shortDescription":"Review code","capabilities":[],"screenshots":[],"screenshotUrls":[]}}]}]}}""")
+        val plugin = assertIs<AgentEvent.PluginsChanged>(events.single()).plugins.single()
+        assertEquals("Reviewer", plugin.displayName)
+        assertTrue(b.setPluginInstalled(plugin.id, plugin.name, plugin.marketplace, plugin.marketplacePath, true))
+        assertTrue("\"method\":\"plugin/install\"" in w.last(), w.last())
+        assertTrue("\"remoteMarketplaceName\":\"official\"" in w.last(), w.last())
+    }
+
+    @Test
     fun completed_agent_message_not_duplicated_after_deltas() = runBlocking {
         val w = mutableListOf<String>()
         val b = ready(w)

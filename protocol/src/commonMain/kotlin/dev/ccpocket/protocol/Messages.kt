@@ -147,6 +147,21 @@ data class ListCodexSkills(val convoId: String, val forceReload: Boolean = false
 @SerialName("pocket/codex.skill.enable")
 data class SetCodexSkillEnabled(val convoId: String, val path: String, val enabled: Boolean) : ToDaemon
 
+@Serializable
+@SerialName("pocket/codex.plugins.list")
+data class ListCodexPlugins(val convoId: String) : ToDaemon
+
+@Serializable
+@SerialName("pocket/codex.plugin.install")
+data class SetCodexPluginInstalled(
+    val convoId: String,
+    val pluginId: String,
+    val pluginName: String,
+    val marketplace: String,
+    val marketplacePath: String? = null,
+    val installed: Boolean,
+) : ToDaemon
+
 /** Stop one background job (a backgrounded shell / sub-agent / monitor) from the phone's task panel
  *  (issue #80). [jobId] is the job's originating tool_use id — the [BackgroundJob.id] the daemon put on
  *  the wire. The daemon interrupts the agent's in-flight work for this conversation and marks that job
@@ -451,6 +466,16 @@ data class CodexSkillsState(
     val skills: List<CodexSkill> = emptyList(),
     val loading: Boolean = false,
     val error: String? = null,
+) : ToPhone
+
+@Serializable
+@SerialName("pocket/codex.plugins")
+data class CodexPluginsState(
+    val convoId: String,
+    val plugins: List<CodexPlugin> = emptyList(),
+    val loading: Boolean = false,
+    val error: String? = null,
+    val notice: String? = null,
 ) : ToPhone
 
 /**

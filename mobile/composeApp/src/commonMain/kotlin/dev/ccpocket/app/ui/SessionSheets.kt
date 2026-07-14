@@ -297,17 +297,35 @@ fun QuickActionsSheet(
 
 @Composable
 private fun SkillsView(repo: PocketRepository, onBack: () -> Unit) {
-    LaunchedEffect(Unit) { repo.loadCodexSkills() }
+    var tab by remember { mutableStateOf("skills") }
+    var uninstallArmed by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(tab) { if (tab == "skills") repo.loadCodexSkills() else repo.loadCodexPlugins() }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("‹ ", color = Tok.tx2, fontSize = 18.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 4.dp))
-        Text(stringResource(Res.string.skills_title), color = Tok.tx, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-        Text(stringResource(Res.string.skills_refresh), color = Tok.accent, fontSize = 12.sp, modifier = Modifier.clickable { repo.loadCodexSkills(true) }.padding(6.dp))
+        Text(stringResource(Res.string.extensions_title), color = Tok.tx, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        Text(stringResource(Res.string.skills_refresh), color = Tok.accent, fontSize = 12.sp, modifier = Modifier.clickable {
+            if (tab == "skills") repo.loadCodexSkills(true) else repo.loadCodexPlugins()
+        }.padding(6.dp))
     }
-    Text(stringResource(Res.string.skills_subtitle), color = Tok.tx2, fontSize = 12.5.sp, modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
-    if (repo.codexSkillsLoading.value) CircularProgressIndicator(Modifier.padding(20.dp).size(22.dp), strokeWidth = 2.dp)
-    repo.codexSkillsError.value?.let { Text(it, color = Tok.danger, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp)) }
+    Row(Modifier.padding(top = 8.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf("skills" to Res.string.skills_tab, "plugins" to Res.string.plugins_tab).forEach { (id, label) ->
+            Text(stringResource(label), color = if (tab == id) Tok.base else Tok.tx2, fontSize = 12.sp,
+                modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(if (tab == id) Tok.accent else Tok.surface)
+                    .clickable { tab = id }.padding(horizontal = 14.dp, vertical = 7.dp))
+        }
+    }
+    if (tab == "skills") {
+        Text(stringResource(Res.string.skills_subtitle), color = Tok.tx2, fontSize = 12.5.sp, modifier = Modifier.padding(bottom = 10.dp))
+        if (repo.codexSkillsLoading.value) CircularProgressIndicator(Modifier.padding(20.dp).size(22.dp), strokeWidth = 2.dp)
+        repo.codexSkillsError.value?.let { Text(it, color = Tok.danger, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp)) }
+    } else {
+        Text(stringResource(Res.string.plugins_subtitle), color = Tok.tx2, fontSize = 12.5.sp, modifier = Modifier.padding(bottom = 10.dp))
+        if (repo.codexPluginsLoading.value) CircularProgressIndicator(Modifier.padding(20.dp).size(22.dp), strokeWidth = 2.dp)
+        repo.codexPluginsError.value?.let { Text(it, color = Tok.danger, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp)) }
+        repo.codexPluginsNotice.value?.let { Text(it, color = Tok.ok, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp)) }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        repo.codexSkills.forEach { skill ->
+        if (tab == "skills") repo.codexSkills.forEach { skill ->
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Tok.surface)
                     .border(1.dp, Tok.hair, RoundedCornerShape(10.dp))
@@ -320,6 +338,32 @@ private fun SkillsView(repo: PocketRepository, onBack: () -> Unit) {
                     Text(skill.scope.uppercase(), color = Tok.muted, fontSize = 9.5.sp, modifier = Modifier.padding(top = 3.dp))
                 }
                 Text(if (skill.enabled) stringResource(Res.string.skills_enabled) else stringResource(Res.string.skills_disabled), color = if (skill.enabled) Tok.ok else Tok.muted, fontSize = 11.sp)
+            }
+        }
+        if (tab == "plugins") repo.codexPlugins.forEach { plugin ->
+            val blocked = plugin.availability == "DISABLED_BY_ADMIN" || plugin.installPolicy == "NOT_AVAILABLE"
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Tok.surface)
+                    .border(1.dp, Tok.hair, RoundedCornerShape(10.dp)).padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(plugin.displayName ?: plugin.name, color = Tok.tx, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    plugin.description?.let { Text(it, color = Tok.tx2, fontSize = 11.5.sp, maxLines = 2) }
+                    Text(buildString { append(plugin.marketplace); plugin.version?.let { append(" · ").append(it) } }, color = Tok.muted, fontSize = 9.5.sp, modifier = Modifier.padding(top = 3.dp))
+                }
+                val label = when {
+                    blocked -> Res.string.plugins_blocked
+                    plugin.installed && uninstallArmed == plugin.id -> Res.string.plugins_confirm_remove
+                    plugin.installed -> Res.string.plugins_remove
+                    else -> Res.string.plugins_install
+                }
+                Text(stringResource(label), color = if (blocked) Tok.muted else if (plugin.installed) Tok.danger else Tok.accent, fontSize = 11.sp,
+                    modifier = Modifier.clickable(enabled = !blocked) {
+                        if (!plugin.installed) repo.setCodexPluginInstalled(plugin, true)
+                        else if (uninstallArmed == plugin.id) { repo.setCodexPluginInstalled(plugin, false); uninstallArmed = null }
+                        else uninstallArmed = plugin.id
+                    }.padding(8.dp))
             }
         }
     }

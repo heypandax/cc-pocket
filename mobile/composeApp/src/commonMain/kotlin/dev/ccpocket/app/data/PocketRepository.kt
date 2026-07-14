@@ -41,6 +41,10 @@ import dev.ccpocket.protocol.ListCodexSkills
 import dev.ccpocket.protocol.SetCodexSkillEnabled
 import dev.ccpocket.protocol.CodexSkill
 import dev.ccpocket.protocol.CodexSkillsState
+import dev.ccpocket.protocol.CodexPlugin
+import dev.ccpocket.protocol.CodexPluginsState
+import dev.ccpocket.protocol.ListCodexPlugins
+import dev.ccpocket.protocol.SetCodexPluginInstalled
 import dev.ccpocket.protocol.CodexGoal
 import dev.ccpocket.protocol.CodexGoalState
 import dev.ccpocket.protocol.CursorModels
@@ -457,6 +461,10 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     val codexSkills = mutableStateListOf<CodexSkill>()
     val codexSkillsLoading = mutableStateOf(false)
     val codexSkillsError = mutableStateOf<String?>(null)
+    val codexPlugins = mutableStateListOf<CodexPlugin>()
+    val codexPluginsLoading = mutableStateOf(false)
+    val codexPluginsError = mutableStateOf<String?>(null)
+    val codexPluginsNotice = mutableStateOf<String?>(null)
     val workdir = mutableStateOf<String?>(null)
     val chatTitle = mutableStateOf<String?>(null)            // session title for the chat header (client-side)
     private var thinkStartMs: Long? = null                   // first Thinking chunk of the in-progress block
@@ -1417,6 +1425,12 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 codexSkillsError.value = f.error
                 if (!f.loading && f.error == null) { codexSkills.clear(); codexSkills.addAll(f.skills) }
             }
+            is CodexPluginsState -> if (f.convoId == convoId.value) {
+                codexPluginsLoading.value = f.loading
+                codexPluginsError.value = f.error
+                f.notice?.let { codexPluginsNotice.value = it }
+                if (!f.loading && f.error == null && f.notice == null) { codexPlugins.clear(); codexPlugins.addAll(f.plugins) }
+            }
             is AuthState -> authState.value = f
             is PushPrefs -> pushPrefs.value = f.enabled
             is VoiceAgentStatus -> voiceAgent.value = f
@@ -1829,6 +1843,19 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         scope.launch { send(SetCodexSkillEnabled(id, path, enabled)) }
     }
 
+    fun loadCodexPlugins() {
+        val id = convoId.value ?: return
+        codexPluginsLoading.value = true
+        codexPluginsError.value = null
+        scope.launch { send(ListCodexPlugins(id)) }
+    }
+
+    fun setCodexPluginInstalled(plugin: CodexPlugin, installed: Boolean) {
+        val id = convoId.value ?: return
+        codexPluginsNotice.value = null
+        scope.launch { send(SetCodexPluginInstalled(id, plugin.id, plugin.name, plugin.marketplace, plugin.marketplacePath, installed)) }
+    }
+
     /** Called only after the destructive confirmation dialog. A stable random key makes one tap one spend. */
     fun consumeCodexLimitReset() {
         if (codexResetting.value) return
@@ -1899,6 +1926,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         codexGoal.value = null
         codexGoalError.value = null
         codexSkills.clear(); codexSkillsLoading.value = false; codexSkillsError.value = null
+        codexPlugins.clear(); codexPluginsLoading.value = false; codexPluginsError.value = null; codexPluginsNotice.value = null
         openTimedOut.value = false
         promptPending = false // the pending marker belongs to the previous conversation's transcript
         promptWatchdog?.cancel(); promptWatchdog = null; sendStalled.value = false // and so does its receipt deadline
@@ -2536,6 +2564,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         codexGoal.value = null
         codexGoalError.value = null
         codexSkills.clear(); codexSkillsLoading.value = false; codexSkillsError.value = null
+        codexPlugins.clear(); codexPluginsLoading.value = false; codexPluginsError.value = null; codexPluginsNotice.value = null
         chatTitle.value = null
         messages.clear(); activityEvents.clear()
         pendingImages.clear()

@@ -395,3 +395,19 @@ data class CodexSkill(
     val displayName: String? = null,
     val shortDescription: String? = null,
 )
+
+/** One plugin advertised by an official Codex marketplace. */
+@Serializable
+data class CodexPlugin(
+    val id: String,
+    val name: String,
+    val marketplace: String,
+    val marketplacePath: String? = null,
+    val displayName: String? = null,
+    val description: String? = null,
+    val installed: Boolean = false,
+    val enabled: Boolean = false,
+    val installPolicy: String = "AVAILABLE",
+    val availability: String = "AVAILABLE",
+    val version: String? = null,
+)
