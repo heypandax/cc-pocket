@@ -265,6 +265,14 @@ class SerializationRoundTripTest {
     }
 
     @Test
+    fun codex_integrations_roundtrip() {
+        val request = Envelope(id = "mcp", ts = 0, body = ListCodexIntegrations("c1", true))
+        assertEquals(request, PocketJson.decodeFromString<Envelope>(PocketJson.encodeToString(request)))
+        val state = Envelope(id = "mcp-state", ts = 0, body = CodexIntegrationsState("c1", servers = listOf(CodexMcpServer("docs", toolCount = 2))))
+        assertEquals(state, PocketJson.decodeFromString<Envelope>(PocketJson.encodeToString(state)))
+    }
+
+    @Test
     fun usage_claude_limits_roundtrip_and_old_frames_default() {
         val limits = dev.ccpocket.protocol.ClaudeLimits(
             planType = "pro",

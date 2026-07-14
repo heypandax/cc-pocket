@@ -411,3 +411,27 @@ data class CodexPlugin(
     val availability: String = "AVAILABLE",
     val version: String? = null,
 )
+
+@Serializable
+data class CodexMcpServer(
+    val name: String,
+    val title: String? = null,
+    val description: String? = null,
+    val version: String? = null,
+    val authStatus: String = "unsupported",
+    val toolCount: Int = 0,
+    val resourceCount: Int = 0,
+    val templateCount: Int = 0,
+)
+
+@Serializable
+data class CodexApp(
+    val id: String,
+    val name: String,
+    val description: String? = null,
+    val installUrl: String? = null,
+    val accessible: Boolean = false,
+    val enabled: Boolean = true,
+    val developer: String? = null,
+    val version: String? = null,
+)

@@ -81,6 +81,13 @@ sealed interface AgentEvent {
         val error: String? = null,
         val notice: String? = null,
     ) : AgentEvent
+    data class IntegrationsChanged(
+        val servers: List<dev.ccpocket.protocol.CodexMcpServer>? = null,
+        val apps: List<dev.ccpocket.protocol.CodexApp>? = null,
+        val authorizationUrl: String? = null,
+        val error: String? = null,
+        val notice: String? = null,
+    ) : AgentEvent
 
     /** a known-but-uninteresting line (hook_*, rate_limit_event, serverRequest/resolved, ...). */
     data class Ignored(val type: String?) : AgentEvent

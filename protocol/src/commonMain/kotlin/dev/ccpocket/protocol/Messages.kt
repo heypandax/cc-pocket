@@ -162,6 +162,18 @@ data class SetCodexPluginInstalled(
     val installed: Boolean,
 ) : ToDaemon
 
+@Serializable
+@SerialName("pocket/codex.integrations.list")
+data class ListCodexIntegrations(val convoId: String, val forceReload: Boolean = false) : ToDaemon
+
+@Serializable
+@SerialName("pocket/codex.mcp.reload")
+data class ReloadCodexMcp(val convoId: String) : ToDaemon
+
+@Serializable
+@SerialName("pocket/codex.mcp.login")
+data class LoginCodexMcp(val convoId: String, val serverName: String) : ToDaemon
+
 /** Stop one background job (a backgrounded shell / sub-agent / monitor) from the phone's task panel
  *  (issue #80). [jobId] is the job's originating tool_use id — the [BackgroundJob.id] the daemon put on
  *  the wire. The daemon interrupts the agent's in-flight work for this conversation and marks that job
@@ -474,6 +486,18 @@ data class CodexPluginsState(
     val convoId: String,
     val plugins: List<CodexPlugin> = emptyList(),
     val loading: Boolean = false,
+    val error: String? = null,
+    val notice: String? = null,
+) : ToPhone
+
+@Serializable
+@SerialName("pocket/codex.integrations")
+data class CodexIntegrationsState(
+    val convoId: String,
+    val servers: List<CodexMcpServer>? = null,
+    val apps: List<CodexApp>? = null,
+    val loading: Boolean = false,
+    val authorizationUrl: String? = null,
     val error: String? = null,
     val notice: String? = null,
 ) : ToPhone

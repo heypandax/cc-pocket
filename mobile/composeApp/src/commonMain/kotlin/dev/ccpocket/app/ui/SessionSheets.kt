@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
@@ -203,7 +204,7 @@ private fun Hairline() = Box(Modifier.fillMaxWidth().height(1.dp).background(Tok
 // ════════════════════════════════════════════════════════════════════
 //  Quick actions: switch model / effort, compact, clear, simplify
 // ════════════════════════════════════════════════════════════════════
-enum class QuickActionSection { MAIN, MODEL, EFFORT, ACTIVITY, GOAL, REVIEW, SKILLS }
+enum class QuickActionSection { MAIN, MODEL, EFFORT, ACTIVITY, GOAL, REVIEW, SKILLS, INTEGRATIONS }
 
 @Composable
 fun QuickActionsSheet(
@@ -243,6 +244,7 @@ fun QuickActionsSheet(
                         if (repo.sessionAgent.value == AgentKind.CODEX) {
                             ActionRow(stringResource(Res.string.qa_review_native), chevron = true) { sub = QuickActionSection.REVIEW }
                             ActionRow(stringResource(Res.string.qa_skills), value = repo.codexSkills.size.takeIf { it > 0 }?.toString(), chevron = true) { sub = QuickActionSection.SKILLS }
+                            ActionRow(stringResource(Res.string.qa_integrations), value = repo.codexMcpServers.size.takeIf { it > 0 }?.toString(), chevron = true) { sub = QuickActionSection.INTEGRATIONS }
                             ActionRow(
                                 stringResource(Res.string.qa_goal),
                                 value = when (repo.codexGoal.value?.status) {
@@ -290,9 +292,62 @@ fun QuickActionsSheet(
                 QuickActionSection.GOAL -> GoalEditor(repo, onBack = { sub = QuickActionSection.MAIN }, onDone = onDismiss)
                 QuickActionSection.REVIEW -> ReviewEditor(repo, onBack = { sub = QuickActionSection.MAIN }, onDone = onDismiss)
                 QuickActionSection.SKILLS -> SkillsView(repo, onBack = { sub = QuickActionSection.MAIN })
+                QuickActionSection.INTEGRATIONS -> IntegrationsView(repo, onBack = { sub = QuickActionSection.MAIN })
             }
         }
     }
+}
+
+@Composable
+private fun IntegrationsView(repo: PocketRepository, onBack: () -> Unit) {
+    val uri = LocalUriHandler.current
+    var tab by remember { mutableStateOf("mcp") }
+    LaunchedEffect(Unit) { repo.loadCodexIntegrations() }
+    val authUrl = repo.codexAuthorizationUrl.value
+    LaunchedEffect(authUrl) { authUrl?.let { uri.openUri(it); repo.consumeCodexAuthorizationUrl() } }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("‹ ", color = Tok.tx2, fontSize = 18.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 4.dp))
+        Text(stringResource(Res.string.integrations_title), color = Tok.tx, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        Text(stringResource(Res.string.skills_refresh), color = Tok.accent, fontSize = 12.sp, modifier = Modifier.clickable { repo.loadCodexIntegrations(true) }.padding(6.dp))
+    }
+    Row(Modifier.padding(top = 8.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf("mcp" to Res.string.mcp_tab, "apps" to Res.string.apps_tab).forEach { (id, label) ->
+            Text(stringResource(label), color = if (tab == id) Tok.base else Tok.tx2, fontSize = 12.sp,
+                modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(if (tab == id) Tok.accent else Tok.surface)
+                    .clickable { tab = id }.padding(horizontal = 14.dp, vertical = 7.dp))
+        }
+    }
+    if (repo.codexIntegrationsLoading.value) CircularProgressIndicator(Modifier.padding(20.dp).size(22.dp), strokeWidth = 2.dp)
+    repo.codexIntegrationsError.value?.let { Text(it, color = Tok.danger, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp)) }
+    repo.codexIntegrationsNotice.value?.let { Text(it, color = Tok.ok, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp)) }
+    if (tab == "mcp") {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Text(stringResource(Res.string.mcp_reload), color = Tok.accent, fontSize = 11.5.sp, modifier = Modifier.clickable { repo.reloadCodexMcp() }.padding(8.dp))
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { repo.codexMcpServers.forEach { server ->
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(10.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(server.title ?: server.name, color = Tok.tx, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    server.description?.let { Text(it, color = Tok.tx2, fontSize = 11.5.sp, maxLines = 2) }
+                    Text(stringResource(Res.string.mcp_counts, server.toolCount, server.resourceCount, server.templateCount), color = Tok.muted, fontSize = 9.5.sp, modifier = Modifier.padding(top = 3.dp))
+                }
+                val login = server.authStatus == "notLoggedIn"
+                Text(if (login) stringResource(Res.string.mcp_login) else server.authStatus, color = if (login) Tok.accent else Tok.ok, fontSize = 11.sp,
+                    modifier = Modifier.clickable(enabled = login) { repo.loginCodexMcp(server.name) }.padding(8.dp))
+            }
+        } }
+    } else Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { repo.codexApps.forEach { app ->
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(10.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(app.name, color = Tok.tx, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                app.description?.let { Text(it, color = Tok.tx2, fontSize = 11.5.sp, maxLines = 2) }
+                app.developer?.let { Text(it, color = Tok.muted, fontSize = 9.5.sp, modifier = Modifier.padding(top = 3.dp)) }
+            }
+            val link = !app.accessible && app.installUrl != null
+            Text(if (app.accessible) stringResource(Res.string.app_connected) else stringResource(Res.string.app_connect), color = if (app.accessible) Tok.ok else Tok.accent, fontSize = 11.sp,
+                modifier = Modifier.clickable(enabled = link) { app.installUrl?.let(uri::openUri) }.padding(8.dp))
+        }
+    } }
 }
 
 @Composable

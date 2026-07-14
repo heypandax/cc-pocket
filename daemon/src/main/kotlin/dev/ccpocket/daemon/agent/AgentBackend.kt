@@ -58,6 +58,9 @@ interface AgentBackend {
     suspend fun setSkillEnabled(path: String, enabled: Boolean): Boolean = false
     suspend fun listPlugins(): Boolean = false
     suspend fun setPluginInstalled(pluginId: String, pluginName: String, marketplace: String, marketplacePath: String?, installed: Boolean): Boolean = false
+    suspend fun listIntegrations(forceReload: Boolean): Boolean = false
+    suspend fun reloadMcp(): Boolean = false
+    suspend fun loginMcp(name: String): Boolean = false
 
     /** Write a permission decision for [askId] (an [AgentEvent.ControlRequest.requestId]).
      *  [remember] maps to a session-scoped "always allow" (Codex acceptForSession). */

@@ -28,6 +28,9 @@ import dev.ccpocket.protocol.ListCodexSkills
 import dev.ccpocket.protocol.SetCodexSkillEnabled
 import dev.ccpocket.protocol.ListCodexPlugins
 import dev.ccpocket.protocol.SetCodexPluginInstalled
+import dev.ccpocket.protocol.ListCodexIntegrations
+import dev.ccpocket.protocol.ReloadCodexMcp
+import dev.ccpocket.protocol.LoginCodexMcp
 import dev.ccpocket.protocol.Directories
 import dev.ccpocket.protocol.FetchAuthStatus
 import dev.ccpocket.protocol.FetchUsage
@@ -232,6 +235,9 @@ class RequestRouter(
             is SetCodexSkillEnabled -> registry.setSkillEnabled(frame)
             is ListCodexPlugins -> registry.listPlugins(frame)
             is SetCodexPluginInstalled -> registry.setPluginInstalled(frame)
+            is ListCodexIntegrations -> registry.listIntegrations(frame)
+            is ReloadCodexMcp -> registry.reloadMcp(frame)
+            is LoginCodexMcp -> registry.loginMcp(frame)
             // task panel "stop" (issue #80): interrupt the agent's work for this job + settle its row killed
             is StopBackgroundJob -> registry.stopBackgroundJob(frame)
 

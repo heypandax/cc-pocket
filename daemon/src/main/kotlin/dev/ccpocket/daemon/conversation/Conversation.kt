@@ -724,6 +724,7 @@ class Conversation(
                     }
                     is AgentEvent.SkillsChanged -> sink.emit(dev.ccpocket.protocol.CodexSkillsState(convoId, ev.skills, error = ev.error))
                     is AgentEvent.PluginsChanged -> sink.emit(dev.ccpocket.protocol.CodexPluginsState(convoId, ev.plugins, error = ev.error, notice = ev.notice))
+                    is AgentEvent.IntegrationsChanged -> sink.emit(dev.ccpocket.protocol.CodexIntegrationsState(convoId, ev.servers, ev.apps, authorizationUrl = ev.authorizationUrl, error = ev.error, notice = ev.notice))
                     // the CLI's consumption receipt (issue #122): a top-level user replay proves the
                     // matching prompt reached the model — settle its ledger entry. A parent-tagged
                     // replay is a sub-agent's inner user line, never one of ours.
@@ -1168,6 +1169,20 @@ class Conversation(
         if (backend.kind != AgentKind.CODEX || !backend.setPluginInstalled(frame.pluginId, frame.pluginName, frame.marketplace, frame.marketplacePath, frame.installed)) {
             sink.emit(dev.ccpocket.protocol.CodexPluginsState(convoId, error = "Unable to update this Codex plugin"))
         }
+    }
+
+    suspend fun listIntegrations(forceReload: Boolean) {
+        if (backend.kind != AgentKind.CODEX || proc == null || !backend.listIntegrations(forceReload)) {
+            sink.emit(dev.ccpocket.protocol.CodexIntegrationsState(convoId, error = "Codex integrations are available after the thread has started"))
+        } else sink.emit(dev.ccpocket.protocol.CodexIntegrationsState(convoId, loading = true))
+    }
+
+    suspend fun reloadMcp() {
+        if (!backend.reloadMcp()) sink.emit(dev.ccpocket.protocol.CodexIntegrationsState(convoId, error = "Unable to reload MCP configuration"))
+    }
+
+    suspend fun loginMcp(name: String) {
+        if (!backend.loginMcp(name)) sink.emit(dev.ccpocket.protocol.CodexIntegrationsState(convoId, error = "Unable to start MCP authorization"))
     }
 
     /**

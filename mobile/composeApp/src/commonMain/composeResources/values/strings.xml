@@ -440,6 +440,15 @@
     <string name="qa_goal">Goal</string>
     <string name="qa_review_native">Code review</string>
     <string name="qa_skills">Skills &amp; plugins</string>
+    <string name="qa_integrations">MCP &amp; Apps</string>
+    <string name="integrations_title">MCP &amp; Apps</string>
+    <string name="mcp_tab">MCP servers</string>
+    <string name="apps_tab">Apps</string>
+    <string name="mcp_reload">Reload configuration</string>
+    <string name="mcp_login">Log in</string>
+    <string name="mcp_counts">%1$d tools · %2$d resources · %3$d templates</string>
+    <string name="app_connected">Connected</string>
+    <string name="app_connect">Connect</string>
     <string name="extensions_title">Skills &amp; plugins</string>
     <string name="skills_tab">Skills</string>
     <string name="plugins_tab">Plugins</string>

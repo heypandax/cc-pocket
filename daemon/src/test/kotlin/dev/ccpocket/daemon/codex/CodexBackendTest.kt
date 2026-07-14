@@ -191,6 +191,21 @@ class CodexBackendTest {
     }
 
     @Test
+    fun integrations_list_and_oauth_use_official_rpc() = runBlocking {
+        val w = mutableListOf<String>()
+        val b = ready(w)
+        assertTrue(b.listIntegrations(false))
+        assertTrue(w.any { "\"method\":\"mcpServerStatus/list\"" in it })
+        assertTrue(w.any { "\"method\":\"app/list\"" in it })
+        val mcp = b.parse("""{"id":4,"result":{"data":[{"name":"docs","authStatus":"notLoggedIn","tools":{"search":{"name":"search","inputSchema":{}}},"resources":[],"resourceTemplates":[],"serverInfo":{"name":"docs","title":"Docs","version":"1"}}]}}""")
+        assertEquals(1, assertIs<AgentEvent.IntegrationsChanged>(mcp.single()).servers?.single()?.toolCount)
+        val apps = b.parse("""{"id":5,"result":{"data":[{"id":"a1","name":"Drive","isAccessible":true,"isEnabled":true}]}}""")
+        assertTrue(assertIs<AgentEvent.IntegrationsChanged>(apps.single()).apps?.single()?.accessible == true)
+        assertTrue(b.loginMcp("docs"))
+        assertTrue("\"method\":\"mcpServer/oauth/login\"" in w.last(), w.last())
+    }
+
+    @Test
     fun completed_agent_message_not_duplicated_after_deltas() = runBlocking {
         val w = mutableListOf<String>()
         val b = ready(w)

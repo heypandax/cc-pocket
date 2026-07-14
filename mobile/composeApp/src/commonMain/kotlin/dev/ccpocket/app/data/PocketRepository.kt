@@ -45,6 +45,12 @@ import dev.ccpocket.protocol.CodexPlugin
 import dev.ccpocket.protocol.CodexPluginsState
 import dev.ccpocket.protocol.ListCodexPlugins
 import dev.ccpocket.protocol.SetCodexPluginInstalled
+import dev.ccpocket.protocol.CodexMcpServer
+import dev.ccpocket.protocol.CodexApp
+import dev.ccpocket.protocol.CodexIntegrationsState
+import dev.ccpocket.protocol.ListCodexIntegrations
+import dev.ccpocket.protocol.ReloadCodexMcp
+import dev.ccpocket.protocol.LoginCodexMcp
 import dev.ccpocket.protocol.CodexGoal
 import dev.ccpocket.protocol.CodexGoalState
 import dev.ccpocket.protocol.CursorModels
@@ -465,6 +471,12 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     val codexPluginsLoading = mutableStateOf(false)
     val codexPluginsError = mutableStateOf<String?>(null)
     val codexPluginsNotice = mutableStateOf<String?>(null)
+    val codexMcpServers = mutableStateListOf<CodexMcpServer>()
+    val codexApps = mutableStateListOf<CodexApp>()
+    val codexIntegrationsLoading = mutableStateOf(false)
+    val codexIntegrationsError = mutableStateOf<String?>(null)
+    val codexIntegrationsNotice = mutableStateOf<String?>(null)
+    val codexAuthorizationUrl = mutableStateOf<String?>(null)
     val workdir = mutableStateOf<String?>(null)
     val chatTitle = mutableStateOf<String?>(null)            // session title for the chat header (client-side)
     private var thinkStartMs: Long? = null                   // first Thinking chunk of the in-progress block
@@ -1431,6 +1443,14 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 f.notice?.let { codexPluginsNotice.value = it }
                 if (!f.loading && f.error == null && f.notice == null) { codexPlugins.clear(); codexPlugins.addAll(f.plugins) }
             }
+            is CodexIntegrationsState -> if (f.convoId == convoId.value) {
+                codexIntegrationsLoading.value = f.loading
+                codexIntegrationsError.value = f.error
+                f.notice?.let { codexIntegrationsNotice.value = it }
+                f.authorizationUrl?.let { codexAuthorizationUrl.value = it }
+                f.servers?.let { codexMcpServers.clear(); codexMcpServers.addAll(it) }
+                f.apps?.let { codexApps.clear(); codexApps.addAll(it) }
+            }
             is AuthState -> authState.value = f
             is PushPrefs -> pushPrefs.value = f.enabled
             is VoiceAgentStatus -> voiceAgent.value = f
@@ -1856,6 +1876,16 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         scope.launch { send(SetCodexPluginInstalled(id, plugin.id, plugin.name, plugin.marketplace, plugin.marketplacePath, installed)) }
     }
 
+    fun loadCodexIntegrations(forceReload: Boolean = false) {
+        val id = convoId.value ?: return
+        codexIntegrationsLoading.value = true
+        scope.launch { send(ListCodexIntegrations(id, forceReload)) }
+    }
+
+    fun reloadCodexMcp() { val id = convoId.value ?: return; scope.launch { send(ReloadCodexMcp(id)) } }
+    fun loginCodexMcp(name: String) { val id = convoId.value ?: return; scope.launch { send(LoginCodexMcp(id, name)) } }
+    fun consumeCodexAuthorizationUrl(): String? = codexAuthorizationUrl.value.also { codexAuthorizationUrl.value = null }
+
     /** Called only after the destructive confirmation dialog. A stable random key makes one tap one spend. */
     fun consumeCodexLimitReset() {
         if (codexResetting.value) return
@@ -1927,6 +1957,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         codexGoalError.value = null
         codexSkills.clear(); codexSkillsLoading.value = false; codexSkillsError.value = null
         codexPlugins.clear(); codexPluginsLoading.value = false; codexPluginsError.value = null; codexPluginsNotice.value = null
+        codexMcpServers.clear(); codexApps.clear(); codexIntegrationsLoading.value = false; codexIntegrationsError.value = null; codexIntegrationsNotice.value = null; codexAuthorizationUrl.value = null
         openTimedOut.value = false
         promptPending = false // the pending marker belongs to the previous conversation's transcript
         promptWatchdog?.cancel(); promptWatchdog = null; sendStalled.value = false // and so does its receipt deadline
@@ -2565,6 +2596,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         codexGoalError.value = null
         codexSkills.clear(); codexSkillsLoading.value = false; codexSkillsError.value = null
         codexPlugins.clear(); codexPluginsLoading.value = false; codexPluginsError.value = null; codexPluginsNotice.value = null
+        codexMcpServers.clear(); codexApps.clear(); codexIntegrationsLoading.value = false; codexIntegrationsError.value = null; codexIntegrationsNotice.value = null; codexAuthorizationUrl.value = null
         chatTitle.value = null
         messages.clear(); activityEvents.clear()
         pendingImages.clear()

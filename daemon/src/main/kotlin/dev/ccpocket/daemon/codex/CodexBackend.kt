@@ -75,6 +75,10 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
     private val pluginListIds = ConcurrentHashMap.newKeySet<Long>()
     private val pluginInstallIds = ConcurrentHashMap.newKeySet<Long>()
     private val pluginUninstallIds = ConcurrentHashMap.newKeySet<Long>()
+    private val mcpListIds = ConcurrentHashMap.newKeySet<Long>()
+    private val appListIds = ConcurrentHashMap.newKeySet<Long>()
+    private val mcpReloadIds = ConcurrentHashMap.newKeySet<Long>()
+    private val mcpLoginIds = ConcurrentHashMap.newKeySet<Long>()
 
     // a turn's running state, reset on turn/completed
     @Volatile private var lastAgentText: String? = null
@@ -113,6 +117,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         pendingReview = null
         goalGetId = -1; goalSetIds.clear(); goalClearIds.clear(); reviewStartIds.clear(); skillsListIds.clear(); skillWriteIds.clear()
         pluginListIds.clear(); pluginInstallIds.clear(); pluginUninstallIds.clear()
+        mcpListIds.clear(); appListIds.clear(); mcpReloadIds.clear(); mcpLoginIds.clear()
         lastAgentText = null; lastUsage = Usage(); usageSeen = false
         deltaSeen.clear(); fileChangePaths.clear(); fileChangeDiffs.clear(); pendingApprovals.clear()
         // kick off the handshake — initialized + thread open happen when the response lands (see handleResponse)
@@ -180,6 +185,15 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
                 listPlugins()
                 listOf(AgentEvent.PluginsChanged(notice = "Plugin uninstalled"))
             }
+            responseId != null && mcpListIds.remove(responseId) -> listOf(mcpEvent(result as? JsonObject))
+            responseId != null && appListIds.remove(responseId) -> listOf(appsEvent(result as? JsonObject))
+            responseId != null && mcpReloadIds.remove(responseId) -> {
+                listIntegrations(forceReload = true)
+                listOf(AgentEvent.IntegrationsChanged(notice = "MCP configuration reloaded"))
+            }
+            responseId != null && mcpLoginIds.remove(responseId) -> listOf(
+                AgentEvent.IntegrationsChanged(authorizationUrl = (result as? JsonObject)?.str("authorizationUrl")),
+            )
             else -> {
                 responseId?.let(pendingSteers::remove)
                 emptyList()
@@ -209,6 +223,9 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         }
         if (id != null && (pluginListIds.remove(id) || pluginInstallIds.remove(id) || pluginUninstallIds.remove(id))) {
             return listOf(AgentEvent.PluginsChanged(error = error?.str("message") ?: "plugin request failed"))
+        }
+        if (id != null && (mcpListIds.remove(id) || appListIds.remove(id) || mcpReloadIds.remove(id) || mcpLoginIds.remove(id))) {
+            return listOf(AgentEvent.IntegrationsChanged(error = error?.str("message") ?: "integration request failed"))
         }
         log.warn("codex error: $error")
         return emptyList()
@@ -274,6 +291,12 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
             "thread/goal/updated" -> listOf(AgentEvent.GoalChanged(params.obj("goal")?.goal()))
             "thread/goal/cleared" -> listOf(AgentEvent.GoalChanged(null))
             "skills/changed" -> { listSkills(forceReload = true); emptyList() }
+            "mcpServer/startupStatus/updated", "app/list/updated" -> { listIntegrations(forceReload = false); emptyList() }
+            "mcpServer/oauthLogin/completed" -> {
+                listIntegrations(forceReload = true)
+                val ok = (params["success"] as? JsonPrimitive)?.booleanOrNull == true
+                listOf(AgentEvent.IntegrationsChanged(notice = if (ok) "MCP authorization completed" else null, error = if (ok) null else params.str("error") ?: "MCP authorization failed"))
+            }
             "error" -> {
                 val msg = params.obj("error")?.str("message") ?: "codex error"
                 // turn/completed (status=failed) still follows and clears `executing`; surface the text now
@@ -579,6 +602,58 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         }
         val errors = (result?.get("marketplaceLoadErrors") as? JsonArray)?.mapNotNull { (it as? JsonObject)?.str("message") }
         return AgentEvent.PluginsChanged(plugins, errors?.joinToString("\n")?.takeIf(String::isNotBlank))
+    }
+
+    override suspend fun listIntegrations(forceReload: Boolean): Boolean {
+        val tid = threadId ?: return false
+        rpcRequest("mcpServerStatus/list", buildJsonObject { put("threadId", tid); put("detail", "full") }) { mcpListIds.add(it) }
+        rpcRequest("app/list", buildJsonObject { put("threadId", tid); put("forceRefetch", forceReload) }) { appListIds.add(it) }
+        return true
+    }
+
+    override suspend fun reloadMcp(): Boolean {
+        if (threadId == null) return false
+        rpcRequest("config/mcpServer/reload", null) { mcpReloadIds.add(it) }
+        return true
+    }
+
+    override suspend fun loginMcp(name: String): Boolean {
+        val tid = threadId ?: return false
+        if (name.isBlank()) return false
+        rpcRequest("mcpServer/oauth/login", buildJsonObject { put("name", name); put("threadId", tid) }) { mcpLoginIds.add(it) }
+        return true
+    }
+
+    private fun mcpEvent(result: JsonObject?): AgentEvent.IntegrationsChanged {
+        val servers = (result?.get("data") as? JsonArray).orEmpty().mapNotNull { raw ->
+            val s = raw as? JsonObject ?: return@mapNotNull null
+            val info = s.obj("serverInfo")
+            dev.ccpocket.protocol.CodexMcpServer(
+                name = s.str("name") ?: return@mapNotNull null,
+                title = info?.str("title"), description = info?.str("description"), version = info?.str("version"),
+                authStatus = s.str("authStatus") ?: "unsupported",
+                toolCount = (s["tools"] as? JsonObject)?.size ?: 0,
+                resourceCount = (s["resources"] as? JsonArray)?.size ?: 0,
+                templateCount = (s["resourceTemplates"] as? JsonArray)?.size ?: 0,
+            )
+        }
+        return AgentEvent.IntegrationsChanged(servers = servers)
+    }
+
+    private fun appsEvent(result: JsonObject?): AgentEvent.IntegrationsChanged {
+        val apps = (result?.get("data") as? JsonArray).orEmpty().mapNotNull { raw ->
+            val a = raw as? JsonObject ?: return@mapNotNull null
+            dev.ccpocket.protocol.CodexApp(
+                id = a.str("id") ?: return@mapNotNull null,
+                name = a.str("name") ?: return@mapNotNull null,
+                description = a.str("description"), installUrl = a.str("installUrl"),
+                accessible = (a["isAccessible"] as? JsonPrimitive)?.booleanOrNull ?: false,
+                enabled = (a["isEnabled"] as? JsonPrimitive)?.booleanOrNull ?: true,
+                developer = a.obj("branding")?.str("developer") ?: a.obj("appMetadata")?.str("developer"),
+                version = a.obj("appMetadata")?.str("version"),
+            )
+        }
+        return AgentEvent.IntegrationsChanged(apps = apps)
     }
 
     override suspend fun respondPermission(

@@ -440,6 +440,15 @@
     <string name="qa_goal">目标</string>
     <string name="qa_review_native">代码审查</string>
     <string name="qa_skills">技能与插件</string>
+    <string name="qa_integrations">MCP 与 Apps</string>
+    <string name="integrations_title">MCP 与 Apps</string>
+    <string name="mcp_tab">MCP 服务器</string>
+    <string name="apps_tab">应用</string>
+    <string name="mcp_reload">重新加载配置</string>
+    <string name="mcp_login">登录</string>
+    <string name="mcp_counts">%1$d 个工具 · %2$d 个资源 · %3$d 个模板</string>
+    <string name="app_connected">已连接</string>
+    <string name="app_connect">连接</string>
     <string name="extensions_title">技能与插件</string>
     <string name="skills_tab">技能</string>
     <string name="plugins_tab">插件</string>
