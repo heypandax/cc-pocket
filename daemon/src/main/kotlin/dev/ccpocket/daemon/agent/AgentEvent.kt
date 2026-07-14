@@ -73,6 +73,9 @@ sealed interface AgentEvent {
     data class GoalChanged(val goal: dev.ccpocket.protocol.CodexGoal?) : AgentEvent
     data class GoalError(val message: String) : AgentEvent
 
+    /** An asynchronous native review request was rejected before a turn could start. */
+    data class ReviewError(val message: String) : AgentEvent
+
     /** a known-but-uninteresting line (hook_*, rate_limit_event, serverRequest/resolved, ...). */
     data class Ignored(val type: String?) : AgentEvent
 

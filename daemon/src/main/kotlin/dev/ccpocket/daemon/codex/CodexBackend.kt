@@ -59,6 +59,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
     private val pendingSteers = ConcurrentHashMap<Long, Prompt>()
     private val queuedAfterTurn = ConcurrentLinkedQueue<Prompt>()
     private var pendingGoal: GoalUpdate? = null
+    private var pendingReview: ReviewRequest? = null
 
     // JSON-RPC id correlation: which of our outstanding requests this id belongs to
     @Volatile private var initializeId: Long = -1
@@ -66,6 +67,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
     @Volatile private var goalGetId: Long = -1
     private val goalSetIds = ConcurrentHashMap.newKeySet<Long>()
     private val goalClearIds = ConcurrentHashMap.newKeySet<Long>()
+    private val reviewStartIds = ConcurrentHashMap.newKeySet<Long>()
 
     // a turn's running state, reset on turn/completed
     @Volatile private var lastAgentText: String? = null
@@ -78,6 +80,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
 
     private data class Prompt(val text: String, val images: List<ImageData>)
     private data class GoalUpdate(val objective: String?, val status: String?, val tokenBudget: Long?, val clear: Boolean)
+    private data class ReviewRequest(val target: String, val value: String?)
     private data class Usage(val input: Long = 0, val output: Long = 0, val cached: Long = 0)
 
     override val kind: AgentKind = AgentKind.CODEX
@@ -100,7 +103,8 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         bootstrap.withLock { pendingPrompt = null }
         pendingSteers.clear(); queuedAfterTurn.clear()
         pendingGoal = null
-        goalGetId = -1; goalSetIds.clear(); goalClearIds.clear()
+        pendingReview = null
+        goalGetId = -1; goalSetIds.clear(); goalClearIds.clear(); reviewStartIds.clear()
         lastAgentText = null; lastUsage = Usage(); usageSeen = false
         deltaSeen.clear(); fileChangePaths.clear(); fileChangeDiffs.clear(); pendingApprovals.clear()
         // kick off the handshake — initialized + thread open happen when the response lands (see handleResponse)
@@ -146,6 +150,11 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
             responseId != null && goalClearIds.remove(responseId) -> {
                 listOf(AgentEvent.GoalChanged(null))
             }
+            responseId != null && reviewStartIds.remove(responseId) -> {
+                currentTurnId = (result as? JsonObject)?.obj("turn")?.str("id")
+                turnStartPending = currentTurnId == null
+                emptyList()
+            }
             else -> {
                 responseId?.let(pendingSteers::remove)
                 emptyList()
@@ -165,6 +174,10 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         }
         if (id == goalGetId || (id != null && (goalSetIds.remove(id) || goalClearIds.remove(id)))) {
             return listOf(AgentEvent.GoalError(error?.str("message") ?: "unknown error"))
+        }
+        if (id != null && reviewStartIds.remove(id)) {
+            turnStartPending = false
+            return listOf(AgentEvent.ReviewError(error?.str("message") ?: "review request failed"))
         }
         log.warn("codex error: $error")
         return emptyList()
@@ -196,6 +209,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         flush?.let { writeTurnStart(it.text, it.images) }
         goalGetId = rpcRequest("thread/goal/get", buildJsonObject { put("threadId", tid) })
         pendingGoal?.also { pendingGoal = null }?.let { setGoal(it.objective, it.status, it.tokenBudget, it.clear) }
+        pendingReview?.also { pendingReview = null }?.let { startReview(it.target, it.value) }
         return listOf(AgentEvent.SessionInit(sessionId = tid, cwd = workdir, model = result.str("model")))
     }
 
@@ -423,6 +437,31 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         return true
     }
 
+    override suspend fun startReview(target: String, value: String?): Boolean {
+        if (target !in REVIEW_TARGETS) return false
+        if (target != "uncommittedChanges" && value.isNullOrBlank()) return false
+        val tid = threadId
+        if (tid == null) {
+            pendingReview = ReviewRequest(target, value)
+            return true
+        }
+        turnStartPending = true
+        rpcRequest("review/start", buildJsonObject {
+            put("threadId", tid)
+            put("delivery", "inline")
+            putJsonObject("target") {
+                put("type", target)
+                when (target) {
+                    "baseBranch" -> put("branch", value!!)
+                    "commit" -> put("sha", value!!)
+                    "custom" -> put("instructions", value!!)
+                    else -> Unit
+                }
+            }
+        }) { reviewStartIds.add(it) }
+        return true
+    }
+
     override suspend fun respondPermission(
         askId: String,
         allow: Boolean,
@@ -538,5 +577,6 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         val CLIENT_VERSION: String get() = dev.ccpocket.daemon.util.DaemonVersion.CURRENT
         const val MAX_DIFF_CHARS = 6000 // approval diff cap — keeps the PermissionAsk frame well under the relay's 256 KiB limit
         val CLAUDE_ALIASES = setOf("opus", "sonnet", "haiku")
+        val REVIEW_TARGETS = setOf("uncommittedChanges", "baseBranch", "commit", "custom")
     }
 }

@@ -36,6 +36,7 @@ import dev.ccpocket.protocol.CompactSession
 import dev.ccpocket.protocol.BranchSession
 import dev.ccpocket.protocol.SetSessionArchived
 import dev.ccpocket.protocol.SetCodexGoal
+import dev.ccpocket.protocol.StartCodexReview
 import dev.ccpocket.protocol.CodexGoal
 import dev.ccpocket.protocol.CodexGoalState
 import dev.ccpocket.protocol.CursorModels
@@ -1798,6 +1799,11 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         val id = convoId.value ?: return
         val goal = codexGoal.value ?: return
         scope.launch { send(SetCodexGoal(id, objective = goal.objective, status = status, tokenBudget = goal.tokenBudget)) }
+    }
+
+    fun startCodexReview(target: String, value: String?) {
+        val id = convoId.value ?: return
+        scope.launch { send(StartCodexReview(id, target, value?.trim()?.takeIf(String::isNotEmpty))) }
     }
 
     /** Called only after the destructive confirmation dialog. A stable random key makes one tap one spend. */

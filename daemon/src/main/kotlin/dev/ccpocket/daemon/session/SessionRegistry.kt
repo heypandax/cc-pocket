@@ -350,6 +350,8 @@ class SessionRegistry(
     suspend fun branch(convoId: String) = get(convoId)?.branch() ?: Unit
     suspend fun setGoal(frame: dev.ccpocket.protocol.SetCodexGoal) =
         get(frame.convoId)?.setGoal(frame.objective, frame.status, frame.tokenBudget, frame.clear) ?: Unit
+    suspend fun startReview(frame: dev.ccpocket.protocol.StartCodexReview) =
+        get(frame.convoId)?.startReview(frame.target, frame.value) ?: Unit
     suspend fun verdict(v: PermissionVerdict) = get(v.convoId)?.submitVerdict(v) ?: Unit
     suspend fun switchDir(s: SwitchDirectory) = get(s.convoId)?.switchDirectory(Path.of(s.workdir)) ?: Unit
     suspend fun switchMode(s: SwitchMode) = get(s.convoId)?.switchMode(s.mode) ?: Unit

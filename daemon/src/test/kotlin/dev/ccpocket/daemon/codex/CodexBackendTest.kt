@@ -138,6 +138,31 @@ class CodexBackendTest {
     }
 
     @Test
+    fun review_uses_official_structured_target() = runBlocking {
+        val w = mutableListOf<String>()
+        val b = ready(w)
+        assertTrue(b.startReview("baseBranch", "main"))
+        val request = w.last()
+        assertTrue("\"method\":\"review/start\"" in request, request)
+        assertTrue("\"delivery\":\"inline\"" in request, request)
+        assertTrue("\"type\":\"baseBranch\"" in request, request)
+        assertTrue("\"branch\":\"main\"" in request, request)
+
+        // goal/get is id 3 and review/start is id 4; the response carries the interruptible turn id.
+        b.parse("""{"id":4,"result":{"reviewThreadId":"thr-1","turn":{"id":"review-turn","status":"inProgress","items":[]}}}""")
+        b.interrupt()
+        assertTrue("\"method\":\"turn/interrupt\"" in w.last(), w.last())
+        assertTrue("\"turnId\":\"review-turn\"" in w.last(), w.last())
+    }
+
+    @Test
+    fun review_rejects_missing_structured_value() = runBlocking {
+        val b = ready(mutableListOf())
+        assertTrue(!b.startReview("commit", null))
+        assertTrue(!b.startReview("unknown", "x"))
+    }
+
+    @Test
     fun completed_agent_message_not_duplicated_after_deltas() = runBlocking {
         val w = mutableListOf<String>()
         val b = ready(w)

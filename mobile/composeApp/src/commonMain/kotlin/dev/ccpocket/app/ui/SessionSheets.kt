@@ -203,7 +203,7 @@ private fun Hairline() = Box(Modifier.fillMaxWidth().height(1.dp).background(Tok
 // ════════════════════════════════════════════════════════════════════
 //  Quick actions: switch model / effort, compact, clear, simplify
 // ════════════════════════════════════════════════════════════════════
-enum class QuickActionSection { MAIN, MODEL, EFFORT, ACTIVITY, GOAL }
+enum class QuickActionSection { MAIN, MODEL, EFFORT, ACTIVITY, GOAL, REVIEW }
 
 @Composable
 fun QuickActionsSheet(
@@ -257,6 +257,7 @@ fun QuickActionsSheet(
                             ActionRow(stringResource(Res.string.qa_branch)) { repo.branchConversation(); onDismiss() }
                         }
                         if (repo.sessionAgent.value == AgentKind.CODEX) {
+                            ActionRow(stringResource(Res.string.qa_review_native), chevron = true) { sub = QuickActionSection.REVIEW }
                             ActionRow(
                                 stringResource(Res.string.qa_goal),
                                 value = when (repo.codexGoal.value?.status) {
@@ -302,8 +303,62 @@ fun QuickActionsSheet(
                 }
                 QuickActionSection.ACTIVITY -> ActivityView(repo, onBack = { sub = QuickActionSection.MAIN })
                 QuickActionSection.GOAL -> GoalEditor(repo, onBack = { sub = QuickActionSection.MAIN }, onDone = onDismiss)
+                QuickActionSection.REVIEW -> ReviewEditor(repo, onBack = { sub = QuickActionSection.MAIN }, onDone = onDismiss)
             }
         }
+    }
+}
+
+@Composable
+private fun ReviewEditor(repo: PocketRepository, onBack: () -> Unit, onDone: () -> Unit) {
+    val targets = listOf(
+        "uncommittedChanges" to Res.string.review_uncommitted,
+        "baseBranch" to Res.string.review_base_branch,
+        "commit" to Res.string.review_commit,
+        "custom" to Res.string.review_custom,
+    )
+    var target by remember { mutableStateOf("uncommittedChanges") }
+    var value by remember { mutableStateOf("") }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("‹ ", color = Tok.tx2, fontSize = 18.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 4.dp))
+        Text(stringResource(Res.string.review_title), color = Tok.tx, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    }
+    Text(stringResource(Res.string.review_subtitle), color = Tok.tx2, fontSize = 12.5.sp, modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        targets.forEach { (id, label) ->
+            val selected = target == id
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                    .background(if (selected) Tok.accent.copy(alpha = 0.12f) else Tok.surface)
+                    .border(1.dp, if (selected) Tok.accent else Tok.hair, RoundedCornerShape(10.dp))
+                    .clickable { target = id; value = "" }.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(stringResource(label), color = if (selected) Tok.accent else Tok.tx, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                if (selected) Text("✓", color = Tok.accent, fontSize = 13.sp)
+            }
+        }
+    }
+    if (target != "uncommittedChanges") {
+        val label = when (target) {
+            "baseBranch" -> Res.string.review_branch_hint
+            "commit" -> Res.string.review_commit_hint
+            else -> Res.string.review_custom_hint
+        }
+        OutlinedTextField(
+            value = value,
+            onValueChange = { value = it },
+            label = { Text(stringResource(label)) },
+            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+            minLines = if (target == "custom") 3 else 1,
+            singleLine = target != "custom",
+        )
+    }
+    val enabled = target == "uncommittedChanges" || value.isNotBlank()
+    Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.End) {
+        TextButton(onClick = {
+            if (enabled) { repo.startCodexReview(target, value); onDone() }
+        }) { Text(stringResource(Res.string.review_start), color = if (enabled) Tok.accent else Tok.muted) }
     }
 }
 

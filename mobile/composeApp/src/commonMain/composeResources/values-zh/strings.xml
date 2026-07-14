@@ -438,6 +438,17 @@
     <string name="qa_compact">压缩上下文</string>
     <string name="qa_branch">创建会话分支</string>
     <string name="qa_goal">目标</string>
+    <string name="qa_review_native">代码审查</string>
+    <string name="review_title">Codex 代码审查</string>
+    <string name="review_subtitle">在当前会话中启动官方结构化审查流程。</string>
+    <string name="review_uncommitted">未提交的修改</string>
+    <string name="review_base_branch">与基础分支比较</string>
+    <string name="review_commit">指定 Commit</string>
+    <string name="review_custom">自定义审查</string>
+    <string name="review_branch_hint">基础分支（例如 main）</string>
+    <string name="review_commit_hint">Commit SHA</string>
+    <string name="review_custom_hint">审查要求</string>
+    <string name="review_start">开始审查</string>
     <string name="goal_title">Codex 目标</string>
     <string name="goal_objective">目标内容</string>
     <string name="goal_budget">Token 预算（可选）</string>

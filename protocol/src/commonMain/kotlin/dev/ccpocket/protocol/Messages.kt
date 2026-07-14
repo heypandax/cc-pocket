@@ -129,6 +129,16 @@ data class SetCodexGoal(
     val clear: Boolean = false,
 ) : ToDaemon
 
+/** Start an official Codex app-server review on the current thread. [target] is one of
+ * uncommittedChanges, baseBranch, commit, or custom; [value] carries the branch, SHA, or instructions. */
+@Serializable
+@SerialName("pocket/codex.review.start")
+data class StartCodexReview(
+    val convoId: String,
+    val target: String,
+    val value: String? = null,
+) : ToDaemon
+
 /** Stop one background job (a backgrounded shell / sub-agent / monitor) from the phone's task panel
  *  (issue #80). [jobId] is the job's originating tool_use id — the [BackgroundJob.id] the daemon put on
  *  the wire. The daemon interrupts the agent's in-flight work for this conversation and marks that job

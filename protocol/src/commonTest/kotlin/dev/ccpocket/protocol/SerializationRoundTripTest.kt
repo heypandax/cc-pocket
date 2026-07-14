@@ -243,6 +243,12 @@ class SerializationRoundTripTest {
     }
 
     @Test
+    fun codex_review_roundtrip() {
+        val frame = Envelope(id = "review", ts = 0, body = StartCodexReview("c1", "baseBranch", "main"))
+        assertEquals(frame, PocketJson.decodeFromString<Envelope>(PocketJson.encodeToString(frame)))
+    }
+
+    @Test
     fun usage_claude_limits_roundtrip_and_old_frames_default() {
         val limits = dev.ccpocket.protocol.ClaudeLimits(
             planType = "pro",

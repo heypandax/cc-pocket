@@ -51,6 +51,9 @@ interface AgentBackend {
     /** Update or clear the provider's persistent thread goal. False means unsupported/not ready. */
     suspend fun setGoal(objective: String?, status: String?, tokenBudget: Long?, clear: Boolean): Boolean = false
 
+    /** Start a provider-native code review. [target] follows Codex ReviewTarget's discriminators. */
+    suspend fun startReview(target: String, value: String?): Boolean = false
+
     /** Write a permission decision for [askId] (an [AgentEvent.ControlRequest.requestId]).
      *  [remember] maps to a session-scoped "always allow" (Codex acceptForSession). */
     suspend fun respondPermission(
