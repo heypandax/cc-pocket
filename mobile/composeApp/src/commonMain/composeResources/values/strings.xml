@@ -439,6 +439,12 @@
     <string name="qa_branch">Create conversation branch</string>
     <string name="qa_goal">Goal</string>
     <string name="qa_review_native">Code review</string>
+    <string name="qa_skills">Skills</string>
+    <string name="skills_title">Codex skills</string>
+    <string name="skills_subtitle">Official skills available to this repository. Tap one to enable or disable it.</string>
+    <string name="skills_refresh">Refresh</string>
+    <string name="skills_enabled">Enabled</string>
+    <string name="skills_disabled">Disabled</string>
     <string name="review_title">Codex code review</string>
     <string name="review_subtitle">Run the official structured review workflow on this thread.</string>
     <string name="review_uncommitted">Uncommitted changes</string>

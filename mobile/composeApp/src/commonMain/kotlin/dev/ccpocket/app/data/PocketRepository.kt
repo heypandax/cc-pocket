@@ -37,6 +37,10 @@ import dev.ccpocket.protocol.BranchSession
 import dev.ccpocket.protocol.SetSessionArchived
 import dev.ccpocket.protocol.SetCodexGoal
 import dev.ccpocket.protocol.StartCodexReview
+import dev.ccpocket.protocol.ListCodexSkills
+import dev.ccpocket.protocol.SetCodexSkillEnabled
+import dev.ccpocket.protocol.CodexSkill
+import dev.ccpocket.protocol.CodexSkillsState
 import dev.ccpocket.protocol.CodexGoal
 import dev.ccpocket.protocol.CodexGoalState
 import dev.ccpocket.protocol.CursorModels
@@ -450,6 +454,9 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     val convoId = mutableStateOf<String?>(null)
     val codexGoal = mutableStateOf<CodexGoal?>(null)
     val codexGoalError = mutableStateOf<String?>(null)
+    val codexSkills = mutableStateListOf<CodexSkill>()
+    val codexSkillsLoading = mutableStateOf(false)
+    val codexSkillsError = mutableStateOf<String?>(null)
     val workdir = mutableStateOf<String?>(null)
     val chatTitle = mutableStateOf<String?>(null)            // session title for the chat header (client-side)
     private var thinkStartMs: Long? = null                   // first Thinking chunk of the in-progress block
@@ -1405,6 +1412,11 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 codexGoal.value = f.goal
                 codexGoalError.value = f.error
             }
+            is CodexSkillsState -> if (f.convoId == convoId.value) {
+                codexSkillsLoading.value = f.loading
+                codexSkillsError.value = f.error
+                if (!f.loading && f.error == null) { codexSkills.clear(); codexSkills.addAll(f.skills) }
+            }
             is AuthState -> authState.value = f
             is PushPrefs -> pushPrefs.value = f.enabled
             is VoiceAgentStatus -> voiceAgent.value = f
@@ -1806,6 +1818,17 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         scope.launch { send(StartCodexReview(id, target, value?.trim()?.takeIf(String::isNotEmpty))) }
     }
 
+    fun loadCodexSkills(forceReload: Boolean = false) {
+        val id = convoId.value ?: return
+        codexSkillsLoading.value = true
+        scope.launch { send(ListCodexSkills(id, forceReload)) }
+    }
+
+    fun setCodexSkillEnabled(path: String, enabled: Boolean) {
+        val id = convoId.value ?: return
+        scope.launch { send(SetCodexSkillEnabled(id, path, enabled)) }
+    }
+
     /** Called only after the destructive confirmation dialog. A stable random key makes one tap one spend. */
     fun consumeCodexLimitReset() {
         if (codexResetting.value) return
@@ -1875,6 +1898,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         opening.value = true // held until the daemon answers (SessionLive/PocketError) — 8s net below
         codexGoal.value = null
         codexGoalError.value = null
+        codexSkills.clear(); codexSkillsLoading.value = false; codexSkillsError.value = null
         openTimedOut.value = false
         promptPending = false // the pending marker belongs to the previous conversation's transcript
         promptWatchdog?.cancel(); promptWatchdog = null; sendStalled.value = false // and so does its receipt deadline
@@ -2511,6 +2535,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         convoId.value = null
         codexGoal.value = null
         codexGoalError.value = null
+        codexSkills.clear(); codexSkillsLoading.value = false; codexSkillsError.value = null
         chatTitle.value = null
         messages.clear(); activityEvents.clear()
         pendingImages.clear()

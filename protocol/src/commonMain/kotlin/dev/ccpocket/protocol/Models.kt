@@ -383,3 +383,15 @@ data class AskQuestion(
     val multiSelect: Boolean = false,
     val options: List<AskOption> = emptyList(),
 )
+
+/** Skill metadata returned by the official Codex app-server skills/list API. */
+@Serializable
+data class CodexSkill(
+    val name: String,
+    val description: String,
+    val path: String,
+    val scope: String,
+    val enabled: Boolean,
+    val displayName: String? = null,
+    val shortDescription: String? = null,
+)

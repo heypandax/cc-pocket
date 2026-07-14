@@ -163,6 +163,20 @@ class CodexBackendTest {
     }
 
     @Test
+    fun skills_list_and_toggle_use_official_rpc() = runBlocking {
+        val w = mutableListOf<String>()
+        val b = ready(w)
+        assertTrue(b.listSkills(false))
+        assertTrue("\"method\":\"skills/list\"" in w.last(), w.last())
+        val events = b.parse("""{"id":4,"result":{"data":[{"cwd":"/repo","skills":[{"name":"review","description":"Review code","path":"/repo/.agents/skills/review/SKILL.md","scope":"repo","enabled":true,"interface":{"displayName":"Code Review"}}],"errors":[]}]}}""")
+        val skills = assertIs<AgentEvent.SkillsChanged>(events.single()).skills
+        assertEquals("Code Review", skills.single().displayName)
+        assertTrue(b.setSkillEnabled(skills.single().path, false))
+        assertTrue("\"method\":\"skills/config/write\"" in w.last(), w.last())
+        assertTrue("\"enabled\":false" in w.last(), w.last())
+    }
+
+    @Test
     fun completed_agent_message_not_duplicated_after_deltas() = runBlocking {
         val w = mutableListOf<String>()
         val b = ready(w)

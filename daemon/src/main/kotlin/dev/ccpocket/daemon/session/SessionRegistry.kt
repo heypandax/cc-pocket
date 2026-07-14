@@ -352,6 +352,8 @@ class SessionRegistry(
         get(frame.convoId)?.setGoal(frame.objective, frame.status, frame.tokenBudget, frame.clear) ?: Unit
     suspend fun startReview(frame: dev.ccpocket.protocol.StartCodexReview) =
         get(frame.convoId)?.startReview(frame.target, frame.value) ?: Unit
+    suspend fun listSkills(frame: dev.ccpocket.protocol.ListCodexSkills) = get(frame.convoId)?.listSkills(frame.forceReload) ?: Unit
+    suspend fun setSkillEnabled(frame: dev.ccpocket.protocol.SetCodexSkillEnabled) = get(frame.convoId)?.setSkillEnabled(frame.path, frame.enabled) ?: Unit
     suspend fun verdict(v: PermissionVerdict) = get(v.convoId)?.submitVerdict(v) ?: Unit
     suspend fun switchDir(s: SwitchDirectory) = get(s.convoId)?.switchDirectory(Path.of(s.workdir)) ?: Unit
     suspend fun switchMode(s: SwitchMode) = get(s.convoId)?.switchMode(s.mode) ?: Unit

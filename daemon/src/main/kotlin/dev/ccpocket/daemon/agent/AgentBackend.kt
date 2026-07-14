@@ -54,6 +54,9 @@ interface AgentBackend {
     /** Start a provider-native code review. [target] follows Codex ReviewTarget's discriminators. */
     suspend fun startReview(target: String, value: String?): Boolean = false
 
+    suspend fun listSkills(forceReload: Boolean): Boolean = false
+    suspend fun setSkillEnabled(path: String, enabled: Boolean): Boolean = false
+
     /** Write a permission decision for [askId] (an [AgentEvent.ControlRequest.requestId]).
      *  [remember] maps to a session-scoped "always allow" (Codex acceptForSession). */
     suspend fun respondPermission(

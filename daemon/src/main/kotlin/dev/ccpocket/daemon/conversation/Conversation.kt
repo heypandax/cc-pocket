@@ -722,6 +722,7 @@ class Conversation(
                         sink.emit(PocketError("review_failed", ev.message, convoId))
                         sink.emit(live(sessionId))
                     }
+                    is AgentEvent.SkillsChanged -> sink.emit(dev.ccpocket.protocol.CodexSkillsState(convoId, ev.skills, error = ev.error))
                     // the CLI's consumption receipt (issue #122): a top-level user replay proves the
                     // matching prompt reached the model — settle its ledger entry. A parent-tagged
                     // replay is a sub-agent's inner user line, never one of ours.
@@ -1142,6 +1143,18 @@ class Conversation(
         executing = true
         lastActivityMs = System.currentTimeMillis()
         sink.emit(live(sessionId))
+    }
+
+    suspend fun listSkills(forceReload: Boolean) {
+        if (backend.kind != AgentKind.CODEX || proc == null || !backend.listSkills(forceReload)) {
+            sink.emit(dev.ccpocket.protocol.CodexSkillsState(convoId, error = "Codex skills are available after the thread has started"))
+        } else sink.emit(dev.ccpocket.protocol.CodexSkillsState(convoId, loading = true))
+    }
+
+    suspend fun setSkillEnabled(path: String, enabled: Boolean) {
+        if (backend.kind != AgentKind.CODEX || !backend.setSkillEnabled(path, enabled)) {
+            sink.emit(dev.ccpocket.protocol.CodexSkillsState(convoId, error = "Unable to update this Codex skill"))
+        }
     }
 
     /**

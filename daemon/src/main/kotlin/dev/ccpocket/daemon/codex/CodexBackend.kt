@@ -15,6 +15,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -22,6 +23,7 @@ import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
@@ -68,6 +70,8 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
     private val goalSetIds = ConcurrentHashMap.newKeySet<Long>()
     private val goalClearIds = ConcurrentHashMap.newKeySet<Long>()
     private val reviewStartIds = ConcurrentHashMap.newKeySet<Long>()
+    private val skillsListIds = ConcurrentHashMap.newKeySet<Long>()
+    private val skillWriteIds = ConcurrentHashMap.newKeySet<Long>()
 
     // a turn's running state, reset on turn/completed
     @Volatile private var lastAgentText: String? = null
@@ -104,7 +108,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         pendingSteers.clear(); queuedAfterTurn.clear()
         pendingGoal = null
         pendingReview = null
-        goalGetId = -1; goalSetIds.clear(); goalClearIds.clear(); reviewStartIds.clear()
+        goalGetId = -1; goalSetIds.clear(); goalClearIds.clear(); reviewStartIds.clear(); skillsListIds.clear(); skillWriteIds.clear()
         lastAgentText = null; lastUsage = Usage(); usageSeen = false
         deltaSeen.clear(); fileChangePaths.clear(); fileChangeDiffs.clear(); pendingApprovals.clear()
         // kick off the handshake — initialized + thread open happen when the response lands (see handleResponse)
@@ -155,6 +159,11 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
                 turnStartPending = currentTurnId == null
                 emptyList()
             }
+            responseId != null && skillsListIds.remove(responseId) -> listOf(skillsEvent(result as? JsonObject))
+            responseId != null && skillWriteIds.remove(responseId) -> {
+                listSkills(forceReload = true)
+                emptyList()
+            }
             else -> {
                 responseId?.let(pendingSteers::remove)
                 emptyList()
@@ -178,6 +187,9 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         if (id != null && reviewStartIds.remove(id)) {
             turnStartPending = false
             return listOf(AgentEvent.ReviewError(error?.str("message") ?: "review request failed"))
+        }
+        if (id != null && (skillsListIds.remove(id) || skillWriteIds.remove(id))) {
+            return listOf(AgentEvent.SkillsChanged(emptyList(), error?.str("message") ?: "skills request failed"))
         }
         log.warn("codex error: $error")
         return emptyList()
@@ -242,6 +254,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
             "turn/completed" -> onTurnCompleted(params.obj("turn"))
             "thread/goal/updated" -> listOf(AgentEvent.GoalChanged(params.obj("goal")?.goal()))
             "thread/goal/cleared" -> listOf(AgentEvent.GoalChanged(null))
+            "skills/changed" -> { listSkills(forceReload = true); emptyList() }
             "error" -> {
                 val msg = params.obj("error")?.str("message") ?: "codex error"
                 // turn/completed (status=failed) still follows and clears `executing`; surface the text now
@@ -460,6 +473,40 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
             }
         }) { reviewStartIds.add(it) }
         return true
+    }
+
+    override suspend fun listSkills(forceReload: Boolean): Boolean {
+        if (threadId == null) return false
+        rpcRequest("skills/list", buildJsonObject {
+            putJsonArray("cwds") { add(JsonPrimitive(workdir)) }
+            put("forceReload", forceReload)
+        }) { skillsListIds.add(it) }
+        return true
+    }
+
+    override suspend fun setSkillEnabled(path: String, enabled: Boolean): Boolean {
+        if (threadId == null || path.isBlank()) return false
+        rpcRequest("skills/config/write", buildJsonObject { put("path", path); put("enabled", enabled) }) { skillWriteIds.add(it) }
+        return true
+    }
+
+    private fun skillsEvent(result: JsonObject?): AgentEvent.SkillsChanged {
+        val entry = (result?.get("data") as? JsonArray)?.mapNotNull { it as? JsonObject }
+            ?.firstOrNull { it.str("cwd") == workdir }
+        val errors = (entry?.get("errors") as? JsonArray)?.mapNotNull { (it as? JsonObject)?.str("message") }
+        val skills = (entry?.get("skills") as? JsonArray).orEmpty().mapNotNull { raw ->
+            val s = raw as? JsonObject ?: return@mapNotNull null
+            dev.ccpocket.protocol.CodexSkill(
+                name = s.str("name") ?: return@mapNotNull null,
+                description = s.str("description").orEmpty(),
+                path = s.str("path") ?: return@mapNotNull null,
+                scope = s.str("scope") ?: "user",
+                enabled = (s["enabled"] as? JsonPrimitive)?.booleanOrNull ?: true,
+                displayName = s.obj("interface")?.str("displayName"),
+                shortDescription = s.obj("interface")?.str("shortDescription") ?: s.str("shortDescription"),
+            )
+        }
+        return AgentEvent.SkillsChanged(skills, errors?.joinToString("\n")?.takeIf { it.isNotBlank() })
     }
 
     override suspend fun respondPermission(

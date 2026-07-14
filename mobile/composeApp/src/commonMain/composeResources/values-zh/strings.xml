@@ -439,6 +439,12 @@
     <string name="qa_branch">创建会话分支</string>
     <string name="qa_goal">目标</string>
     <string name="qa_review_native">代码审查</string>
+    <string name="qa_skills">技能</string>
+    <string name="skills_title">Codex 技能</string>
+    <string name="skills_subtitle">当前仓库可用的官方技能。点击技能即可启用或停用。</string>
+    <string name="skills_refresh">刷新</string>
+    <string name="skills_enabled">已启用</string>
+    <string name="skills_disabled">已停用</string>
     <string name="review_title">Codex 代码审查</string>
     <string name="review_subtitle">在当前会话中启动官方结构化审查流程。</string>
     <string name="review_uncommitted">未提交的修改</string>

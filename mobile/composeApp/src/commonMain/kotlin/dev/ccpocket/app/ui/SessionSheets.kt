@@ -203,7 +203,7 @@ private fun Hairline() = Box(Modifier.fillMaxWidth().height(1.dp).background(Tok
 // ════════════════════════════════════════════════════════════════════
 //  Quick actions: switch model / effort, compact, clear, simplify
 // ════════════════════════════════════════════════════════════════════
-enum class QuickActionSection { MAIN, MODEL, EFFORT, ACTIVITY, GOAL, REVIEW }
+enum class QuickActionSection { MAIN, MODEL, EFFORT, ACTIVITY, GOAL, REVIEW, SKILLS }
 
 @Composable
 fun QuickActionsSheet(
@@ -258,6 +258,7 @@ fun QuickActionsSheet(
                         }
                         if (repo.sessionAgent.value == AgentKind.CODEX) {
                             ActionRow(stringResource(Res.string.qa_review_native), chevron = true) { sub = QuickActionSection.REVIEW }
+                            ActionRow(stringResource(Res.string.qa_skills), value = repo.codexSkills.size.takeIf { it > 0 }?.toString(), chevron = true) { sub = QuickActionSection.SKILLS }
                             ActionRow(
                                 stringResource(Res.string.qa_goal),
                                 value = when (repo.codexGoal.value?.status) {
@@ -304,6 +305,37 @@ fun QuickActionsSheet(
                 QuickActionSection.ACTIVITY -> ActivityView(repo, onBack = { sub = QuickActionSection.MAIN })
                 QuickActionSection.GOAL -> GoalEditor(repo, onBack = { sub = QuickActionSection.MAIN }, onDone = onDismiss)
                 QuickActionSection.REVIEW -> ReviewEditor(repo, onBack = { sub = QuickActionSection.MAIN }, onDone = onDismiss)
+                QuickActionSection.SKILLS -> SkillsView(repo, onBack = { sub = QuickActionSection.MAIN })
+            }
+        }
+    }
+}
+
+@Composable
+private fun SkillsView(repo: PocketRepository, onBack: () -> Unit) {
+    LaunchedEffect(Unit) { repo.loadCodexSkills() }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("‹ ", color = Tok.tx2, fontSize = 18.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 4.dp))
+        Text(stringResource(Res.string.skills_title), color = Tok.tx, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        Text(stringResource(Res.string.skills_refresh), color = Tok.accent, fontSize = 12.sp, modifier = Modifier.clickable { repo.loadCodexSkills(true) }.padding(6.dp))
+    }
+    Text(stringResource(Res.string.skills_subtitle), color = Tok.tx2, fontSize = 12.5.sp, modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
+    if (repo.codexSkillsLoading.value) CircularProgressIndicator(Modifier.padding(20.dp).size(22.dp), strokeWidth = 2.dp)
+    repo.codexSkillsError.value?.let { Text(it, color = Tok.danger, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp)) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        repo.codexSkills.forEach { skill ->
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Tok.surface)
+                    .border(1.dp, Tok.hair, RoundedCornerShape(10.dp))
+                    .clickable { repo.setCodexSkillEnabled(skill.path, !skill.enabled) }.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(skill.displayName ?: skill.name, color = Tok.tx, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(skill.shortDescription ?: skill.description, color = Tok.tx2, fontSize = 11.5.sp, maxLines = 2)
+                    Text(skill.scope.uppercase(), color = Tok.muted, fontSize = 9.5.sp, modifier = Modifier.padding(top = 3.dp))
+                }
+                Text(if (skill.enabled) stringResource(Res.string.skills_enabled) else stringResource(Res.string.skills_disabled), color = if (skill.enabled) Tok.ok else Tok.muted, fontSize = 11.sp)
             }
         }
     }
