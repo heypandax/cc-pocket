@@ -450,12 +450,6 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     fun saveSessionScrollPosition(workdir: String, index: Int, offset: Int) {
         sessionScrollPositions[workdir] = index to offset
     }
-    private val chatScrollPositions = mutableMapOf<String, Triple<Int, Int, Boolean>>()
-    fun hasChatScrollPosition(key: String): Boolean = key in chatScrollPositions
-    fun chatScrollPosition(key: String): Triple<Int, Int, Boolean> = chatScrollPositions[key] ?: Triple(0, 0, true)
-    fun saveChatScrollPosition(key: String, index: Int, offset: Int, pinned: Boolean) {
-        chatScrollPositions[key] = Triple(index, offset, pinned)
-    }
     val sessionsDir = mutableStateOf<String?>(null)
     val messages = mutableStateListOf<ChatItem>()
     val activityEvents = mutableStateListOf<ActivityEvent>()

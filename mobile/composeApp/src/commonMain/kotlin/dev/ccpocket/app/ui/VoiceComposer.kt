@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextRange
@@ -71,6 +72,7 @@ fun ComposerField(
     placeholder: String,
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
+    onFocused: () -> Unit = {},
 ) {
     val shape = RoundedCornerShape(12.dp)
     Box(
@@ -85,7 +87,8 @@ fun ComposerField(
             cursorBrush = SolidColor(Tok.accent),
             maxLines = 4,
             modifier = Modifier.fillMaxWidth().padding(vertical = 11.dp)
-                .let { m -> focusRequester?.let { m.focusRequester(it) } ?: m },
+                .let { m -> focusRequester?.let { m.focusRequester(it) } ?: m }
+                .onFocusChanged { if (it.isFocused) onFocused() },
         )
         if (value.isEmpty()) Text(placeholder, color = Tok.muted, fontSize = 14.5.sp, maxLines = 1)
     }

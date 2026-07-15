@@ -170,7 +170,8 @@ fun UsageScreen(repo: PocketRepository, onBack: () -> Unit) {
     val u = repo.usage.value
     val connected = repo.phase.value == ConnPhase.Ready
 
-    Column(Modifier.fillMaxSize().background(Tok.base)) {
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().background(Tok.base)) {
         // header
         Column(Modifier.fillMaxWidth().background(Tok.base)) {
             val refreshLabel = stringResource(Res.string.usage_refresh)
@@ -208,6 +209,8 @@ fun UsageScreen(repo: PocketRepository, onBack: () -> Unit) {
             !connected || timedOut -> Offline()
             else -> Loading()
         }
+        }
+        if (!showResetConfirm) EdgeSwipeBack(onBack)
     }
 
     if (showResetConfirm) {

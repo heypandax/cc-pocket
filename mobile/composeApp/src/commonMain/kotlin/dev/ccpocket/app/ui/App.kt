@@ -1391,14 +1391,14 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
     // platform picker resizes/compresses on-device; the repo budgets the picked photos against the 256 KiB frame
     val launchPicker = rememberImageAttacher { added -> repo.attachImages(added) }
     val scrollKey = repo.convoId.value ?: draftKey ?: "new:${repo.workdir.value.orEmpty()}"
-    val hasSavedScroll = repo.hasChatScrollPosition(scrollKey)
-    val savedScroll = repo.chatScrollPosition(scrollKey)
-    val listState = remember(scrollKey) { LazyListState(savedScroll.first, savedScroll.second) }
+    // A conversation always opens at its live tail. Restoring an old reading position made a resumed
+    // session look stale and hid new work below the fold; history remains available by scrolling up.
+    val listState = remember(scrollKey) { LazyListState() }
     // stick to the bottom only while the user is there ("pinned"); scrolling up unpins and shows
     // the Jump-to-latest pill instead of yanking the viewport down on every streamed chunk.
     var pinned by rememberBottomPinned(
         listState, scrollKey,
-        initialPinned = !hasSavedScroll || savedScroll.third,
+        initialPinned = true,
     )
     // Snapshot the transcript when the user leaves the bottom. The latest assistant bubble grows in
     // place while streaming (the list size does not change), so retain both count and tail identity:
@@ -1410,23 +1410,23 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
     // keep the message list hidden until it's first parked at the bottom, so opening a session with
     // history doesn't flash the top then visibly scroll down. Resets per session (convoId); a short
     // grace reveals an empty/new session that has no history to position on.
-    var landed by remember(repo.convoId.value) { mutableStateOf(hasSavedScroll && !savedScroll.third) }
+    var landed by remember(repo.convoId.value) { mutableStateOf(false) }
     LaunchedEffect(repo.convoId.value) { delay(180); landed = true }
-    // Never persist the transient top position before history has landed. Store whether the user was
-    // pinned too: a saved bottom session must reopen at the latest message, while an intentional
-    // history position restores exactly.
-    LaunchedEffect(listState, scrollKey, landed, repo.messages.isNotEmpty()) {
-        if (landed && repo.messages.isNotEmpty()) snapshotFlow {
-            Triple(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset, pinned)
-        }.collect { (index, offset, atBottom) ->
-            repo.saveChatScrollPosition(scrollKey, index, offset, atBottom)
-        }
-    }
     // a just-created session opens on an empty chat — focus the composer and raise the keyboard
     // right away instead of making the user tap the field first. openSession arms the flag only
     // for resumeId == null (never on resume/reattach/fleet-follow); consumed here exactly once.
     val composerFocus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    val chatScope = rememberCoroutineScope()
+    fun revealLatest() {
+        pinned = true
+        chatScope.launch {
+            // Let an IME resize or the just-sent user bubble enter the LazyColumn before measuring the tail.
+            delay(16)
+            scrollToTranscriptEnd(listState, repo.messages.lastIndex)
+            landed = true
+        }
+    }
     LaunchedEffect(repo.convoId.value) {
         if (repo.convoId.value != null && repo.autoFocusComposer.value && !repo.observing.value) {
             repo.autoFocusComposer.value = false
@@ -1735,7 +1735,12 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                             }
                             Spacer(Modifier.width(8.dp))
                             ComposerField(
-                                input, { input = it },
+                                input, {
+                                    input = it
+                                    // Editing means the user is composing the next turn: keep its context and
+                                    // the latest response visible even if they had previously scrolled upward.
+                                    if (!pinned) revealLatest()
+                                },
                                 // mid-turn the field stays enabled (sends queue into the running turn) — say so,
                                 // or an editable composer under a "running" session reads as disconnected (issue #52)
                                 placeholder = stringResource(
@@ -1751,6 +1756,7 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                                 ),
                                 modifier = Modifier.weight(1f),
                                 focusRequester = composerFocus,
+                                onFocused = ::revealLatest,
                             )
                             Spacer(Modifier.width(8.dp))
                             // while a turn runs the ■ stays put; typed text adds Send NEXT TO it instead of
@@ -1769,7 +1775,11 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                                         onClick = {
                                             val t = input.trim()
                                             // a gated send (degraded session, issue #65) returns false — keep the text for the retry
-                                            if ((t.isNotBlank() || hasReady) && repo.sendPrompt(t)) { input = ""; repo.clearDraft(draftKey) }
+                                            if ((t.isNotBlank() || hasReady) && repo.sendPrompt(t)) {
+                                                input = ""
+                                                repo.clearDraft(draftKey)
+                                                revealLatest()
+                                            }
                                         },
                                         filled = true, contentDescription = sendLabel,
                                     ) { Icon(SendArrowIcon, sendLabel, tint = Tok.base, modifier = Modifier.size(18.dp)) }
@@ -1831,7 +1841,7 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
 /** iOS-style interactive affordance shared by the two drill-down levels. Keeping the hit target on the
  *  extreme edge avoids stealing horizontal gestures from messages, code blocks, and sheets. */
 @Composable
-private fun EdgeSwipeBack(onBack: () -> Unit) {
+internal fun EdgeSwipeBack(onBack: () -> Unit) {
     val latestBack by rememberUpdatedState(onBack)
     val thresholdPx = with(LocalDensity.current) { 64.dp.toPx() }
     var distance by remember { mutableStateOf(0f) }

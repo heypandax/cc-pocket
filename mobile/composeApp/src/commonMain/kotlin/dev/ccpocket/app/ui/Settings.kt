@@ -69,7 +69,8 @@ fun SettingsScreen(repo: PocketRepository, onBack: () -> Unit) {
     if (showUsage) { UsageScreen(repo, onBack = { showUsage = false }); return } // full-screen usage dashboard (#26)
     // back closes Settings — register a handler so it doesn't fall through to the app-level navigation
     dev.ccpocket.app.SystemBackHandler(enabled = true) { onBack() }
-    Column(Modifier.fillMaxSize().background(Tok.base)) {
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().background(Tok.base)) {
         Row(
             Modifier.fillMaxWidth().background(Tok.surface).padding(horizontal = 6.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -259,6 +260,8 @@ fun SettingsScreen(repo: PocketRepository, onBack: () -> Unit) {
                 Text(stringResource(Res.string.exit), color = Tok.danger, fontSize = 14.5.sp, fontWeight = FontWeight.Medium)
             }
         }
+        }
+        EdgeSwipeBack(onBack)
     }
 }
 
