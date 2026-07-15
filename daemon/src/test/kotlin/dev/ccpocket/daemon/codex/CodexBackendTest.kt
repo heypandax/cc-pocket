@@ -320,6 +320,19 @@ class CodexBackendTest {
     }
 
     @Test
+    fun approvals_are_always_routed_to_the_cc_pocket_user_ui() = runBlocking {
+        val writes = mutableListOf<String>()
+        val backend = ready(writes)
+
+        val threadStart = writes.first { "thread/start" in it }
+        assertTrue("\"approvalsReviewer\":\"user\"" in threadStart, threadStart)
+
+        backend.sendPrompt("needs an escalated command", emptyList())
+        val turnStart = writes.last { "turn/start" in it }
+        assertTrue("\"approvalsReviewer\":\"user\"" in turnStart, turnStart)
+    }
+
+    @Test
     fun file_change_approval_carries_the_diff() = runBlocking {
         val w = mutableListOf<String>()
         val b = ready(w)

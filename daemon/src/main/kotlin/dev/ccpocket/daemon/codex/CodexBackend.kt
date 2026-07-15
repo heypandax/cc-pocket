@@ -234,13 +234,24 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
     private suspend fun openThread() {
         val rid = resumeId
         threadOpenId = if (rid != null && forkSession) {
-            rpcRequest("thread/fork", buildJsonObject { put("threadId", rid); codexModel()?.let { put("model", it) } })
+            rpcRequest("thread/fork", buildJsonObject {
+                put("threadId", rid)
+                put("approvalsReviewer", APPROVALS_REVIEWER)
+                codexModel()?.let { put("model", it) }
+            })
         } else if (rid != null) {
-            rpcRequest("thread/resume", buildJsonObject { put("threadId", rid); codexModel()?.let { put("model", it) } })
+            rpcRequest("thread/resume", buildJsonObject {
+                put("threadId", rid)
+                put("approvalsReviewer", APPROVALS_REVIEWER)
+                codexModel()?.let { put("model", it) }
+            })
         } else {
             rpcRequest("thread/start", buildJsonObject {
                 put("cwd", workdir)
                 put("approvalPolicy", approvalPolicy())
+                // CC Pocket is the approval UI. Never inherit an auto-reviewer from config.toml:
+                // it consumes escalation requests inside Codex, so no PermissionAsk reaches the phone.
+                put("approvalsReviewer", APPROVALS_REVIEWER)
                 put("sandbox", sandbox().flat) // thread/start takes the flat SandboxMode string
                 codexModel()?.let { put("model", it) }
             })
@@ -449,6 +460,8 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
             }
             put("cwd", workdir)
             put("approvalPolicy", approvalPolicy())
+            // turn overrides are sticky in app-server and protect resumed/older threads too.
+            put("approvalsReviewer", APPROVALS_REVIEWER)
             putJsonObject("sandboxPolicy") { put("type", sandbox().tag) } // turn/start takes the object form
             codexModel()?.let { put("model", it) }
             effort?.let { put("effort", codexEffort(it)) }
@@ -770,6 +783,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         // the daemon's real build version (single runtime source — no per-release manual bump here)
         val CLIENT_VERSION: String get() = dev.ccpocket.daemon.util.DaemonVersion.CURRENT
         const val MAX_DIFF_CHARS = 6000 // approval diff cap — keeps the PermissionAsk frame well under the relay's 256 KiB limit
+        const val APPROVALS_REVIEWER = "user" // approvals must be routed to CC Pocket, never an auto-review subagent
         val CLAUDE_ALIASES = setOf("opus", "sonnet", "haiku")
         val REVIEW_TARGETS = setOf("uncommittedChanges", "baseBranch", "commit", "custom")
     }
