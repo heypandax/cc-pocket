@@ -809,4 +809,17 @@ class SerializationRoundTripTest {
         assertTrue(isSubagentTool("Agent"))
         assertFalse(isSubagentTool("Bash"))
     }
+
+    @Test
+    fun renameSession_roundtrips_and_capability_defaults_off() {
+        val env = Envelope(id = "rn1", ts = 0, body = RenameSession("/x", "sid-1", "Auth refactor"))
+        val json = PocketJson.encodeToString(env)
+        assertTrue("\"t\":\"pocket/session.rename\"" in json, json)
+        assertEquals(env, PocketJson.decodeFromString<Envelope>(json))
+
+        val legacy = """{"workdir":"/x","items":[],"archived":false}"""
+        assertFalse(PocketJson.decodeFromString<Sessions>(legacy).renameSupported)
+        val supported = Sessions("/x", emptyList(), renameSupported = true)
+        assertTrue(PocketJson.decodeFromString<Sessions>(PocketJson.encodeToString(supported)).renameSupported)
+    }
 }

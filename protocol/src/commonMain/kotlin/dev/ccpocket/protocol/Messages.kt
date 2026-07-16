@@ -17,6 +17,10 @@ data class ListDirectories(val root: String? = null) : ToDaemon
 @SerialName("pocket/sessions.list")
 data class ListSessions(val workdir: String, val archived: Boolean = false) : ToDaemon
 
+@Serializable
+@SerialName("pocket/session.rename")
+data class RenameSession(val workdir: String, val sessionId: String, val title: String) : ToDaemon
+
 /** Ask the daemon-host Cursor CLI for the models available to its signed-in account. */
 @Serializable
 @SerialName("pocket/cursor.models.list")
@@ -402,6 +406,7 @@ data class Sessions(
     val workdir: String,
     val items: List<SessionSummary>,
     val archived: Boolean = false,
+    val renameSupported: Boolean = false,
 ) : ToPhone
 
 /** Runtime Cursor model catalog. Empty + [error] means discovery failed; clients keep bundled fallbacks. */
