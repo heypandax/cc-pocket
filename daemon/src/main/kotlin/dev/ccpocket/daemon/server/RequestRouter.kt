@@ -85,7 +85,19 @@ class RequestRouter(
                     // merge every backend's resumable sessions for this dir (Claude ~/.claude/projects + Codex ~/.codex/sessions)
                     val items = registry.listSessions(frame.workdir)
                         .map { if (it.sessionId in busy) it.copy(busy = true) else it }
-                    sink.emit(Sessions(frame.workdir, items))
+                    sink.emit(Sessions(frame.workdir, items, renameSupported = true))
+                }
+            }
+
+            is RenameSession -> scope.launch {
+                val err = registry.renameSession(frame.workdir, frame.sessionId, frame.title)
+                if (err != null) {
+                    sink.emit(PocketError("rename_failed", err))
+                } else {
+                    val busy = registry.busySessionIds()
+                    val items = registry.listSessions(frame.workdir)
+                        .map { if (it.sessionId in busy) it.copy(busy = true) else it }
+                    sink.emit(Sessions(frame.workdir, items, renameSupported = true))
                 }
             }
 
