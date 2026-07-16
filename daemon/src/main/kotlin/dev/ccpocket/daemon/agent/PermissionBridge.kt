@@ -42,20 +42,23 @@ class PermissionBridge(
     private val autoAllow = mode == PermissionMode.BYPASS_PERMISSIONS
 
     suspend fun onControlRequest(ev: AgentEvent.ControlRequest) {
-        // AskUserQuestion carries its ANSWERS in the verdict — an auto-allow would answer nothing
-        // ("the user did not answer"), so questions reach the phone even under bypassPermissions.
-        val isQuestion = ev.toolName == AskQuestions.TOOL
-        if (autoAllow && !isQuestion) {
+        val meta = ToolMetadata.of(ev.toolName, ev.input)
+        // bypassPermissions auto-allows ordinary tools — but NOT the neverRemember class (issue #156): those
+        // are human-decision gates that must survive every skip-the-ask path (the ToolMeta contract).
+        // ExitPlanMode, because approving a plan is always an explicit, per-plan decision; AskUserQuestion,
+        // because its ANSWERS ride in the verdict — an auto-allow would answer nothing ("the user did not
+        // answer").
+        if (autoAllow && !meta.neverRemember) {
             respond(ev.requestId, true, false, ev.input, null, null)
             return
         }
-        val meta = ToolMetadata.of(ev.toolName, ev.input)
         // neverRemember tools (ExitPlanMode, AskUserQuestion) are a human-decision gate: never satisfy them
         // from a remembered rule — every plan/question must be answered explicitly (issue #10).
         if (!meta.neverRemember && meta.rule in allowRules) { // remembered earlier this session → auto-allow without prompting
             respond(ev.requestId, true, false, ev.input, null, null)
             return
         }
+        val isQuestion = ev.toolName == AskQuestions.TOOL
         val askId = ev.requestId
         val timeout = scope.launch {
             delay(if (isQuestion) questionTimeoutMs else verdictTimeoutMs)
