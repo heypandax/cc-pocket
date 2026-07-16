@@ -77,13 +77,9 @@
     <string name="history_badge">历史</string>
     <string name="dir_projects">项目</string>
     <string name="open_computers">打开电脑总览</string>
-    <string name="view_switch_list">切换到列表视图</string>
-    <string name="view_switch_tree">切换到树状视图</string>
     <string name="home_attention_title">%1$d 项等待你处理</string>
     <string name="home_attention_body">查看待确认授权和电脑运行状态</string>
-    <string name="dir_active">进行中</string>
     <string name="dir_pinned">置顶</string>
-    <string name="dir_current_project">当前项目</string>
     <string name="pin_project">置顶</string>
     <string name="unpin_project">取消置顶</string>
     <string name="running">运行中</string>
@@ -233,17 +229,6 @@
     <string name="notifications_section">通知</string>
     <string name="notify_on_complete">任务完成时通知</string>
     <string name="notify_on_complete_sub">应用关闭时，Claude 完成一轮回复就唤醒手机。</string>
-
-    <!-- ── 电话助手（xAI voice agent）────────────────────────────── -->
-    <string name="voice_agent_section">电话助手</string>
-    <string name="voice_agent_toggle">xAI 电话助手</string>
-    <string name="voice_agent_toggle_sub">在这台电脑上接听打到你 xAI 号码的来电。</string>
-    <string name="voice_agent_status">状态</string>
-    <string name="voice_agent_stopped">已停止</string>
-    <string name="voice_agent_starting">启动中…</string>
-    <string name="voice_agent_ready">在线，可接听来电</string>
-    <string name="voice_agent_xai_down">已启动，xAI 未连接</string>
-    <string name="voice_agent_phone">号码</string>
 
     <!-- ── 新会话默认模式 ────────────────────────────────────────── -->
     <string name="default_mode_section">新会话默认模式</string>

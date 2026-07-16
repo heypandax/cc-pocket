@@ -19,7 +19,7 @@ import dev.ccpocket.protocol.DirectoryEntry
 sealed interface DirRow {
     data class Header(val label: String) : DirRow
 
-    /** [direct] = a live-section row: tapping jumps straight into the running session (not the session list). */
+    /** [direct] lets a pinned project jump into its live session instead of opening the session list first. */
     data class Dir(val entry: DirectoryEntry, val showPath: Boolean, val direct: Boolean = false) : DirRow
 }
 
@@ -82,30 +82,9 @@ fun TailPathText(path: String, modifier: Modifier = Modifier, color: Color = Tok
     )
 }
 
-/**
- * Rows for the project browser: one "Open Sessions" section (every project with a live session —
- * the running/idle badge on the row tells them apart), then ALL projects. Live projects appear
- * twice on purpose — the top section jumps straight into the running session, the Projects copy
- * keeps the session list and "New session" reachable. The daemon sorts by transcript mtime.
- * Section labels come in pre-localized (this runs inside remember{}, outside composition).
- */
-/** The entries for the pinned [paths] (in pin order) that are still present in [dirs]. Shared by the flat
- *  and tree views so both resolve pins the same way. */
+/** The entries for the pinned [paths] (in pin order) that are still present in [dirs]. */
 fun pinnedEntries(dirs: List<DirectoryEntry>, paths: List<String>): List<DirectoryEntry> =
     paths.mapNotNull { p -> dirs.firstOrNull { it.path == p } }
-
-/** One live-section row PER running session: a project whose daemon reports several
- *  [DirectoryEntry.activeSessions] expands into one entry-copy per session, so every existing
- *  cell/tap path keeps working. Each copy carries its session as the legacy single fields AND as a
- *  one-element activeSessions (the tap needs its agent). Entries from older daemons pass through. */
-fun expandLiveSessions(e: DirectoryEntry): List<DirectoryEntry> =
-    if (e.activeSessions.size <= 1) listOf(e)
-    else e.activeSessions.map { s ->
-        e.copy(
-            activeSessionId = s.sessionId, activeSessionTitle = s.title, gitBranch = s.gitBranch,
-            executing = s.executing, busy = s.busy, activeSessions = listOf(s),
-        )
-    }
 
 /** The backend of the entry's linked live session ([DirectoryEntry.activeSessionId]). CLAUDE when the
  *  daemon didn't say (older daemon / transcript-derived active — those are always Claude transcripts):
@@ -130,8 +109,8 @@ fun buildDirRows(
             it.latestSessionTitle?.contains(q, ignoreCase = true) == true ||
             it.activeSessionTitle?.contains(q, ignoreCase = true) == true
     }
-    // pinned-to-top, in pin order; only those still present (and matching the filter). A pinned project
-    // also keeps its copy in the full Projects list below.
+    // One flat browser: pinned projects first in pin order, then every matching project in the daemon's
+    // recency order. A pin intentionally retains its copy in Projects so the complete list stays stable.
     val pins = pinnedEntries(filtered, pinned)
     val rows = ArrayList<DirRow>()
     fun section(label: String, items: List<DirectoryEntry>, direct: Boolean) {
@@ -142,97 +121,4 @@ fun buildDirRows(
     section(pinnedLabel, pins, direct = true)
     section(if (pins.isNotEmpty()) projectsLabel else "", filtered, direct = false)
     return rows
-}
-
-// ── tree browse: a client-side hierarchy over the flat project list ───────────────────────────────
-// The daemon only knows project dirs (cwds with Claude history); it has no real filesystem tree. We
-// derive one by grouping those flat paths on their directory segments, so the phone can drill in level
-// by level (one level per screen, mobile-first) with a breadcrumb back up.
-
-/** A node at the current tree level: a folder to drill into, or a project leaf to open. */
-sealed interface TreeRow {
-    /** [project] is non-null when this folder is ALSO a project itself — tapping then opens its sessions
-     *  directly (a separate chevron drills into subfolders), instead of dead-ending behind the drill. */
-    data class Folder(val name: String, val path: String, val project: DirectoryEntry? = null) : TreeRow
-    data class Leaf(val entry: DirectoryEntry) : TreeRow
-}
-
-/** The tree root: the user's home (~/…) inferred from the project paths, else their common parent dir. */
-fun treeRoot(dirs: List<DirectoryEntry>): String {
-    dirs.firstNotNullOfOrNull { homePrefix(it.path) }?.let { return it }
-    val paths = dirs.map { it.path }
-    if (paths.isEmpty()) return "/"
-    val sep = sepOf(paths.first())
-    var prefix = paths.first().substringBeforeLast(sep)
-    for (p in paths.drop(1)) {
-        while (prefix.isNotEmpty() && p != prefix && !p.startsWith("$prefix$sep")) prefix = prefix.substringBeforeLast(sep, "")
-    }
-    return prefix.ifEmpty { sep.toString() }
-}
-
-/**
- * Rows directly under [base]: immediate child folders (drill in) + project leaves (open). Newest-first.
- * A child that has ANY deeper project is a Folder (drillable) EVEN if it is itself a project — otherwise
- * dirs like ~/Desktop (a project that also holds many projects) would dead-end as a leaf. When [base]
- * itself is a project, its own sessions appear as a leaf at the top of this level.
- *
- * [includeOrphans] (pass true at the tree ROOT): projects NOT under [base] — another drive on Windows,
- * or outside the inferred home — are appended as plain leaves, else tree mode simply loses them (the
- * home-pinned root filters them out and no drill can reach them; flat view always had them).
- */
-fun buildTree(dirs: List<DirectoryEntry>, base: String, includeOrphans: Boolean = false): List<TreeRow> {
-    // sep from base when it carries one; a degenerate root ("C:" from the common-prefix walk, or "/")
-    // has none to detect, so fall back to what the entries actually use
-    val sep = if (base.contains('\\') || base.contains('/')) sepOf(base) else dirs.firstOrNull()?.path?.let(::sepOf) ?: '/'
-    val prefix = if (base.endsWith(sep)) base else "$base$sep" // don't double the sep when base already ends with it ("/", "C:\")
-    val relevant = dirs.filter { it.path == base || it.path.startsWith(prefix) }
-    val rows = ArrayList<TreeRow>()
-    relevant.firstOrNull { it.path == base }?.let { rows += TreeRow.Leaf(it) } // base's own sessions, if any
-    val byChild = LinkedHashMap<String, MutableList<DirectoryEntry>>()
-    for (e in relevant) {
-        if (e.path == base) continue
-        val seg = e.path.removePrefix(prefix).split(PATH_SEP).first()
-        byChild.getOrPut(seg) { mutableListOf() }.add(e)
-    }
-    byChild.entries
-        .sortedByDescending { (_, es) -> es.maxOf { it.lastModified } }
-        .forEach { (seg, es) ->
-            val childPath = prefix + seg
-            if (es.any { it.path.startsWith("$childPath$sep") }) { // has deeper projects → drillable folder
-                rows += TreeRow.Folder(seg, childPath, project = es.firstOrNull { it.path == childPath })
-            } else {
-                rows += TreeRow.Leaf(es.first { it.path == childPath })
-            }
-        }
-    if (includeOrphans) {
-        dirs.filterNot { it.path == base || it.path.startsWith(prefix) }
-            .sortedByDescending { it.lastModified }
-            .forEach { rows += TreeRow.Leaf(it) }
-    }
-    return rows
-}
-
-/** Breadcrumb segments for [base], home collapsed to ~. e.g. /Users/x/proj/app -> [~, proj, app]. */
-fun crumbs(base: String): List<String> = tilde(base).split(PATH_SEP).filter { it.isNotEmpty() }
-
-/**
- * Breadcrumb labels WITH their drill targets, anchored at the tree [root]. The old label-only
- * reconstruction assumed the first segment WAS the root — wrong whenever root is deeper than one
- * segment (a common-prefix root like `/opt/x` or `C:\dev`), where a middle-crumb jump then composed
- * a nonsense path and bounced the view back to root.
- */
-fun crumbTargets(base: String, root: String): List<Pair<String, String>> {
-    val sep = sepOf(base)
-    val rs = root.split(PATH_SEP)
-    // the home root itself is exactly [drive-or-empty, Users|home, <user>] — tilde() only collapses DEEPER paths
-    val rootLabel = if (rs.size == 3 && (rs[1] == "Users" || rs[1] == "home")) "~" else rs.lastOrNull { it.isNotEmpty() } ?: root
-    val rest = base.removePrefix(root).split(PATH_SEP).filter { it.isNotEmpty() }
-    val out = ArrayList<Pair<String, String>>()
-    out += rootLabel to root
-    var acc = root
-    for (seg in rest) {
-        acc = if (acc.endsWith(sep)) "$acc$seg" else "$acc$sep$seg"
-        out += seg to acc
-    }
-    return out
 }

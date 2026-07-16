@@ -41,7 +41,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -65,6 +64,7 @@ import dev.ccpocket.app.share.exportBytesOf
 import dev.ccpocket.app.share.previewFile
 import dev.ccpocket.app.share.shareFile
 import dev.ccpocket.app.theme.Tok
+import dev.ccpocket.app.theme.glassPanel
 import dev.ccpocket.app.ui.DiffEmptyState
 import dev.ccpocket.app.ui.DiffFileToggle
 import dev.ccpocket.app.ui.DiffPaneBody
@@ -126,8 +126,7 @@ fun ChangesOverlay(model: DesktopModel, onDismiss: () -> Unit) {
 
     Column(
         Modifier.widthIn(max = 1040.dp).fillMaxWidth(0.92f).heightIn(max = 640.dp).fillMaxHeight(0.88f)
-            .shadow(30.dp, RoundedCornerShape(14.dp)).clip(RoundedCornerShape(14.dp))
-            .background(Tok.raised).border(1.dp, Tok.hair, RoundedCornerShape(14.dp))
+            .glassPanel(RoundedCornerShape(14.dp), elevated = true, elevation = 30.dp)
             .focusRequester(focus).focusable()
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false

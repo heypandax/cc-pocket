@@ -63,7 +63,7 @@ fun TerminalScreen(repo: PocketRepository, onBack: () -> Unit) {
     LaunchedEffect(entries.size, repo.terminalBusy.value) {
         if (entries.isNotEmpty()) runCatching { listState.animateScrollToItem(entries.size - 1) }
     }
-    Column(Modifier.fillMaxSize().background(Tok.base).imePadding()) {
+    Column(Modifier.fillMaxSize().background(Tok.raised).imePadding()) {
         Row(
             Modifier.fillMaxWidth().background(Tok.surface).padding(start = 6.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,

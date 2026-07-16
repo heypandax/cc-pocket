@@ -1,5 +1,7 @@
 package dev.ccpocket.app.desktop
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.hoverable
@@ -34,6 +36,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ccpocket.app.theme.Tok
+import dev.ccpocket.app.theme.PocketMotion
 
 /**
  * Desktop design kit — the atoms shared by the two-pane shell, ported from `desktop-core.jsx`.
@@ -115,7 +118,12 @@ fun Modifier.hoverFill(
 ): Modifier {
     val src = remember { MutableInteractionSource() }
     val hovered by src.collectIsHoveredAsState()
-    return this.hoverable(src).background(if (hovered) hover else base, shape)
+    val fill by animateColorAsState(
+        targetValue = if (hovered) hover else base,
+        animationSpec = tween(PocketMotion.fastMs),
+        label = "desktop-hover-fill",
+    )
+    return this.hoverable(src).background(fill, shape)
 }
 
 /**
@@ -125,7 +133,7 @@ fun Modifier.hoverFill(
 @Composable
 fun Modifier.selectableRow(selected: Boolean, radius: Dp = 8.dp): Modifier {
     val shape = RoundedCornerShape(radius)
-    return clip(shape).then(if (selected) Modifier.background(Tok.surface) else Modifier.hoverFill(shape))
+    return clip(shape).hoverFill(shape = shape, base = if (selected) Tok.surface else Color.Transparent)
 }
 
 /** A dashed rounded border — marks "add" affordances (add-computer rows) apart from solid cards. */

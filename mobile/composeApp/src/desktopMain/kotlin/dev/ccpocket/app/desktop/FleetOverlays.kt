@@ -188,7 +188,7 @@ fun PaneHeader(machine: String, os: DkOs, title: String, mode: String, focused: 
  */
 @Composable
 fun WatchPane(watch: DkWatch, model: DesktopModel, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxSize().background(Tok.base)) {
+    Column(modifier.fillMaxSize().background(Tok.raised)) {
         PaneHeader(watch.machine, watch.os, watch.title, watch.mode, focused = false)
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 12.dp)) {
             Text(watch.output, color = Tok.tx2, fontFamily = Dk.mono, fontSize = 10.5.sp, lineHeight = 17.sp)

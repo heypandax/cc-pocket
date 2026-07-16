@@ -54,7 +54,7 @@ import kotlinx.coroutines.delay
 fun AttentionInboxScreen(repo: PocketRepository, onBack: () -> Unit) {
     val entries = repo.fleetAttention().sortedBy { it.seconds }
     val finished = repo.fleetFinished()
-    Column(Modifier.fillMaxSize().background(Tok.base)) {
+    Column(Modifier.fillMaxSize().background(Tok.raised)) {
         Row(
             Modifier.fillMaxWidth().background(Tok.surface).padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically,

@@ -1,6 +1,5 @@
 package dev.ccpocket.app
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,7 +38,7 @@ import dev.ccpocket.app.desktop.PaletteScope
 import dev.ccpocket.app.desktop.RepoDesktopModel
 import dev.ccpocket.app.secure.SecureStore
 import dev.ccpocket.app.theme.PocketTheme
-import dev.ccpocket.app.theme.Tok
+import dev.ccpocket.app.theme.GlassBackdrop
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import java.awt.Dimension
@@ -274,45 +273,45 @@ fun main() = application {
             androidx.compose.runtime.CompositionLocalProvider(
                 dev.ccpocket.app.ui.LocalPathOpener provides dev.ccpocket.app.desktop.DesktopPathOpener(),
             ) {
-            Column(Modifier.fillMaxSize().background(Tok.base)) {
-                // In fullscreen the self-drawn title bar collapses (issue #94): macOS already provides its
-                // own auto-hiding menu on top-hover, so drawing our bar too would double up. Win/Linux
-                // borderless fullscreen has no such menu, so they get a slim hover-reveal exit strip instead.
-                if (!fullscreen) {
-                    DkTitleBar(
-                        mac = mac,
-                        onClose = ::exitApplication,
-                        onMinimize = { windowState.isMinimized = true },
-                        onToggleMax = {
-                            val restore = zoomRestore
-                            if (restore != null) {
-                                window.bounds = restore
-                                zoomRestore = null
-                            } else {
-                                zoomRestore = window.bounds
-                                window.bounds = usableScreenBounds(window)
-                            }
-                        },
-                        onToggleFullscreen = toggleFullscreen,
-                        onTray = { model.showTray = !model.showTray },
-                        onSearch = { model.palette = PaletteScope.ALL },
-                    )
-                } else if (!mac) {
-                    FullscreenExitStrip(onExit = toggleFullscreen)
+                GlassBackdrop(Modifier.fillMaxSize()) {
+                    Column(Modifier.fillMaxSize()) {
+                        // In fullscreen the self-drawn title bar collapses (issue #94): macOS already provides
+                        // its own auto-hiding menu on top-hover, so drawing ours too would double up. Win/Linux
+                        // borderless fullscreen gets a slim hover-reveal exit strip instead.
+                        if (!fullscreen) {
+                            DkTitleBar(
+                                mac = mac,
+                                onClose = ::exitApplication,
+                                onMinimize = { windowState.isMinimized = true },
+                                onToggleMax = {
+                                    val restore = zoomRestore
+                                    if (restore != null) {
+                                        window.bounds = restore
+                                        zoomRestore = null
+                                    } else {
+                                        zoomRestore = window.bounds
+                                        window.bounds = usableScreenBounds(window)
+                                    }
+                                },
+                                onToggleFullscreen = toggleFullscreen,
+                                onTray = { model.showTray = !model.showTray },
+                                onSearch = { model.palette = PaletteScope.ALL },
+                            )
+                        } else if (!mac) {
+                            FullscreenExitStrip(onExit = toggleFullscreen)
+                        }
+                        Box(Modifier.fillMaxWidth().weight(1f)) {
+                            // Tray actions raise the window: un-minimize, then bring the AWT window to front.
+                            if (connected) DesktopApp(model, onActivateWindow = {
+                                windowState.isMinimized = false
+                                window.toFront()
+                                window.requestFocus()
+                            }) else ConnectPanel(repo)
+                            // "Add computer" pairs a new daemon in a modal over the live shell (no disconnect).
+                            if (model.showAddComputer) AddComputerModal(repo) { model.showAddComputer = false }
+                        }
+                    }
                 }
-                Box(Modifier.fillMaxWidth().weight(1f)) {
-                    // the tray's "Open cc-pocket" / row-jump raise the window (issue #111): un-minimize, then
-                    // bring the AWT window to front and focus it — a real menu-bar action once the tray leaves
-                    // the title bar, and harmless (already-frontmost) while it lives there.
-                    if (connected) DesktopApp(model, onActivateWindow = {
-                        windowState.isMinimized = false
-                        window.toFront()
-                        window.requestFocus()
-                    }) else ConnectPanel(repo)
-                    // "Add computer" pairs a new daemon in a modal over the live shell (no disconnect)
-                    if (model.showAddComputer) AddComputerModal(repo) { model.showAddComputer = false }
-                }
-            }
             }
         }
     }

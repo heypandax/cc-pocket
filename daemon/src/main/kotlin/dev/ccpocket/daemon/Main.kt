@@ -427,69 +427,10 @@ private class ServiceInstallCmd : CliktCommand(name = "service-install") {
     }
 }
 
-private class VoiceAgentCmd : CliktCommand(name = "voice-agent") {
-    private val action by option(help = "start|stop|status").default("status")
-
-    override fun run() {
-        val projectRoot = run {
-            val envHome = System.getenv("CC_POCKET_HOME")
-            if (envHome != null) {
-                java.io.File(envHome).absoluteFile
-            } else {
-                val codeSource = dev.ccpocket.daemon.voice.VoiceAgentService::class.java
-                    .protectionDomain?.codeSource?.location
-                if (codeSource != null && codeSource.protocol == "file") {
-                    val libDir = java.io.File(codeSource.toURI()).parentFile
-                    libDir?.parentFile?.absoluteFile ?: java.io.File(".").absoluteFile
-                } else {
-                    java.io.File(".").absoluteFile
-                }
-            }
-        }
-        val service = dev.ccpocket.daemon.voice.VoiceAgentService(projectRoot)
-        val prefs = DaemonPrefs.load()
-
-        when (action.lowercase()) {
-            "start" -> {
-                prefs.setVoiceAgentEnabled(true)
-                if (service.start()) {
-                    echo("✅ voice agent started (auto-start on daemon boot: on)")
-                } else {
-                    echo("❌ ${service.error}")
-                    throw com.github.ajalt.clikt.core.ProgramResult(1)
-                }
-            }
-            "stop" -> {
-                prefs.setVoiceAgentEnabled(false)
-                service.stop()
-                echo("✅ voice agent stopped (auto-start on daemon boot: off)")
-            }
-            "status" -> {
-                val enabled = prefs.voiceAgentEnabled
-                val st = service.status() // probes /health — sees the daemon-owned instance too
-                echo("voice agent:")
-                echo("  config:   ${if (enabled) "✅ enabled (auto-start on boot)" else "○ disabled"}")
-                echo("  running:  ${if (st.running) "✅ running" else "○ not running"}")
-                if (st.running) {
-                    val xai = when (st.xaiConnected) {
-                        true -> "✅ connected"
-                        false -> "❌ disconnected"
-                        null -> "? no /health reply"
-                    }
-                    echo("  xAI:      $xai")
-                }
-                st.phoneNumber?.let { echo("  phone:    $it") }
-                if (st.error != null) echo("  error:    ${st.error}")
-            }
-            else -> throw com.github.ajalt.clikt.core.CliktError("--action must be start|stop|status (got: $action)")
-        }
-    }
-}
-
 fun main(args: Array<String>) {
     // BEFORE the first logger materializes: slf4j-simple freezes its config at init, and bare
     // timestamp-less lines made the 07-04 observe/fork incident unreconstructable from the logs
     System.setProperty("org.slf4j.simpleLogger.showDateTime", "true")
     System.setProperty("org.slf4j.simpleLogger.dateTimeFormat", "MM-dd HH:mm:ss.SSS")
-    Root().subcommands(RunCmd(), TestClientCmd(), PairCmd(), StatusCmd(), UpdateCmd(), ConfigCmd(), ServiceInstallCmd(), VoiceAgentCmd()).main(args)
+    Root().subcommands(RunCmd(), TestClientCmd(), PairCmd(), StatusCmd(), UpdateCmd(), ConfigCmd(), ServiceInstallCmd()).main(args)
 }

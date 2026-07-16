@@ -51,15 +51,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.Bolt
-import androidx.compose.material.icons.rounded.AccountTree
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.rounded.Reorder
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Lock
@@ -73,12 +70,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -139,10 +136,12 @@ import dev.ccpocket.app.ui.fleet.crossMachineAttention
 import dev.ccpocket.app.ui.fleet.fleetAttention
 import dev.ccpocket.app.resources.*
 import dev.ccpocket.app.theme.LocalFontScale
+import dev.ccpocket.app.theme.GlassBackdrop
 import dev.ccpocket.app.theme.PocketTheme
 import dev.ccpocket.app.theme.PocketMotion
 import dev.ccpocket.app.theme.ThemeMode
 import dev.ccpocket.app.theme.Tok
+import dev.ccpocket.app.theme.glassPanel
 import dev.ccpocket.app.voice.openAppSettings
 import dev.ccpocket.protocol.AgentKind
 import dev.ccpocket.protocol.CommandSource
@@ -194,7 +193,7 @@ fun App(scope: CoroutineScope) {
     }
     // Mobile always follows the phone's current light/dark appearance. Desktop keeps its own override.
     PocketTheme(mode = ThemeMode.SYSTEM, fontScale = repo.fontScale.value) {
-        Surface(Modifier.fillMaxSize(), color = Tok.base) {
+        GlassBackdrop(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars).imePadding()) {
                 // pushes content down instead of overlaying the header; steady while retrying (no flicker)
                 // preview/recording mode hides the demo banner for a clean marketing capture
@@ -489,40 +488,18 @@ private fun DirectoryScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}
     // instead of the pre-session snapshot — then keep re-pulling quietly
     LaunchedEffect(Unit) { while (true) { repo.refreshDirectoriesSilently(); delay(10_000) } }
 
-    val tree = repo.treeView.value
-    val dirsSnapshot = repo.directories.toList()
-    val root = remember(dirsSnapshot) { treeRoot(dirsSnapshot) }
-    val browse = repo.browsePath.value
-    // a browse path the daemon no longer has (dirs changed) falls back to root
-    val base = remember(dirsSnapshot, browse, root) {
-        browse?.takeIf { b -> dirsSnapshot.any { it.path == b || it.path.startsWith(b + sepOf(b)) } } ?: root // sep-aware: a Windows daemon's paths use '\' (issue #19/#22 — tree drill-in)
-    }
-    val treeMode = tree && query.isBlank() // filtering or flat mode both render the flat grouped list
+    // Snapshot state lists only when their own contents change. DirectoryScreen also observes scroll,
+    // connection, and refresh state; rebuilding these lists on those unrelated frames creates avoidable
+    // allocations precisely while the user is dragging.
+    val dirsSnapshot by remember(repo) { derivedStateOf { repo.directories.toList() } }
 
     val projectsLabel = stringResource(Res.string.dir_projects)
-    val activeLabel = stringResource(Res.string.dir_active)
     val pinnedLabel = stringResource(Res.string.dir_pinned)
-    val currentProjectLabel = stringResource(Res.string.dir_current_project)
     val computersLabel = stringResource(Res.string.open_computers)
-    // drilled into a folder → the header names where you are (folder name); root keeps the section title.
-    // This stops the big title and the in-list "Projects" label from both reading "Projects" while drilled in.
-    // Reuse crumbs() (the breadcrumb's helper) so the title and breadcrumb tail stay identical by construction.
-    val headerTitle = if (treeMode && base != root) crumbs(base).lastOrNull() ?: projectsLabel else projectsLabel
-    val pinnedSnapshot = repo.pinnedPaths.toList()
+    val pinnedSnapshot by remember(repo) { derivedStateOf { repo.pinnedPaths.toList() } }
     val flatRows = remember(dirsSnapshot, query, pinnedSnapshot, pinnedLabel, projectsLabel) {
-        buildDirRows(repo.directories, query, pinnedSnapshot, pinnedLabel, projectsLabel)
+        buildDirRows(dirsSnapshot, query, pinnedSnapshot, pinnedLabel, projectsLabel)
     }
-    // at the root, also surface projects OUTSIDE it (other drives / off-home) as plain leaves
-    val treeRows = remember(dirsSnapshot, base, root) { buildTree(repo.directories, base, includeOrphans = base == root) }
-    // when drilled into a folder that is itself a project, buildTree leads with its own leaf — split it out
-    // as the "current project" row (the rest are its subfolders). Computed once here, not per recomposition.
-    val currentLeaf = remember(treeRows, base, root) {
-        (treeRows.firstOrNull() as? TreeRow.Leaf)?.takeIf { base != root && it.entry.path == base }
-    }
-    val childRows = remember(treeRows, currentLeaf) { if (currentLeaf != null) treeRows.drop(1) else treeRows }
-    val live = remember(dirsSnapshot) { dirsSnapshot.filter { it.open || it.busy }.flatMap(::expandLiveSessions) } // ACTIVE: one row per live session
-    // pinned projects shown at the tree root (in pin order, present-only) — mirrors the flat Pinned section
-    val pinned = remember(dirsSnapshot, pinnedSnapshot) { pinnedEntries(dirsSnapshot, pinnedSnapshot) }
     // long-press a project → a small sheet to pin/unpin it
     var actionTarget by remember { mutableStateOf<DirectoryEntry?>(null) }
     // "+" → type an arbitrary path to start a session in a folder with no prior history (issue #7)
@@ -542,9 +519,9 @@ private fun DirectoryScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}
 
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
-        // ── top bar: "Projects" + connection sub-line · view toggle · settings ──
+        // ── top bar: "Projects" + connection sub-line · new path · settings ──
         ProjectsTopBar(
-            headerTitle,
+            projectsLabel,
             if (repo.phase.value == ConnPhase.Ready) Tok.ok else Tok.warn,
             repo.paired.value?.displayName(),
             // the machine line is the doorway into the fleet: tap → Your computers (live overview)
@@ -565,7 +542,6 @@ private fun DirectoryScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}
             IconButton({ showNewPath = true }, modifier = Modifier.size(44.dp)) {
                 Icon(Icons.Rounded.Add, stringResource(Res.string.new_path_open), tint = Tok.tx2, modifier = Modifier.size(22.dp))
             }
-            ViewToggle(tree) { repo.setTreeView(!tree) }
             Spacer(Modifier.width(4.dp))
             IconButton({ showSettings = true }, modifier = Modifier.size(44.dp)) {
                 Icon(Icons.Outlined.Settings, stringResource(Res.string.settings_open), tint = Tok.tx2, modifier = Modifier.size(20.dp))
@@ -579,67 +555,24 @@ private fun DirectoryScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}
             query, { query = it }, placeholder = { Text(stringResource(Res.string.filter_hint)) }, singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         )
-        // ── breadcrumb (tree, drilled below root) ──
-        if (treeMode && base != root) {
-            // labels + real drill targets anchored at root — a reconstruction from display labels broke
-            // whenever root was deeper than one segment (common-prefix roots like /opt/x or C:\dev)
-            val segs = remember(base, root) { crumbTargets(base, root) }
-            Breadcrumb(
-                segs.map { it.first },
-                onUp = { repo.browsePath.value = segs.getOrNull(segs.size - 2)?.second?.takeIf { it != root } },
-                onSegment = { i -> repo.browsePath.value = segs.getOrNull(i)?.second?.takeIf { it != root } },
-            )
-        }
         PullToRefreshBox(isRefreshing = repo.refreshing.value, onRefresh = { repo.refreshDirectories() }, modifier = Modifier.fillMaxSize()) {
             when {
                 repo.directories.isEmpty() && repo.directoriesLoaded.value && query.isBlank() ->
                     EmptyDirectories(onAdd = { showNewPath = true }) { repo.refreshDirectories() }
-                !treeMode && flatRows.isEmpty() && repo.directoriesLoaded.value ->
+                flatRows.isEmpty() && repo.directoriesLoaded.value ->
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(stringResource(Res.string.dir_no_matches), color = Tok.muted, fontSize = 13.sp)
                     }
-                treeMode -> LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), state = listState, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (base == root) { // PINNED + ACTIVE pinned on top at root
-                        if (pinned.isNotEmpty()) {
-                            item { Label(pinnedLabel) }
-                            items(pinned, key = { "p:" + it.path }) { e -> ProjectCell(repo, e, showPath = true, direct = true, onLongPress = { actionTarget = e }) }
-                        }
-                        if (live.isNotEmpty()) {
-                            item { Label(activeLabel) }
-                            // key carries the session too — expansion can put the same project here several times
-                            items(live, key = { "a:" + it.path + ":" + (it.activeSessionId ?: "") }) { e -> ProjectCell(repo, e, showPath = true, direct = true, onLongPress = { actionTarget = e }) }
-                        }
-                        if (pinned.isNotEmpty() || live.isNotEmpty()) item { Label(projectsLabel) }
-                    }
-                    // drilled into a folder that is itself a project → its own sessions lead as "current project"
-                    if (currentLeaf != null) {
-                        item { Label(currentProjectLabel) }
-                        item(key = "cur:" + currentLeaf.entry.path) {
-                            val e = currentLeaf.entry
-                            LeafRow(e, pinned = repo.isPinned(e.path), onLongPress = { actionTarget = e }) { repo.openProject(e) }
-                        }
-                        item { Label(projectsLabel) }
-                    }
-                    items(childRows, key = { r -> when (r) { is TreeRow.Folder -> "f:" + r.path; is TreeRow.Leaf -> "l:" + r.entry.path } }) { r ->
-                        when (r) {
-                            is TreeRow.Folder -> {
-                                val proj = r.project
-                                FolderRow(
-                                    name = r.name,
-                                    project = proj,
-                                    pinned = proj != null && repo.isPinned(proj.path),
-                                    onLongPress = proj?.let { e -> { actionTarget = e } },
-                                ) { repo.browsePath.value = r.path }
-                            }
-                            is TreeRow.Leaf -> {
-                                val e = r.entry
-                                LeafRow(e, pinned = repo.isPinned(e.path), onLongPress = { actionTarget = e }) { repo.openProject(e) }
-                            }
-                        }
-                    }
-                }
                 else -> LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), state = listState, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(flatRows) { row ->
+                    items(
+                        items = flatRows,
+                        key = { row ->
+                            when (row) {
+                                is DirRow.Header -> "header:${row.label}"
+                                is DirRow.Dir -> "project:${row.direct}:${row.entry.path}"
+                            }
+                        },
+                    ) { row ->
                         when (row) {
                             is DirRow.Header -> Label(row.label)
                             is DirRow.Dir -> ProjectCell(repo, row.entry, showPath = row.showPath, direct = row.direct, onLongPress = { actionTarget = row.entry })
@@ -651,8 +584,7 @@ private fun DirectoryScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}
     }
         actionTarget?.let { ProjectActionsSheet(repo, it) { actionTarget = null } }
         if (showNewPath) NewPathSheet(
-            // drilled into a folder → seed it as the parent so the user types only the new project's name (issue #7)
-            parent = base.takeIf { it.length > 1 }, // seed the current location (root prefix or a drilled folder) so "type the rest of the path" is obvious (#32/#7)
+            parent = null,
             agent = repo.defaultAgent.value,
             mode = repo.defaultMode.value,
             onDismiss = { showNewPath = false },
@@ -1007,113 +939,6 @@ private fun HistoryBadge(onClick: (() -> Unit)? = null) {
     )
 }
 
-/** Flat ⇄ tree view-mode toggle (top-bar right). Tapping flips the persisted mode. */
-@Composable
-private fun ViewToggle(tree: Boolean, onToggle: () -> Unit) {
-    val label = stringResource(if (tree) Res.string.view_switch_list else Res.string.view_switch_tree)
-    Row(
-        Modifier.clip(RoundedCornerShape(9.dp)).clickable(onClick = onToggle).semantics { contentDescription = label }
-            .heightIn(min = 44.dp).padding(2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ViewSeg(on = !tree, icon = Icons.Rounded.Reorder)
-        ViewSeg(on = tree, icon = Icons.Rounded.AccountTree)
-    }
-}
-
-@Composable
-private fun ViewSeg(on: Boolean, icon: ImageVector) {
-    Box(
-        Modifier.size(width = 30.dp, height = 26.dp).clip(RoundedCornerShape(7.dp)).then(if (on) Modifier.background(Tok.accent) else Modifier),
-        contentAlignment = Alignment.Center,
-    ) { Icon(icon, null, tint = if (on) Tok.base else Tok.tx2, modifier = Modifier.size(16.dp)) }
-}
-
-/** Path breadcrumb shown when drilled into a subfolder: back ‹ + tappable mono segments (current bolded). */
-@Composable
-private fun Breadcrumb(segs: List<String>, onUp: () -> Unit, onSegment: (Int) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        Box(Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onUp), contentAlignment = Alignment.Center) {
-            Text("‹", color = Tok.tx2, fontSize = 18.sp)
-        }
-        segs.forEachIndexed { i, s ->
-            val last = i == segs.lastIndex
-            Text(
-                s, color = if (last) Tok.tx else Tok.tx2, fontFamily = FontFamily.Monospace, fontSize = 12.sp,
-                fontWeight = if (last) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1,
-                modifier = Modifier.heightIn(min = 44.dp).clickable(enabled = !last) { onSegment(i) }
-                    .padding(horizontal = 3.dp, vertical = 12.dp),
-            )
-            if (!last) Text("›", color = Tok.muted, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-        }
-    }
-}
-
-/**
- * A folder row in the tree — tap drills in. [project] != null means the folder is ALSO a project
- * (history/running hint shown); drilling in surfaces its own sessions as the "current project" row at
- * the top of that level, so it's reachable without the row itself hijacking the drill gesture.
- */
-@Composable
-private fun FolderRow(
-    name: String,
-    project: DirectoryEntry?,
-    pinned: Boolean,
-    onLongPress: (() -> Unit)?,
-    onClick: () -> Unit,
-) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
-            .padding(horizontal = 4.dp, vertical = 13.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Outlined.Folder, null, tint = Tok.tx2, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(10.dp))
-        Text(name, color = Tok.tx, fontFamily = FontFamily.Monospace, fontSize = 13.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        if (pinned) { PinGlyph(); Spacer(Modifier.width(8.dp)) }
-        if (project != null) {
-            if (project.open || project.busy) {
-                PulseDot(Tok.accent, size = 6.dp)
-                Spacer(Modifier.width(4.dp))
-                Text(stringResource(Res.string.running), color = Tok.accent, fontFamily = FontFamily.Monospace, fontSize = 10.5.sp)
-                Spacer(Modifier.width(8.dp))
-            } else {
-                HistoryBadge()
-                Spacer(Modifier.width(8.dp))
-            }
-        }
-        Icon(Icons.Rounded.KeyboardArrowRight, null, tint = Tok.muted, modifier = Modifier.size(18.dp))
-    }
-}
-
-/** A project-leaf row in the tree — opens its session list (or jumps into the live session). */
-@Composable
-private fun LeafRow(e: DirectoryEntry, pinned: Boolean, onLongPress: (() -> Unit)?, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).combinedClickable(onClick = onClick, onLongClick = onLongPress).padding(horizontal = 4.dp, vertical = 13.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("⑂", color = Tok.accent, fontSize = 14.sp, modifier = Modifier.padding(end = 9.dp)) // project marker
-        Text(e.name.ifBlank { e.path }, color = Tok.tx, fontFamily = FontFamily.Monospace, fontSize = 13.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        if (pinned) { PinGlyph(); Spacer(Modifier.width(8.dp)) }
-        if (e.open || e.busy) {
-            PulseDot(Tok.accent, size = 6.dp)
-            Spacer(Modifier.width(4.dp))
-            Text(stringResource(Res.string.running), color = Tok.accent, fontFamily = FontFamily.Monospace, fontSize = 10.5.sp)
-            Spacer(Modifier.width(8.dp))
-        }
-        e.gitBranch?.let {
-            Text(it, color = Tok.tx2, fontFamily = FontFamily.Monospace, fontSize = 11.5.sp, maxLines = 1)
-            Spacer(Modifier.width(8.dp))
-        }
-        if (e.hasSessions) HistoryBadge()
-    }
-}
-
 @Composable
 private fun DirCell(name: String, path: String?, indent: Boolean, pinned: Boolean = false, onLongPress: (() -> Unit)? = null, onClick: () -> Unit) {
     Row(
@@ -1222,12 +1047,16 @@ internal fun SessionsScreen(repo: PocketRepository) { // internal: driven end-to
                 }
             }
             val af = repo.agentFilter.value
-            val filtered = if (archived) repo.sessions.toList() else repo.sessions.filter {
-                when (af) {
-                    "claude" -> (it.agent ?: AgentKind.CLAUDE) == AgentKind.CLAUDE
-                    "codex" -> it.agent == AgentKind.CODEX
-                    "cursor" -> it.agent == AgentKind.CURSOR
-                    else -> true
+            val filtered by remember(repo, archived, af) {
+                derivedStateOf {
+                    if (archived) repo.sessions.toList() else repo.sessions.filter {
+                        when (af) {
+                            "claude" -> (it.agent ?: AgentKind.CLAUDE) == AgentKind.CLAUDE
+                            "codex" -> it.agent == AgentKind.CODEX
+                            "cursor" -> it.agent == AgentKind.CURSOR
+                            else -> true
+                        }
+                    }
                 }
             }
             PullToRefreshBox(isRefreshing = repo.sessionsRefreshing.value, onRefresh = { repo.refreshSessions() }, modifier = Modifier.fillMaxSize()) {
@@ -1439,7 +1268,8 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
     LaunchedEffect(input, draftKey) { delay(400); repo.saveDraft(draftKey, input) }
     // Follow streaming output at a bounded cadence. Keying a LaunchedEffect directly with the last
     // message restarted it for every protocol chunk; each restart immediately forced a list layout.
-    // snapshotFlow conflates changes while this collector is delayed, capping follow work at 20 Hz.
+    // snapshotFlow conflates changes while this collector is delayed, capping layout/scroll follow at
+    // ~30 Hz. The window still renders at 60/120 Hz; this only bounds expensive tail remeasurement.
     LaunchedEffect(listState) {
         snapshotFlow { Triple(repo.messages.size, repo.messages.lastOrNull(), repo.streaming.value) }.collect {
             delay(PocketMotion.streamSampleMs)
@@ -1660,8 +1490,9 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                 var recElapsed by remember { mutableStateOf(0L) }
                 if (voiceState is VoiceState.Recording) recElapsed = voiceState.elapsedMs
                 val slashQuery = slashQueryOf(input)
-                val suggestions = remember(slashQuery, repo.slashCommands.toList()) {
-                    slashSuggestions(slashQuery, repo.slashCommands)
+                val slashCommands by remember(repo) { derivedStateOf { repo.slashCommands.toList() } }
+                val suggestions = remember(slashQuery, slashCommands) {
+                    slashSuggestions(slashQuery, slashCommands)
                 }
                 // "@file" completion (issue #75): tap-only and cursor-at-end (the common mobile case) — the
                 // daemon browses the session cwd, a folder tap drills in, a file tap inserts its path. Yields
@@ -1677,15 +1508,20 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                 val atFileMatches = remember(atListing, atToken, atDir, atLeaf) {
                     if (atToken == null || atListing?.subPath != atDir) emptyList() else atMatches(atListing.entries, atLeaf)
                 }
-                val atAgentMatches = remember(repo.agencyAgents.toList(), atToken) {
+                val agencyAgents by remember(repo) { derivedStateOf { repo.agencyAgents.toList() } }
+                val atAgentMatches = remember(agencyAgents, atToken) {
                     val q = atToken?.query.orEmpty()
                     if (atToken == null || q.contains('/') || q.contains('\\')) emptyList()
-                    else repo.agencyAgents.filter {
+                    else agencyAgents.filter {
                         q.isEmpty() || it.nameZh.contains(q, true) || it.summaryZh.contains(q, true) ||
                             it.categoryZh.contains(q, true) || it.id.contains(q, true)
                     }.take(50)
                 }
-                Column(Modifier.fillMaxWidth().background(Tok.surface)) {
+                val composerDockShape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+                Column(
+                    Modifier.fillMaxWidth()
+                        .glassPanel(composerDockShape, elevated = true, elevation = 18.dp),
+                ) {
                     BackgroundJobsStrip(repo.backgroundJobs) { showBgJobs = true } // ≥1 running bg task → tap to expand
                     ComposerStatusBar(
                         repo = repo,
@@ -2139,11 +1975,12 @@ private fun NoResponseRow(onResend: () -> Unit) {
 private fun ComposerStatusBar(repo: PocketRepository, onMode: () -> Unit) {
     var openMenu by remember { mutableStateOf<String?>(null) }
     val agent = repo.sessionAgent.value ?: AgentKind.CLAUDE
+    val cursorModels by remember(repo) { derivedStateOf { repo.cursorModels.toList() } }
     LaunchedEffect(agent) { if (agent == AgentKind.CURSOR) repo.refreshCursorModels() }
     val cursorVariant = if (repo.sessionAgent.value == AgentKind.CURSOR) {
-        cursorModelForVariant(repo.cursorModels, repo.model.value)?.variants?.firstOrNull { it.id == repo.model.value }
+        cursorModelForVariant(cursorModels, repo.model.value)?.variants?.firstOrNull { it.id == repo.model.value }
     } else null
-    val cursorModel = if (agent == AgentKind.CURSOR) cursorModelForVariant(repo.cursorModels, repo.model.value) else null
+    val cursorModel = if (agent == AgentKind.CURSOR) cursorModelForVariant(cursorModels, repo.model.value) else null
     val model = when (agent) {
         AgentKind.CLAUDE -> modelAlias(repo.model.value)
         AgentKind.CODEX -> repo.model.value.orEmpty()
@@ -2154,12 +1991,12 @@ private fun ComposerStatusBar(repo: PocketRepository, onMode: () -> Unit) {
     val modelOptions = when (agent) {
         AgentKind.CLAUDE -> CLAUDE_MODEL_OPTIONS
         AgentKind.CODEX -> CODEX_MODEL_OPTIONS.map { it to it }
-        AgentKind.CURSOR -> mergedCursorModels(repo.cursorModels.toList())
+        AgentKind.CURSOR -> mergedCursorModels(cursorModels)
     }
     val selectedModel = when (agent) {
         AgentKind.CLAUDE -> modelAlias(repo.model.value)
         AgentKind.CODEX -> repo.model.value.orEmpty()
-        AgentKind.CURSOR -> cursorModelForVariant(repo.cursorModels, repo.model.value)?.id ?: repo.model.value.orEmpty()
+        AgentKind.CURSOR -> cursorModelForVariant(cursorModels, repo.model.value)?.id ?: repo.model.value.orEmpty()
     }
     val effortOptions = when (agent) {
         AgentKind.CURSOR -> cursorModel?.variants.orEmpty().map { it.name to it.id }

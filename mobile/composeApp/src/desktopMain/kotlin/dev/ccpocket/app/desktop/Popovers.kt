@@ -1,5 +1,7 @@
 package dev.ccpocket.app.desktop
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,6 +53,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ccpocket.app.theme.Tok
+import dev.ccpocket.app.theme.glassPanel
+import dev.ccpocket.app.theme.PocketMotion
 import dev.ccpocket.app.ui.AgentGlyph
 import dev.ccpocket.app.ui.CLAUDE_MODEL_OPTIONS
 import dev.ccpocket.app.ui.CODEX_MODEL_OPTIONS
@@ -95,7 +99,7 @@ fun NewSessionPopover(
     val pathFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { pathFocus.requestFocus() }
     Column(
-        Modifier.width(300.dp).clip(RoundedCornerShape(14.dp)).background(Tok.raised).border(1.dp, Tok.hair, RoundedCornerShape(14.dp))
+        Modifier.width(300.dp).glassPanel(RoundedCornerShape(14.dp), elevated = true, elevation = 18.dp)
             // Enter anywhere in the popover = the Start button (the path field holds focus)
             .onPreviewKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown && (e.key == Key.Enter || e.key == Key.NumPadEnter) && looksAbsolute) {
@@ -161,34 +165,38 @@ fun QuickActionsPopover(model: DesktopModel, onDismiss: () -> Unit) {
     var page by remember { mutableStateOf(QaPage.MAIN) }
     var clearArmed by remember { mutableStateOf(false) }
     Column(
-        Modifier.width(280.dp).clip(RoundedCornerShape(14.dp)).background(Tok.raised)
-            .border(1.dp, Tok.hair, RoundedCornerShape(14.dp)).padding(15.dp),
+        Modifier.width(280.dp).glassPanel(RoundedCornerShape(14.dp), elevated = true, elevation = 18.dp).padding(15.dp),
     ) {
-        when (page) {
-            QaPage.MAIN -> {
-                PopoverLabel("Quick actions")
-                QaRow("Model", value = model.chatModel.ifBlank { "default" }, chevron = true) { page = QaPage.MODEL }
-                val cursorVariant = if (model.chatAgent == AgentKind.CURSOR) {
-                    cursorModelForVariant(model.cursorModels, model.chatModelId.ifBlank { model.chatModel })
-                        ?.variants?.firstOrNull { it.id == model.chatModelId || it.id == model.chatModel }
-                } else null
-                QaRow("Effort", value = cursorVariant?.name ?: model.chatEffort ?: "default", chevron = true) { page = QaPage.EFFORT }
-                QaRow("Mode", value = CLAUDE_MODES.first { it.mode == model.chatMode }.token, chevron = true) { page = QaPage.MODE }
-                // canOpen() stats the filesystem — key it on the workdir so it isn't re-run every
-                // recomposition (this popover recomposes on every page/arm toggle); same as ChatSubHeader
-                val canOpenTerminal = remember(model.chatWorkdir) { TerminalLauncher.canOpen(model.chatWorkdir) }
-                if (canOpenTerminal) {
-                    QaRow("Open terminal") { TerminalLauncher.open(model.terminalApp, model.chatWorkdir); onDismiss() }
+        Crossfade(
+            targetState = page,
+            animationSpec = tween(PocketMotion.fastMs),
+            label = "quick-actions-page",
+        ) { activePage ->
+            when (activePage) {
+                QaPage.MAIN -> {
+                    PopoverLabel("Quick actions")
+                    QaRow("Model", value = model.chatModel.ifBlank { "default" }, chevron = true) { page = QaPage.MODEL }
+                    val cursorVariant = if (model.chatAgent == AgentKind.CURSOR) {
+                        cursorModelForVariant(model.cursorModels, model.chatModelId.ifBlank { model.chatModel })
+                            ?.variants?.firstOrNull { it.id == model.chatModelId || it.id == model.chatModel }
+                    } else null
+                    QaRow("Effort", value = cursorVariant?.name ?: model.chatEffort ?: "default", chevron = true) { page = QaPage.EFFORT }
+                    QaRow("Mode", value = CLAUDE_MODES.first { it.mode == model.chatMode }.token, chevron = true) { page = QaPage.MODE }
+                    // canOpen() stats the filesystem — key it on the workdir so it isn't re-run every
+                    // recomposition (this popover recomposes on every page/arm toggle); same as ChatSubHeader
+                    val canOpenTerminal = remember(model.chatWorkdir) { TerminalLauncher.canOpen(model.chatWorkdir) }
+                    if (canOpenTerminal) {
+                        QaRow("Open terminal") { TerminalLauncher.open(model.terminalApp, model.chatWorkdir); onDismiss() }
+                    }
+                    QaRow("Compact context") { model.compactConversation(); onDismiss() }
+                    if (model.chatAgent != AgentKind.CURSOR) {
+                        QaRow("Create conversation branch") { model.branchConversation(); onDismiss() }
+                    }
+                    QaRow(
+                        if (clearArmed) "Clear chat — tap again" else "Clear chat", danger = true,
+                    ) { if (clearArmed) { model.clearConversation(); onDismiss() } else clearArmed = true }
                 }
-                QaRow("Compact context") { model.compactConversation(); onDismiss() }
-                if (model.chatAgent != AgentKind.CURSOR) {
-                    QaRow("Create conversation branch") { model.branchConversation(); onDismiss() }
-                }
-                QaRow(
-                    if (clearArmed) "Clear chat — tap again" else "Clear chat", danger = true,
-                ) { if (clearArmed) { model.clearConversation(); onDismiss() } else clearArmed = true }
-            }
-            QaPage.MODEL -> {
+                QaPage.MODEL -> {
                 QaBack("Model") { page = QaPage.MAIN }
                 var modelQuery by remember(model.chatAgent) { mutableStateOf("") }
                 LaunchedEffect(model.chatAgent) {
@@ -255,8 +263,8 @@ fun QuickActionsPopover(model: DesktopModel, onDismiss: () -> Unit) {
                             .clickable { model.switchModel(custom.trim()); onDismiss() }.padding(horizontal = 4.dp),
                     )
                 }
-            }
-            QaPage.EFFORT -> {
+                }
+                QaPage.EFFORT -> {
                 QaBack("Effort") { page = QaPage.MAIN }
                 val currentId = model.chatModelId.ifBlank { model.chatModel }
                 val cursorModel = if (model.chatAgent == AgentKind.CURSOR) cursorModelForVariant(model.cursorModels, currentId) else null
@@ -267,13 +275,14 @@ fun QuickActionsPopover(model: DesktopModel, onDismiss: () -> Unit) {
                 } else EFFORT_OPTIONS.forEach { opt ->
                     QaOption(opt, opt.equals(model.chatEffort, true)) { model.switchEffort(opt); onDismiss() }
                 }
-            }
-            QaPage.MODE -> {
+                }
+                QaPage.MODE -> {
                 QaBack("Mode") { page = QaPage.MAIN }
                 CLAUDE_MODES.forEach { m ->
                     QaOption(m.label, m.mode == model.chatMode, dot = m.dot, danger = m.danger, token = m.token) {
                         model.switchMode(m.mode); onDismiss()
                     }
+                }
                 }
             }
         }

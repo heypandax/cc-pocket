@@ -57,7 +57,7 @@ fun FleetHomeScreen(
 ) {
     val machines = repo.fleetMachines()
     val waiting = repo.fleetAttention().size
-    Column(Modifier.fillMaxSize().background(Tok.base)) {
+    Column(Modifier.fillMaxSize().background(Tok.raised)) {
         // ── header: back · big title · FleetStrip ──
         Row(
             Modifier.fillMaxWidth().background(Tok.surface).padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 12.dp),

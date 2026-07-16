@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ccpocket.app.resources.*
 import dev.ccpocket.app.theme.Tok
+import dev.ccpocket.app.theme.glassPanel
 import dev.ccpocket.protocol.AgentKind
 import dev.ccpocket.protocol.PermissionAsk
 import dev.ccpocket.protocol.PermissionMode
@@ -124,11 +125,11 @@ fun PocketSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Un
     LaunchedEffect(Unit) { focus.clearFocus() }
     dev.ccpocket.app.SystemBackHandler(enabled = true) { onDismiss() } // Android back = scrim tap
     Box(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().background(Color(0x94000000)).pointerInput(Unit) { detectTapGestures { onDismiss() } })
+        Box(Modifier.fillMaxSize().background(Tok.glassShadow.copy(alpha = 0.58f)).pointerInput(Unit) { detectTapGestures { onDismiss() } })
+        val sheetShape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
         Column(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
-                .background(Tok.raised)
+                .glassPanel(shape = sheetShape, elevated = true, elevation = 24.dp)
                 .pointerInput(Unit) { detectTapGestures { } } // swallow taps so they don't dismiss via the scrim
                 .windowInsetsPadding(WindowInsets.navigationBars)
                 .imePadding() // sheets render outside the app's ime-padded Box — never hide behind the keyboard

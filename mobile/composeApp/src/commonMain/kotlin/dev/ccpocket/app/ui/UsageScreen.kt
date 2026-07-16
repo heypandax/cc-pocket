@@ -171,9 +171,9 @@ fun UsageScreen(repo: PocketRepository, onBack: () -> Unit) {
     val connected = repo.phase.value == ConnPhase.Ready
 
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().background(Tok.base)) {
+        Column(Modifier.fillMaxSize().background(Tok.raised)) {
         // header
-        Column(Modifier.fillMaxWidth().background(Tok.base)) {
+        Column(Modifier.fillMaxWidth().background(Tok.surface)) {
             val refreshLabel = stringResource(Res.string.usage_refresh)
             Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 14.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextButton({ onBack() }) { Text("←", color = Tok.tx2, fontSize = 18.sp) }

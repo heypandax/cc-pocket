@@ -1,5 +1,7 @@
 package dev.ccpocket.app.desktop
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,7 +42,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -54,6 +55,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ccpocket.app.theme.ThemeMode
 import dev.ccpocket.app.theme.Tok
+import dev.ccpocket.app.theme.glassPanel
+import dev.ccpocket.app.theme.PocketMotion
 import dev.ccpocket.app.ui.CLAUDE_MODEL_OPTIONS
 import kotlinx.coroutines.delay
 import dev.ccpocket.app.ui.AgentGlyph
@@ -80,8 +83,9 @@ private enum class SettingsTab(val label: String, val icon: ImageVector) {
 @Composable
 fun SettingsModal(model: DesktopModel, onDismiss: () -> Unit) {
     var tab by remember { mutableStateOf(SettingsTab.GENERAL) }
+    val shape = RoundedCornerShape(16.dp)
     Column(
-        Modifier.width(700.dp).height(500.dp).shadow(30.dp, RoundedCornerShape(16.dp)).clip(RoundedCornerShape(16.dp)).background(Tok.raised).border(1.dp, Tok.hair, RoundedCornerShape(16.dp)),
+        Modifier.width(700.dp).height(500.dp).glassPanel(shape, elevated = true, elevation = 30.dp),
     ) {
         Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 14.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Settings", color = Tok.tx, fontFamily = Dk.ui, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -94,12 +98,18 @@ fun SettingsModal(model: DesktopModel, onDismiss: () -> Unit) {
             }
             Box(Modifier.width(1.dp).fillMaxHeight().background(Tok.hair))
             Box(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(24.dp)) {
-                when (tab) {
-                    SettingsTab.GENERAL -> GeneralPane(model)
-                    SettingsTab.ACCOUNT -> AccountPane(model)
-                    SettingsTab.COMPUTERS -> ComputersPane(model)
-                    SettingsTab.SHORTCUTS -> ShortcutsPane()
-                    SettingsTab.ABOUT -> AboutPane(model)
+                Crossfade(
+                    targetState = tab,
+                    animationSpec = tween(PocketMotion.fastMs),
+                    label = "settings-tab",
+                ) { activeTab ->
+                    when (activeTab) {
+                        SettingsTab.GENERAL -> GeneralPane(model)
+                        SettingsTab.ACCOUNT -> AccountPane(model)
+                        SettingsTab.COMPUTERS -> ComputersPane(model)
+                        SettingsTab.SHORTCUTS -> ShortcutsPane()
+                        SettingsTab.ABOUT -> AboutPane(model)
+                    }
                 }
             }
         }

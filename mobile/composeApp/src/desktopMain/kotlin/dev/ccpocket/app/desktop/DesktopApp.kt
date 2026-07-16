@@ -51,7 +51,7 @@ fun DesktopApp(model: DesktopModel, onActivateWindow: () -> Unit = {}) {
     }
     val density = LocalDensity.current
     val setCollapsed = { v: Boolean -> collapsed = v; SecureStore.putString(K_SIDEBAR_COLLAPSED, if (v) "1" else "0") }
-    Box(Modifier.fillMaxSize().background(Tok.base)) {
+    Box(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxSize()) {
             if (collapsed) {
                 SidebarRevealStrip { setCollapsed(false) }

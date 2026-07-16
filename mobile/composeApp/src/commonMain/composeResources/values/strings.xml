@@ -77,13 +77,9 @@
     <string name="history_badge">history</string>
     <string name="dir_projects">Projects</string>
     <string name="open_computers">Open your computers</string>
-    <string name="view_switch_list">Switch to list view</string>
-    <string name="view_switch_tree">Switch to tree view</string>
     <string name="home_attention_title">%1$d item needs you</string>
     <string name="home_attention_body">Review waiting approvals and computer activity</string>
-    <string name="dir_active">Active</string>
     <string name="dir_pinned">Pinned</string>
-    <string name="dir_current_project">Current project</string>
     <string name="pin_project">Pin to top</string>
     <string name="unpin_project">Unpin</string>
     <string name="running">running</string>
@@ -233,17 +229,6 @@
     <string name="notifications_section">NOTIFICATIONS</string>
     <string name="notify_on_complete">Notify when a task finishes</string>
     <string name="notify_on_complete_sub">Wake your phone when Claude finishes a turn while the app is closed.</string>
-
-    <!-- ── phone assistant (xAI voice agent) ─────────────────────── -->
-    <string name="voice_agent_section">PHONE ASSISTANT</string>
-    <string name="voice_agent_toggle">xAI phone assistant</string>
-    <string name="voice_agent_toggle_sub">Answer calls to your xAI number on this computer.</string>
-    <string name="voice_agent_status">Status</string>
-    <string name="voice_agent_stopped">Stopped</string>
-    <string name="voice_agent_starting">Starting…</string>
-    <string name="voice_agent_ready">Online — taking calls</string>
-    <string name="voice_agent_xai_down">Running, xAI disconnected</string>
-    <string name="voice_agent_phone">Number</string>
 
     <!-- ── new-session default mode ──────────────────────────────── -->
     <string name="default_mode_section">NEW SESSION DEFAULT</string>

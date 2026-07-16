@@ -55,7 +55,7 @@ import dev.ccpocket.app.ui.resolve
 /** Not-connected state: pick a paired computer, or pair a new one with the 6-digit code it prints. */
 @Composable
 fun ConnectPanel(repo: PocketRepository) {
-    Box(Modifier.fillMaxSize().background(Tok.base), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(Modifier.width(380.dp).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("CC Pocket", color = Tok.tx, fontFamily = Dk.ui, fontSize = 26.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(28.dp))

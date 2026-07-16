@@ -21,7 +21,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,7 +69,7 @@ fun SettingsScreen(repo: PocketRepository, onBack: () -> Unit) {
     // back closes Settings — register a handler so it doesn't fall through to the app-level navigation
     dev.ccpocket.app.SystemBackHandler(enabled = true) { onBack() }
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().background(Tok.base)) {
+        Column(Modifier.fillMaxSize().background(Tok.raised)) {
         Row(
             Modifier.fillMaxWidth().background(Tok.surface).padding(horizontal = 6.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -103,38 +102,6 @@ fun SettingsScreen(repo: PocketRepository, onBack: () -> Unit) {
                     checked = repo.notificationsOn.value,
                     onChange = { repo.setNotificationsEnabled(it) },
                 )
-            }
-
-            // Phone assistant (xAI voice agent on the daemon host) — hidden until the daemon answers
-            // pocket/voice-agent.* (an older daemon silently drops the request, same as pushPrefs).
-            LaunchedEffect(Unit) { repo.fetchVoiceAgent() }
-            repo.voiceAgent.value?.let { va ->
-                SectionLabel(stringResource(Res.string.voice_agent_section))
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(12.dp))) {
-                    ToggleRow(
-                        label = stringResource(Res.string.voice_agent_toggle),
-                        sub = stringResource(Res.string.voice_agent_toggle_sub),
-                        checked = va.enabled,
-                        onChange = { repo.setVoiceAgentEnabled(it) },
-                    )
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(Tok.hair))
-                    AboutRow(
-                        stringResource(Res.string.voice_agent_status),
-                        when {
-                            !va.running -> stringResource(Res.string.voice_agent_stopped)
-                            va.xaiConnected == true -> stringResource(Res.string.voice_agent_ready)
-                            va.xaiConnected == false -> stringResource(Res.string.voice_agent_xai_down)
-                            else -> stringResource(Res.string.voice_agent_starting)
-                        },
-                    )
-                    va.phoneNumber?.let {
-                        Box(Modifier.fillMaxWidth().height(1.dp).background(Tok.hair))
-                        AboutRow(stringResource(Res.string.voice_agent_phone), it)
-                    }
-                }
-                va.error?.let {
-                    Text(it, color = Tok.danger, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 8.dp, start = 2.dp))
-                }
             }
 
             SectionLabel(stringResource(Res.string.default_mode_section))

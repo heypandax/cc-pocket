@@ -37,7 +37,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
@@ -56,6 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ccpocket.app.theme.Tok
+import dev.ccpocket.app.theme.glassPanel
 import dev.ccpocket.app.ui.AgentTag
 import dev.ccpocket.app.ui.fleet.AttentionBadge
 import dev.ccpocket.app.ui.fmtMmSs
@@ -157,9 +157,7 @@ fun CommandPalette(model: DesktopModel, onDismiss: () -> Unit) {
 
     fun open(i: Int) { items.getOrNull(i)?.let { it.activate(); onDismiss() } }
 
-    Column(
-        Modifier.width(560.dp).shadow(30.dp, RoundedCornerShape(14.dp)).clip(RoundedCornerShape(14.dp)).background(Tok.raised).border(1.dp, Tok.hair, RoundedCornerShape(14.dp)),
-    ) {
+    Column(Modifier.width(560.dp).glassPanel(RoundedCornerShape(14.dp), elevated = true, elevation = 30.dp)) {
         // search row
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 13.dp),

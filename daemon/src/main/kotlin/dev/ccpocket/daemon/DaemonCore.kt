@@ -39,33 +39,9 @@ class DaemonCore(
         scope, registry::busyForAuth, registry::closeIdleForAuth, registry::closeBusyForAuth,
         claudeConfigDir = claudeConfigDir,
     )
-    // Resolve voice-agent dir: prefer CC_POCKET_HOME env var (set by systemd unit),
-    // fall back to the daemon's own install dir, then cwd.
-    private val voiceAgentDir: java.io.File by lazy {
-        val envHome = System.getenv("CC_POCKET_HOME")
-        if (envHome != null) {
-            java.io.File(envHome).absoluteFile
-        } else {
-            // Try to resolve from the daemon's own JAR location
-            val codeSource = dev.ccpocket.daemon.voice.VoiceAgentService::class.java.protectionDomain?.codeSource?.location
-            if (codeSource != null && codeSource.protocol == "file") {
-                // JAR is in <DEST>/lib/*.jar → go up two levels to <DEST>/
-                val libDir = java.io.File(codeSource.toURI()).parentFile  // <DEST>/lib
-                libDir?.parentFile?.absoluteFile ?: java.io.File(".").absoluteFile
-            } else {
-                java.io.File(".").absoluteFile
-            }
-        }
-    }
-    val voiceAgent = dev.ccpocket.daemon.voice.VoiceAgentService(projectRoot = voiceAgentDir)
-    // auto-start if enabled in prefs
-    init {
-        if (prefs.voiceAgentEnabled) voiceAgent.start()
-    }
-    val router = RequestRouter(registry, dirs, transcribe, shell, scope, auth, prefs, voiceAgent)
+    val router = RequestRouter(registry, dirs, transcribe, shell, scope, auth, prefs)
 
     suspend fun shutdown() {
-        voiceAgent.stop()
         registry.closeAll()
     }
 }

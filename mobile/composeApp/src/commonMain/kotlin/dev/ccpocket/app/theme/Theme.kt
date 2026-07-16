@@ -24,9 +24,16 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK;
 /** A full semantic color set — one per theme. Reads flow through [Tok], which points at the active one. */
 data class Palette(
     val base: Color,
+    val canvasTop: Color,
+    val canvasBottom: Color,
     val surface: Color,
     val raised: Color,
     val hair: Color,
+    val glassBorder: Color,
+    val glassHighlight: Color,
+    val glassShadow: Color,
+    val glowWarm: Color,
+    val glowCool: Color,
     val tx: Color,
     val tx2: Color,
     val muted: Color,
@@ -40,15 +47,22 @@ data class Palette(
     val dark: Boolean,
 )
 
-/** Calm Terminal Companion — the original dark palette (unchanged values, so dark never regresses). */
+/** Calm Terminal Companion — dark glass tuned for opaque, high-contrast text over the ambient canvas. */
 val DarkPalette = Palette(
     base = Color(0xFF0E0F11),
-    surface = Color(0xFF16181B),
-    raised = Color(0xFF1E2125),
-    hair = Color(0xFF2A2E33),
+    canvasTop = Color(0xFF151925),
+    canvasBottom = Color(0xFF090B10),
+    surface = Color(0xB8161A21),
+    raised = Color(0xDE242832),
+    hair = Color(0x3DFFFFFF),
+    glassBorder = Color(0x4AFFFFFF),
+    glassHighlight = Color(0x70FFFFFF),
+    glassShadow = Color(0x99000000),
+    glowWarm = Color(0xFFD97757),
+    glowCool = Color(0xFF3FB5AC),
     tx = Color(0xFFECEDEE),
     tx2 = Color(0xFF9BA1A6),
-    muted = Color(0xFF6B7177),
+    muted = Color(0xFF858B91),
     accent = Color(0xFFD97757),
     accentPressed = Color(0xFFC4633F), // primary pressed/active (desktop hover-press)
     codex = Color(0xFF3FB5AC),         // Codex agent identity — calm teal that sits on the dark palette
@@ -63,19 +77,26 @@ val DarkPalette = Palette(
  *  darkened enough to stay legible on light backgrounds (accents double as text/borders in places). */
 val LightPalette = Palette(
     base = Color(0xFFFAF9F7),
-    surface = Color(0xFFFFFFFF),
-    raised = Color(0xFFF1EFEB),
-    hair = Color(0xFFE4E1DB),
+    canvasTop = Color(0xFFFFF8F3),
+    canvasBottom = Color(0xFFEAF2F3),
+    surface = Color(0xC9FFFFFF),
+    raised = Color(0xEDFFFFFF),
+    hair = Color(0x40717B8A),
+    glassBorder = Color(0x526A7482),
+    glassHighlight = Color(0xD9FFFFFF),
+    glassShadow = Color(0x290E1828),
+    glowWarm = Color(0xFFC15F3C),
+    glowCool = Color(0xFF1C8B82),
     tx = Color(0xFF1C1D1F),
     tx2 = Color(0xFF5B6066),
-    muted = Color(0xFF878C92),
-    accent = Color(0xFFC15F3C),
-    accentPressed = Color(0xFFA94E30),
-    codex = Color(0xFF1C8B82),
-    ok = Color(0xFF2E9E5B),
-    warn = Color(0xFFB07D1C),
-    danger = Color(0xFFC53D2B),
-    info = Color(0xFF3B7DC4),
+    muted = Color(0xFF6F757C),
+    accent = Color(0xFFA94E30),
+    accentPressed = Color(0xFF8E3F27),
+    codex = Color(0xFF14776F),
+    ok = Color(0xFF237A46),
+    warn = Color(0xFF8A5E0A),
+    danger = Color(0xFFB33223),
+    info = Color(0xFF2869A8),
     dark = false,
 )
 
@@ -90,9 +111,16 @@ object Tok {
         internal set
 
     val base: Color get() = current.base
+    val canvasTop: Color get() = current.canvasTop
+    val canvasBottom: Color get() = current.canvasBottom
     val surface: Color get() = current.surface
     val raised: Color get() = current.raised
     val hair: Color get() = current.hair
+    val glassBorder: Color get() = current.glassBorder
+    val glassHighlight: Color get() = current.glassHighlight
+    val glassShadow: Color get() = current.glassShadow
+    val glowWarm: Color get() = current.glowWarm
+    val glowCool: Color get() = current.glowCool
     val tx: Color get() = current.tx
     val tx2: Color get() = current.tx2
     val muted: Color get() = current.muted
@@ -140,7 +168,7 @@ fun PocketTheme(dark: Boolean = true, fontScale: Float = 1f, content: @Composabl
     // one override list over whichever baseline — the unset M3 fields keep each factory's light/dark
     // defaults (identical to spelling both schemes out), so a token add/rename stays in a single place
     val scheme = (if (dark) darkColorScheme() else lightColorScheme()).copy(
-        primary = palette.accent, onPrimary = Color.White,
+        primary = palette.accent, onPrimary = if (dark) palette.base else Color.White,
         background = palette.base, onBackground = palette.tx,
         surface = palette.surface, onSurface = palette.tx,
         surfaceVariant = palette.raised, onSurfaceVariant = palette.tx2,

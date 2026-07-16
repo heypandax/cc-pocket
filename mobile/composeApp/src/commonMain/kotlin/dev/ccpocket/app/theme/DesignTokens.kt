@@ -31,6 +31,7 @@ object PocketMotion {
     const val fastMs = 150
     const val normalMs = 300
     const val slowMs = 500
-    const val streamSampleMs = 50L
+    /** Follow a growing streaming message at ~30 Hz; rendering itself remains display-rate (60/120 Hz). */
+    const val streamSampleMs = 33L
     const val imeSettleMs = 80L
 }

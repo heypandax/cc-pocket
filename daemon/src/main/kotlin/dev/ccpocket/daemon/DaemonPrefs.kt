@@ -8,16 +8,15 @@ import java.io.File
 
 /**
  * Daemon-side user preferences, persisted beside identity.json (~/.cc-pocket/prefs.json).
- * Currently just the phone-push switch (pocket/push.prefs.set): pushEnabled=false silences the
- * relay's "turn complete" phone alerts while someone is working at the computer — set from a
- * client's Settings, honored by RelayClient's push hook.
+ * Includes the phone-push switch (pocket/push.prefs.set): pushEnabled=false silences the relay's
+ * "turn complete" phone alerts while someone is working at the computer — set from a client's
+ * Settings and honored by RelayClient's push hook. Authentication isolation is configured by CLI.
  */
 class DaemonPrefs private constructor(private val path: File) {
     @Serializable
     private data class Stored(
         val pushEnabled: Boolean = true,
         val isolatedClaudeAuth: Boolean = false,
-        val voiceAgentEnabled: Boolean = false,
     )
 
     @Volatile
@@ -40,19 +39,10 @@ class DaemonPrefs private constructor(private val path: File) {
         persist()
     }
 
-    @Volatile
-    var voiceAgentEnabled: Boolean = false
-        private set
-
-    fun setVoiceAgentEnabled(v: Boolean) {
-        voiceAgentEnabled = v
-        persist()
-    }
-
     private fun persist() {
         runCatching {
             path.parentFile?.mkdirs()
-            path.writeText(JSON.encodeToString(Stored(pushEnabled, isolatedClaudeAuth, voiceAgentEnabled)))
+            path.writeText(JSON.encodeToString(Stored(pushEnabled, isolatedClaudeAuth)))
         }
     }
 
@@ -66,7 +56,6 @@ class DaemonPrefs private constructor(private val path: File) {
                 val s = JSON.decodeFromString<Stored>(path.readText())
                 pushEnabled = s.pushEnabled
                 isolatedClaudeAuth = s.isolatedClaudeAuth
-                voiceAgentEnabled = s.voiceAgentEnabled
             }
         }
     }

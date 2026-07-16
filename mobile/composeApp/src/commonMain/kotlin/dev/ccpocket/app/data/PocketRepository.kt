@@ -122,8 +122,6 @@ import dev.ccpocket.protocol.CancelTurn
 import dev.ccpocket.protocol.TurnDone
 import dev.ccpocket.protocol.SetPushPrefs
 import dev.ccpocket.protocol.PushPrefs
-import dev.ccpocket.protocol.SetVoiceAgent
-import dev.ccpocket.protocol.VoiceAgentStatus
 import dev.ccpocket.app.isPreviewMode
 import dev.ccpocket.app.resources.Res
 import dev.ccpocket.app.resources.preview_cmd_title
@@ -339,9 +337,6 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
      *  from the Sessions list; each row keeps its own identity color (issue #31). */
     val agentFilter = mutableStateOf(SecureStore.getString(K_AGENT_FILTER)?.takeIf { it.isNotEmpty() } ?: "both")
 
-    /** Projects screen: tree (drill-down) vs flat. Persisted (default tree). */
-    val treeView = mutableStateOf(SecureStore.getString(K_VIEW_MODE) != "flat")
-
     /** Chat text scale (FONT_SCALE_MIN..MAX), persisted. 1.0 = the design's default sizes; bumped for eye comfort
      *  on small screens (issue #8). Threaded into every message via LocalFontScale. */
     val fontScale = mutableStateOf(
@@ -409,10 +404,6 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         val text = draftFor(from)
         if (text.isNotBlank() && draftFor(to).isBlank()) { saveDraft(to, text); clearDraft(from) }
     }
-
-    /** Current tree drill-down path (null = root). Hoisted here (not screen-local) so it survives opening a
-     *  session and returning — DirectoryScreen leaves the composition on that navigation. Not persisted. */
-    val browsePath = mutableStateOf<String?>(null)
 
     /** A session a tapped push asked to open, held until the link is Ready (see [requestOpenSession]). */
     private var pendingOpen: dev.ccpocket.app.SessionRoute? = null
@@ -812,13 +803,6 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         SecureStore.putString(K_DEFAULT_MODE, m.name)
     }
 
-    /** Projects screen: persist the browse mode (true = tree, false = flat). */
-    fun setTreeView(on: Boolean) {
-        if (on == treeView.value) return
-        treeView.value = on
-        SecureStore.putString(K_VIEW_MODE, if (on) "tree" else "flat")
-    }
-
     /** Settings: persist the default reasoning effort for new sessions (null = model default). */
     fun setDefaultEffort(level: String?) {
         val v = level?.takeIf { it.isNotEmpty() }
@@ -1189,7 +1173,6 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         contextWindowOverride.value = from.contextWindowOverride.value
         defaultAgent.value = from.defaultAgent.value
         agentFilter.value = from.agentFilter.value
-        treeView.value = from.treeView.value
         fontScale.value = from.fontScale.value
         themeMode.value = from.themeMode.value
         replace(pinnedPaths, from.pinnedPaths.toList())
@@ -1447,7 +1430,6 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
             }
             is AuthState -> authState.value = f
             is PushPrefs -> pushPrefs.value = f.enabled
-            is VoiceAgentStatus -> voiceAgent.value = f
             // the daemon told us where it lives on the LAN — persist per binding; the next connect (this
             // repo OR a rebuilt fleet satellite reading the same store) dials it before the relay. An
             // address that already answered with the WRONG daemon key stays blacklisted — the daemon
@@ -1771,14 +1753,6 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     fun fetchPushPrefs() = scope.launch { runCatching { send(SetPushPrefs()) } }
 
     fun setPushEnabled(enabled: Boolean) = scope.launch { runCatching { send(SetPushPrefs(enabled)) } }
-
-    /** The daemon-side xAI phone assistant — daemon truth via [VoiceAgentStatus].
-     *  Null until first fetched (or the daemon predates pocket/voice-agent.* — hide the section then). */
-    val voiceAgent = mutableStateOf<VoiceAgentStatus?>(null)
-
-    fun fetchVoiceAgent() = scope.launch { runCatching { send(SetVoiceAgent()) } }
-
-    fun setVoiceAgentEnabled(enabled: Boolean) = scope.launch { runCatching { send(SetVoiceAgent(enabled)) } }
 
     /** Switch account: the daemon logs the CLI out (when needed) and starts `claude auth login` —
      *  the browser opens on the daemon host; [authState] turns loginPending with the OAuth URL.
@@ -2666,7 +2640,6 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         const val K_CONTEXT_WINDOW_OVERRIDE = "context_window_override" // SecureStore: statusline denominator in tokens ("" = follow derived window)
         const val K_DEFAULT_AGENT = "default_session_agent"   // SecureStore: AgentKind.name new sessions start under (default CLAUDE)
         const val K_AGENT_FILTER = "sessions_agent_filter"    // SecureStore: "both" | "claude" | "codex" — Sessions-list filter (issue #31)
-        const val K_VIEW_MODE = "projects_view_mode"          // SecureStore: "tree" | "flat" for the Projects screen
         const val K_PINNED = "pinned_projects"                 // SecureStore: '\n'-joined project paths pinned to the top
         const val K_DRAFT_PREFIX = "draft:"                    // SecureStore: "draft:<sessionId|convoId|workdir>" → unsent composer text for that conversation
         const val K_SESSION_PARAMS = "session_params"          // SecureStore: TSV sid\tmode\tmodel\teffort\tagent per line (last 100 sessions)

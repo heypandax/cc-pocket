@@ -744,25 +744,6 @@ data class Transcript(
     val error: String? = null, // e.g. "whisper-cli not found — brew install whisper-cpp"
 ) : ToPhone
 
-/**
- * phone -> daemon: toggle the xAI voice phone agent (set enabled, or query with null).
- * Reply is one [VoiceAgentStatus].
- */
-@Serializable
-@SerialName("pocket/voice-agent.set")
-data class SetVoiceAgent(val enabled: Boolean? = null) : ToDaemon
-
-/** daemon -> phone: current voice agent state — single reply to every [SetVoiceAgent]. */
-@Serializable
-@SerialName("pocket/voice-agent.status")
-data class VoiceAgentStatus(
-    val enabled: Boolean,
-    val running: Boolean = false,
-    val phoneNumber: String? = null,
-    val xaiConnected: Boolean? = null, // null = agent not answering its /health probe
-    val error: String? = null,
-) : ToPhone
-
 /** daemon -> phone: the result of a [RunShellCommand]. stdout/stderr are capped server-side. */
 @Serializable
 @SerialName("pocket/shell.result")

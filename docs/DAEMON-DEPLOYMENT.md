@@ -23,9 +23,9 @@ systemctl --user status cc-pocket-daemon
 升级时：
 
 1. 解压 artifact 到临时目录。
-2. 备份当前安装目录和 `voice-agent/.env`。
+2. 备份当前安装目录。
 3. 停止服务，只替换 artifact 中的 `bin/`、`lib/` 及其随包资源。
-4. 恢复本机 `.env` 等密钥配置，不要用仓库示例覆盖生产凭据。
+4. 恢复本机密钥配置，不要用仓库示例覆盖生产凭据。
 5. 执行 `systemctl --user daemon-reload`，再启动服务。
 
 ```bash
@@ -49,15 +49,3 @@ cc-pocket-daemon status
 至少确认：服务为 `active`、只有一个 daemon 实例、版本与 artifact 一致、relay 已连接。然后在 App 中重新进入电脑，验证项目列表和一个短会话。
 
 如果升级失败，停止服务并恢复备份的 `bin/`、`lib/` 后重启；不要在生产服务器临时编译一个来源不明的版本救急。
-
-## 4. Voice Agent
-
-`cc-pocket-daemon voice-agent --action start` 用于启动可选的语音/电话助手，不是 daemon 主服务的启动命令。先保持 `cc-pocket-daemon` systemd 服务正常，再按需执行：
-
-```bash
-cc-pocket-daemon voice-agent --action status
-cc-pocket-daemon voice-agent --action start
-cc-pocket-daemon voice-agent --action stop
-```
-
-如果未配置 voice-agent 的依赖和 `.env`，不需要启动它，也不会影响 App 的文本会话。

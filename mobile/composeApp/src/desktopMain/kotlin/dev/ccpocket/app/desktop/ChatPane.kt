@@ -88,6 +88,7 @@ import dev.ccpocket.app.data.ChatItem
 import dev.ccpocket.app.data.ImgState
 import dev.ccpocket.app.share.previewFile
 import dev.ccpocket.app.theme.Tok
+import dev.ccpocket.app.theme.glassPanel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -129,7 +130,7 @@ fun ChatPane(model: DesktopModel, modifier: Modifier = Modifier, focused: Boolea
         // read as "the newly-opened session didn't respond" when ⌘K-switching (issue #82). `opening` clears
         // atomically with convoId on SessionLive, so this hands straight off to the live transcript — no
         // EmptyChat flash in between.
-        Column(modifier.fillMaxSize().background(Tok.base)) {
+        Column(modifier.fillMaxSize()) {
             if (model.opening) OpeningChat(model.chatTitle) else EmptyChat()
         }
         return
@@ -141,7 +142,7 @@ fun ChatPane(model: DesktopModel, modifier: Modifier = Modifier, focused: Boolea
     // those relative paths fail exists() and stay plain — no dead links.
     val pathOpener = remember(model.chatWorkdir) { DesktopPathOpener(model.chatWorkdir) }
     CompositionLocalProvider(LocalPathOpener provides pathOpener) {
-    Column(modifier.fillMaxSize().background(Tok.base)) {
+    Column(modifier.fillMaxSize()) {
         // split view marks the pane that owns the keyboard with a 2px terracotta top hairline (Fleet ⑥)
         if (focused) Box(Modifier.fillMaxWidth().height(2.dp).background(Tok.accent))
         // While a QuestionCard text field (its "Other…" / freeform box) owns the keyboard, the composer
@@ -526,8 +527,10 @@ private fun Modifier.blinkAccent(): Modifier = composed {
  *  on the computer). Take-over forks a branch the app can drive — same gesture as mobile. */
 @Composable
 private fun ObserveBar(model: DesktopModel) {
-    Column(Modifier.fillMaxWidth()) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Tok.hair))
+    val dockShape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)
+    Column(
+        Modifier.fillMaxWidth().glassPanel(dockShape, elevated = true, elevation = 16.dp),
+    ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -548,8 +551,10 @@ private fun ObserveBar(model: DesktopModel) {
 
 @Composable
 private fun Composer(model: DesktopModel, suppressAutoFocus: Boolean = false) {
-    Column(Modifier.fillMaxWidth()) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Tok.hair))
+    val dockShape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)
+    Column(
+        Modifier.fillMaxWidth().glassPanel(dockShape, elevated = true, elevation = 16.dp),
+    ) {
         Column(
             Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 14.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -627,8 +632,8 @@ private fun Composer(model: DesktopModel, suppressAutoFocus: Boolean = false) {
                 if (slashOpen) SlashMenu(slashCmds, slashSel, onPick = completeSlash)
                 if (atOpen) FileMenu(atEntries, atSel, atDir, sep, atListing?.truncated == true, onPick = applyEntry)
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Tok.surface)
-                        .border(1.dp, Tok.hair, RoundedCornerShape(12.dp)).padding(start = 12.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
+                    Modifier.fillMaxWidth().glassPanel(RoundedCornerShape(12.dp))
+                        .padding(start = 12.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.Bottom,
                     horizontalArrangement = Arrangement.spacedBy(9.dp),
                 ) {

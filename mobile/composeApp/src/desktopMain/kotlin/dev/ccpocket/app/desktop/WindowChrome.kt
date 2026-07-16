@@ -62,7 +62,7 @@ fun FrameWindowScope.DkTitleBar(
 ) {
     Column(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().height(38.dp).background(Tok.base).padding(horizontal = 12.dp),
+            Modifier.fillMaxWidth().height(38.dp).background(Tok.surface).padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {

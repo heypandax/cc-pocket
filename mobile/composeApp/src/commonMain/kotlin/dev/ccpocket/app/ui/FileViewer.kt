@@ -153,7 +153,7 @@ fun FileViewerScreen(repo: PocketRepository, onExit: (() -> Unit)? = null, onBac
     var diffTab by rememberDiffTab(path, isImage, deleted, diff)
     val wrap = rememberWrapState()
 
-    Column(Modifier.fillMaxSize().background(Tok.base)) {
+    Column(Modifier.fillMaxSize().background(Tok.raised)) {
         Column(Modifier.fillMaxWidth().background(Tok.surface)) {
             Row(
                 Modifier.fillMaxWidth().padding(start = 6.dp, end = 12.dp, top = 10.dp),

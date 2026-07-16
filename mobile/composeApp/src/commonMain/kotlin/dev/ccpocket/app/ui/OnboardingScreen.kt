@@ -97,7 +97,7 @@ fun OnboardingScreen(onBack: () -> Unit, onPairNow: () -> Unit) {
         )
     }
 
-    Column(Modifier.fillMaxSize().background(Tok.base)) {
+    Column(Modifier.fillMaxSize().background(Tok.raised)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton({ onBack() }) { Text("←", color = Tok.tx2, fontSize = 18.sp) }
         }

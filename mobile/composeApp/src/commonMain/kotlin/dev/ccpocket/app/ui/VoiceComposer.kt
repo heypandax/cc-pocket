@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ccpocket.app.resources.*
 import dev.ccpocket.app.theme.Tok
+import dev.ccpocket.app.theme.glassPanel
 import org.jetbrains.compose.resources.stringResource
 
 /** Design easing for the recording-bar morph: cubic-bezier(.22,1,.36,1), 220ms. */
@@ -64,7 +65,7 @@ internal fun fmtMmSs(seconds: Int): String = "${seconds / 60}:${(seconds % 60).t
 
 internal fun fmtElapsed(ms: Long): String = fmtMmSs((ms / 1000).toInt())
 
-/** The composer text field per the design: base bg, hairline border, radius 12, minHeight 44. */
+/** The composer text field: quiet inner glass, highlight edge, radius 12, minHeight 44. */
 @Composable
 fun ComposerField(
     value: String,
@@ -76,8 +77,7 @@ fun ComposerField(
 ) {
     val shape = RoundedCornerShape(12.dp)
     Box(
-        modifier.heightIn(min = 44.dp).clip(shape).background(Tok.base).border(1.dp, Tok.hair, shape)
-            .padding(horizontal = 14.dp),
+        modifier.heightIn(min = 44.dp).glassPanel(shape).padding(horizontal = 14.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
         val mirror = rememberImeSafeMirror(value, onValueChange)
