@@ -77,6 +77,7 @@ import dev.ccpocket.protocol.ListAgencyAgents
 import dev.ccpocket.protocol.ListPathEntries
 import dev.ccpocket.protocol.ListSessionFiles
 import dev.ccpocket.protocol.ListSessions
+import dev.ccpocket.protocol.RenameSession
 import dev.ccpocket.protocol.PathEntries
 import dev.ccpocket.protocol.PathEntry
 import dev.ccpocket.protocol.ReadFile
@@ -434,6 +435,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     val refreshing = mutableStateOf(false)
     val sessions = mutableStateListOf<SessionSummary>()
     val sessionsArchived = mutableStateOf(false)
+    val renameSupported = mutableStateOf(false)
     var directoryScrollIndex = 0
     var directoryScrollOffset = 0
     private val sessionScrollPositions = mutableMapOf<String, Pair<Int, Int>>()
@@ -1398,6 +1400,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 expectedSessionsDir = null
                 expectedSessionsArchived = null
                 sessionsArchived.value = f.archived
+                renameSupported.value = f.renameSupported
                 sessionsDir.value = f.workdir; replace(sessions, f.items); sessionsRefreshing.value = false
             }
             is Usage -> { usage.value = f; usageLoading.value = false }
@@ -1925,6 +1928,13 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         expectedSessionsDir = dir
         expectedSessionsArchived = sessionsArchived.value
         refreshWithSpinner(sessionsRefreshing, ListSessions(dir, sessionsArchived.value))
+    }
+
+    fun renameSession(sessionId: String, title: String, wd: String? = null) {
+        val dir = wd ?: sessionsDir.value ?: return
+        val clean = title.trim()
+        if (clean.isEmpty()) return
+        scope.launch { send(RenameSession(dir, sessionId, clean)) }
     }
     // startMode defaults to the persisted default mode (mirrors effort), so tapping a session straight from
     // the list applies it too — not just the new-session picker.

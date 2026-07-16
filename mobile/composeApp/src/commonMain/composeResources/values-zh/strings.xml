@@ -537,4 +537,6 @@
     <string name="session_status_permission">等待审批</string>
     <string name="session_status_background">后台任务</string>
     <string name="session_status_idle">在线 · 空闲</string>
+    <string name="session_rename">重命名会话</string>
+    <string name="session_rename_hint">会话名称</string>
 </resources>

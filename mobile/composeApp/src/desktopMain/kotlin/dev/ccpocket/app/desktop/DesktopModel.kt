@@ -227,6 +227,9 @@ interface DesktopModel {
     fun openProject(p: DkProject)
     fun selectSession(s: DkSession)
 
+    val canRenameSessions: Boolean get() = false
+    fun renameSession(sessionId: String, title: String) {}
+
     /** Remove a session row from the RECENT list — the row's hover ✕ (issue #62). Non-destructive: the
      *  transcript stays on the host and reopening its project resurfaces it. No-op for seed/preview models. */
     fun hideSession(s: DkSession) {}

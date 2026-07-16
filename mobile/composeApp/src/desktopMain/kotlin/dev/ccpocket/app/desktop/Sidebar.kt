@@ -6,6 +6,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ContextMenuArea
+import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -29,6 +31,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Folder
@@ -59,6 +62,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
@@ -67,17 +72,24 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import dev.ccpocket.app.APP_VERSION
+import dev.ccpocket.app.resources.Res
+import dev.ccpocket.app.resources.session_rename
+import dev.ccpocket.app.resources.session_rename_hint
 import dev.ccpocket.app.theme.Tok
 import dev.ccpocket.app.ui.AgentTag
 import dev.ccpocket.app.ui.fleet.AttentionBadge
+import org.jetbrains.compose.resources.stringResource
 import dev.ccpocket.app.ui.modelAlias
 import dev.ccpocket.protocol.AgentKind
 import kotlin.math.roundToInt
@@ -538,6 +550,53 @@ private fun NewSessionRow(onClick: () -> Unit) {
 
 @Composable
 private fun SessionRow(model: DesktopModel, s: DkSession, selected: Boolean, onClick: () -> Unit) {
+    var renaming by remember(s.sessionId) { mutableStateOf(false) }
+    if (renaming) {
+        SessionRenameInput(
+            initial = s.title,
+            onCommit = { model.renameSession(s.sessionId, it); renaming = false },
+            onCancel = { renaming = false },
+        )
+        return
+    }
+    val canRename = model.canRenameSessions && s.agent != AgentKind.CODEX
+    if (canRename) {
+        val label = stringResource(Res.string.session_rename)
+        ContextMenuArea(
+            items = { listOf(ContextMenuItem(label) { renaming = true }) },
+        ) { SessionRowBody(model, s, selected, onClick) }
+    } else {
+        SessionRowBody(model, s, selected, onClick)
+    }
+}
+
+@Composable
+private fun SessionRenameInput(initial: String, onCommit: (String) -> Unit, onCancel: () -> Unit) {
+    var text by remember { mutableStateOf(initial) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    Box(Modifier.fillMaxWidth().height(32.dp).padding(horizontal = 12.dp), contentAlignment = Alignment.CenterStart) {
+        if (text.isEmpty()) Text(stringResource(Res.string.session_rename_hint), color = Tok.muted, fontSize = 12.sp)
+        BasicTextField(
+            value = text,
+            onValueChange = { text = it },
+            singleLine = true,
+            textStyle = TextStyle(color = Tok.tx, fontFamily = Dk.ui, fontSize = 13.sp),
+            cursorBrush = SolidColor(Tok.accent),
+            modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { e ->
+                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (e.key) {
+                    androidx.compose.ui.input.key.Key.Enter -> { text.trim().takeIf { it.isNotEmpty() }?.let(onCommit); true }
+                    androidx.compose.ui.input.key.Key.Escape -> { onCancel(); true }
+                    else -> false
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun SessionRowBody(model: DesktopModel, s: DkSession, selected: Boolean, onClick: () -> Unit) {
     val src = remember { MutableInteractionSource() }
     val hovered by src.collectIsHoveredAsState()
     val bg = if (selected || hovered) Tok.raised else Color.Transparent

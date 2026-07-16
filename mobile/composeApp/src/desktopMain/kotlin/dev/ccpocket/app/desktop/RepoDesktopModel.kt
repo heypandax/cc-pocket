@@ -475,6 +475,8 @@ class RepoDesktopModel(
     override val sessionGroups: List<DkSessionGroup> get() = sessionGroupsDerived.value
 
     override val sessionsRefreshing: Boolean get() = repo.sessionsRefreshing.value
+    override val canRenameSessions: Boolean get() = repo.renameSupported.value
+    override fun renameSession(sessionId: String, title: String) = repo.renameSession(sessionId, title)
 
     override fun refresh(g: DkSessionGroup?) {
         navGen++ // manual refresh repoints the list deliberately — stop any RECENT refill sweep (#102)
