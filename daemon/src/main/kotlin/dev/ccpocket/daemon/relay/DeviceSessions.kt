@@ -21,7 +21,7 @@ import java.util.Base64
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Manages one end-to-end-encrypted [E2ESession] per paired device and bridges decrypted frames into
+ * Manages end-to-end-encrypted [E2ESession]s per paired device and bridges decrypted frames into
  * the shared [DaemonCore] router. The daemon is the Noise responder; the device initiates. Paired
  * device public keys are persisted so reconnects survive a daemon restart; the pairing-ticket PSK is
  * kept in memory only for the brief first handshake.
@@ -41,7 +41,7 @@ class DeviceSessions(
     private val devicePubs = HashMap<String, ByteArray>(loadPersisted())
     private val psks = ArrayDeque<ByteArray>()              // minted tickets, oldest first
     private val pskFor = HashMap<String, ByteArray>()       // deviceId -> first-handshake PSK
-    private val sessions = HashMap<String, E2ESession>()
+    private val sessions = HashMap<String, DeviceLink>()
     private val owned = HashMap<String, MutableList<String>>()
     private val nextId = AtomicLong(0)
     private val seenThisAttach = HashSet<String>()          // devices the relay re-announced since the last attach
@@ -129,9 +129,20 @@ class DeviceSessions(
         val devicePub = mutex.withLock { devicePubs[deviceId] }
         if (devicePub == null) { log.warn("handshake from unknown device ${deviceId.take(8)}…"); return }
         val psk = mutex.withLock { pskFor[deviceId] ?: ByteArray(0) }
-        val (session, responderEph) = E2ESession.responder(identity.e2ePrivRaw, identity.e2ePubRaw, devicePub, psk, deviceEphPub)
-        mutex.withLock { sessions[deviceId] = session }
-        log.info("handshake from ${deviceId.take(8)}… (psk ${psk.size}B) → session established")
+        // A phone consumes its pairing ticket when it starts its first attempt, while the daemon only
+        // clears its copy after decrypting the first transport frame. If that attempt is interrupted,
+        // derive an empty-PSK twin from the same responder ephemeral and let the first decrypt choose.
+        val twinned = psk.isNotEmpty()
+        val candidates = if (twinned) listOf(psk, ByteArray(0)) else listOf(psk)
+        val (derived, responderEph) = E2ESession.responder(
+            identity.e2ePrivRaw,
+            identity.e2ePubRaw,
+            devicePub,
+            candidates,
+            deviceEphPub,
+        )
+        mutex.withLock { sessions[deviceId] = DeviceLink(derived.first(), derived.getOrNull(1)) }
+        log.info("handshake from ${deviceId.take(8)}… (psk ${psk.size}B${if (twinned) " + empty-PSK twin" else ""}) → session established")
         send(deviceId, Wire.payload(Wire.HANDSHAKE, responderEph))
         // teach the device where this daemon lives on the LAN so its next connect can skip the relay;
         // null actively clears a stale stored address (listener since disabled / no usable interface)
@@ -139,11 +150,31 @@ class DeviceSessions(
     }
 
     private suspend fun transport(deviceId: String, body: ByteArray) {
-        val session = mutex.withLock { sessions[deviceId] }
-        if (session == null) { log.warn("transport before handshake from ${deviceId.take(8)}…"); return }
-        val plaintext = session.open(body)
+        val link = mutex.withLock { sessions[deviceId] }
+        if (link == null) { log.warn("transport before handshake from ${deviceId.take(8)}…"); return }
+        var viaTwin = false
+        var plaintext = link.active.open(body)
+        if (plaintext == null) {
+            plaintext = link.pskShadow?.open(body)
+            if (plaintext != null) {
+                viaTwin = true
+                mutex.withLock {
+                    link.active = link.pskShadow ?: link.active
+                    link.pskShadow = null
+                }
+            }
+        }
         if (plaintext == null) { log.warn("decrypt failed from ${deviceId.take(8)}…"); return }
-        mutex.withLock { pskFor.remove(deviceId) } // PSK confirmed; reconnects use authenticated statics
+        val confirmedPsk = mutex.withLock {
+            link.pskShadow = null
+            pskFor.remove(deviceId)
+        }
+        if (viaTwin && confirmedPsk?.isNotEmpty() == true) {
+            log.info("first-contact PSK abandoned for ${deviceId.take(8)}… — device handshook without its ticket")
+            // The DaemonInfo sent immediately after the handshake used the ticket-bound session.
+            // Re-send it under the now-proven twin so this connection learns the LAN endpoint.
+            sealAndSend(deviceId, DaemonInfo(lanUrl(), hostname()))
+        }
         val env = runCatching { PocketJson.decodeFromString<Envelope>(plaintext.decodeToString()) }.getOrNull() ?: return
         log.info("← ${env.body::class.simpleName} from ${deviceId.take(8)}…")
 
@@ -168,11 +199,13 @@ class DeviceSessions(
         // and a re-handshake re-keys — a stale session would seal frames the device can't decrypt. No session
         // means the phone disconnected (sessions cleared on disconnect) and the frame is undeliverable — drop it.
         val payload = mutex.withLock {
-            val live = sessions[deviceId] ?: return
+            val live = sessions[deviceId]?.active ?: return
             Wire.payload(Wire.TRANSPORT, live.seal(json.encodeToByteArray()))
         }
         send(deviceId, payload)
     }
+
+    private class DeviceLink(var active: E2ESession, var pskShadow: E2ESession? = null)
 
     // ---- persistence of paired device public keys (shared with the direct-LAN gate) ----
 
