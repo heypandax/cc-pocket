@@ -482,6 +482,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     val agencyAgents = mutableStateListOf<AgencyAgent>()
     val agencyAgentsLoading = mutableStateOf(false)
     val agencyAgentsError = mutableStateOf<String?>(null)
+    val browseListing = mutableStateOf<PathEntries?>(null)   // latest home-anchored folder-browse listing (issue #152); match its subPath before use
     val mode = mutableStateOf(PermissionMode.DEFAULT)        // current execution/permission mode
     val model = mutableStateOf<String?>(null)                // daemon's actual model for this session (header + info sheet)
     val sessionAgent = mutableStateOf<AgentKind?>(null)      // backend driving this session (Claude/Codex) — header badge
@@ -1618,7 +1619,12 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
             // @-file completion (issue #75): keyed on workdir, not a session id — it browses the cwd, not a
             // session's changed set. A reply for a workdir we've since left is dropped (the completer keys
             // the visible listing on its own requested subPath anyway).
-            is PathEntries -> if (f.workdir == workdir.value) pathListing.value = f
+            // The folder browser (issue #152) rides the same frame anchored at the literal "~" — a session's
+            // workdir is always a real absolute path, so the two listings can't collide on the key.
+            is PathEntries -> when (f.workdir) {
+                BROWSE_HOME -> browseListing.value = f
+                workdir.value -> pathListing.value = f
+            }
             else -> {}
         }
     }
@@ -2208,6 +2214,16 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         scope.launch { send(ListCursorModels) }
     }
 
+    /** Ask the daemon for the children under its HOME + [subPath] ('/'-joined, "" = home itself) for the
+     *  "open a project folder" browser (issue #152). Reuses the #75 listing frame anchored at the literal
+     *  "~" — only the daemon knows the remote machine's home, and its NIO resolve accepts '/' on Windows
+     *  too. The reply lands in [browseListing]; the picker only renders it once its subPath matches. A
+     *  guest credential gets a PocketError instead (GuestGuard clamps the frame to the shared root), which
+     *  the picker never sees — the entry is owner-only client-side and the daemon stays the authority. */
+    fun browseHomeDirs(subPath: String) {
+        scope.launch { send(ListPathEntries(BROWSE_HOME, subPath)) }
+    }
+
     // ── voice input actions ───────────────────────────────────────────────
 
     /** Mic tap (S1). Picks the engine: iOS native streaming dictation, else record→daemon-whisper. */
@@ -2614,7 +2630,11 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         sessions.clear()
     }
 
-    private companion object {
+    internal companion object {
+        /** The folder browser's workdir anchor (issue #152): the literal "~" the daemon expands to ITS
+         *  home. Also the [PathEntries] routing key that separates browser replies from @-completion
+         *  ones — a real session's workdir is never the bare "~" (SessionLive carries the resolved path). */
+        const val BROWSE_HOME = "~"
         const val FIRST_GRACE_MS = 2_000L     // first connect: show the skeleton this long before "can't reach server"
         const val RECONNECT_GRACE_MS = 6_000L // a reconnect already keeps the old list under a banner
         const val RECONNECT_BANNER_GRACE_MS = 2_500L // hold the Ready look this long on a blip before the Reconnecting banner (#28)
