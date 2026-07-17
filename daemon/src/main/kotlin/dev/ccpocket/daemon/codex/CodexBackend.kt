@@ -27,7 +27,9 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
+import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
@@ -60,6 +62,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
     private var pendingPrompt: Prompt? = null // buffered first turn (guarded by [bootstrap])
     private val pendingSteers = ConcurrentHashMap<Long, Prompt>()
     private val queuedAfterTurn = ConcurrentLinkedQueue<Prompt>()
+    private val temporaryImages = ConcurrentHashMap.newKeySet<Path>()
     private var pendingGoal: GoalUpdate? = null
     private var pendingReview: ReviewRequest? = null
 
@@ -113,6 +116,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         threadId = null; currentTurnId = null; turnStartPending = false
         bootstrap.withLock { pendingPrompt = null }
         pendingSteers.clear(); queuedAfterTurn.clear()
+        cleanupImages()
         pendingGoal = null
         pendingReview = null
         goalGetId = -1; goalSetIds.clear(); goalClearIds.clear(); reviewStartIds.clear(); skillsListIds.clear(); skillWriteIds.clear()
@@ -378,6 +382,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         turnStartPending = false
         deltaSeen.clear()
         fileChangePaths.clear(); fileChangeDiffs.clear() // approvals for this turn are resolved by now — don't accumulate
+        cleanupImages()
         startQueuedIfIdle()
         return listOf(ev)
     }
@@ -441,7 +446,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
                 rpcRequest("turn/steer", buildJsonObject {
                     put("threadId", tid)
                     put("expectedTurnId", turn)
-                    putJsonArray("input") { addJsonObject { put("type", "text"); put("text", text) } }
+                    putJsonArray("input") { addPromptInput(prompt) }
                 }) { id -> pendingSteers[id] = prompt }
             }
             turnStartPending -> queuedAfterTurn.add(prompt)
@@ -454,10 +459,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         turnStartPending = true
         rpcRequest("turn/start", buildJsonObject {
             put("threadId", tid)
-            putJsonArray("input") {
-                addJsonObject { put("type", "text"); put("text", text) }
-                // images: Codex takes image{url}/localImage{path}, not base64 inline — deferred (Tier C)
-            }
+            putJsonArray("input") { addPromptInput(Prompt(text, images)) }
             put("cwd", workdir)
             put("approvalPolicy", approvalPolicy())
             // turn overrides are sticky in app-server and protect resumed/older threads too.
@@ -466,6 +468,38 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
             codexModel()?.let { put("model", it) }
             effort?.let { put("effort", codexEffort(it)) }
         })
+    }
+
+    /** Codex app-server accepts local image paths, not inline base64. Keep each unique hidden file
+     *  alive until the turn settles so turn/start and same-turn steering can both consume it. */
+    private fun kotlinx.serialization.json.JsonArrayBuilder.addPromptInput(prompt: Prompt) {
+        prompt.images.forEachIndexed { index, image ->
+            writeImage(index, image)?.let { path ->
+                addJsonObject {
+                    put("type", "localImage")
+                    put("path", path.toAbsolutePath().normalize().toString())
+                }
+            }
+        }
+        if (prompt.text.isNotBlank()) addJsonObject { put("type", "text"); put("text", prompt.text) }
+    }
+
+    private fun writeImage(index: Int, image: ImageData): Path? = runCatching {
+        val suffix = when (image.mediaType.lowercase()) {
+            "image/jpeg", "image/jpg" -> ".jpg"
+            "image/gif" -> ".gif"
+            "image/webp" -> ".webp"
+            else -> ".png"
+        }
+        val path = Files.createTempFile(Path.of(workdir), ".cc-pocket-codex-image-${index + 1}-", suffix)
+        Files.write(path, Base64.getDecoder().decode(image.base64))
+        temporaryImages.add(path)
+        path
+    }.onFailure { log.warn("codex image attachment failed: ${it.message}") }.getOrNull()
+
+    private fun cleanupImages() {
+        temporaryImages.forEach { runCatching { Files.deleteIfExists(it) } }
+        temporaryImages.clear()
     }
 
     private suspend fun startQueuedIfIdle() {
@@ -690,7 +724,9 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         return false
     }
 
-    override suspend fun onProcessEnded(sessionId: String?) {} // codex rollouts are self-managed; nothing to unhide
+    override suspend fun onProcessEnded(sessionId: String?) {
+        cleanupImages() // codex rollouts are self-managed; only attachment files need lifecycle cleanup
+    }
 
     // ---- disk: ~/.codex/sessions rollout scanning + replay (filtered by recorded cwd) ----
 

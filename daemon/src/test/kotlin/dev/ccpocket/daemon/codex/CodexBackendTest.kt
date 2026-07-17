@@ -3,11 +3,16 @@ package dev.ccpocket.daemon.codex
 import dev.ccpocket.daemon.agent.AgentEvent
 import dev.ccpocket.daemon.agent.AgentIo
 import dev.ccpocket.daemon.agent.AgentSpec
+import dev.ccpocket.protocol.ImageData
 import dev.ccpocket.protocol.PermissionMode
 import kotlinx.coroutines.runBlocking
+import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Base64
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -96,6 +101,57 @@ class CodexBackendTest {
         assertTrue("\"method\":\"turn/steer\"" in steer, steer)
         assertTrue("\"expectedTurnId\":\"turn-1\"" in steer, steer)
         assertTrue("focus on tests" in steer, steer)
+    }
+
+    @Test
+    fun image_prompt_materializes_local_image_and_cleans_it_after_turn() = runBlocking {
+        val dir = Files.createTempDirectory("codex-image-test-")
+        try {
+            val writes = mutableListOf<String>()
+            val backend = CodexBackend(null)
+            backend.attach(AgentIo({ writes += it }, {}), AgentSpec(dir, mode = PermissionMode.DEFAULT))
+            backend.parse(initResponse(1))
+            backend.parse(threadStartResponse(2, "thr-1"))
+
+            val bytes = "fake-jpeg".toByteArray()
+            backend.sendPrompt("match this design", listOf(ImageData("image/jpeg", Base64.getEncoder().encodeToString(bytes))))
+
+            val turn = writes.last { "turn/start" in it && "localImage" in it }
+            assertTrue("\"type\":\"localImage\"" in turn, turn)
+            assertTrue("match this design" in turn, turn)
+            val imagePath = Path.of(Regex("""\"path\":\"([^\"]+)\"""").find(turn)!!.groupValues[1])
+            assertTrue(Files.exists(imagePath), imagePath.toString())
+            assertTrue(imagePath.fileName.toString().endsWith(".jpg"), imagePath.toString())
+            assertContentEquals(bytes, Files.readAllBytes(imagePath))
+
+            backend.parse("""{"method":"turn/completed","params":{"turn":{"id":"t1","status":"completed"}}}""")
+            assertFalse(Files.exists(imagePath), "turn completion must delete the temporary attachment")
+        } finally {
+            Files.deleteIfExists(dir)
+        }
+    }
+
+    @Test
+    fun image_sent_during_active_turn_uses_local_image_in_turn_steer() = runBlocking {
+        val dir = Files.createTempDirectory("codex-steer-image-test-")
+        val writes = mutableListOf<String>()
+        val backend = CodexBackend(null)
+        try {
+            backend.attach(AgentIo({ writes += it }, {}), AgentSpec(dir, mode = PermissionMode.DEFAULT))
+            backend.parse(initResponse(1))
+            backend.parse(threadStartResponse(2, "thr-1"))
+            backend.parse("""{"method":"turn/started","params":{"turn":{"id":"turn-1"}}}""")
+
+            backend.sendPrompt("", listOf(ImageData("image/png", Base64.getEncoder().encodeToString(byteArrayOf(1, 2, 3)))))
+
+            val steer = writes.last()
+            assertTrue("\"method\":\"turn/steer\"" in steer, steer)
+            assertTrue("\"type\":\"localImage\"" in steer, steer)
+            assertFalse("\"type\":\"text\"" in steer, "image-only prompts must not add an empty text item: $steer")
+        } finally {
+            backend.onProcessEnded("thr-1")
+            Files.deleteIfExists(dir)
+        }
     }
 
     @Test
