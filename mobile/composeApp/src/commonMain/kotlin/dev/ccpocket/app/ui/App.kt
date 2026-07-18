@@ -178,8 +178,15 @@ fun App(scope: CoroutineScope) {
     val pushOpen by dev.ccpocket.app.PushRoute.pending.collectAsState()
     LaunchedEffect(pushOpen) { pushOpen?.let { repo.requestOpenSession(it.workdir, it.sessionId); dev.ccpocket.app.PushRoute.pending.value = null } }
     val appLock = repo.appLock
+    val connectionPhase = repo.phase.value
+    LaunchedEffect(connectionPhase) {
+        // Keep the home-screen widget useful without requiring a visit to the Usage page. WidgetKit reads
+        // the resulting snapshot offline; it never owns a daemon socket or credentials.
+        if (connectionPhase == ConnPhase.Ready) repo.fetchUsage(1)
+    }
     dev.ccpocket.app.OnAppForeground { // iOS kills sockets in background — reconnect the whole fleet on return
         repo.onAppForeground()
+        if (repo.phase.value == ConnPhase.Ready) repo.fetchUsage(1)
         dev.ccpocket.app.data.FleetRuntime.coordinator?.onAppForeground()
         appLock.onForeground() // App Lock (issue #109): re-lock per policy / drop the cover on return
     }

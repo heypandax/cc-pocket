@@ -5,6 +5,7 @@ import FirebaseAnalytics
 import FirebaseCrashlytics
 import UIKit
 import UserNotifications
+import WidgetKit
 
 /// Hosts the APNs callbacks SwiftUI's `App` can't receive directly. The first-time authorization *prompt*
 /// is Kotlin-driven (PushController.registrar, after pairing) so it never fires at cold start; but once the
@@ -127,6 +128,9 @@ struct iOSApp: App {
                 }
             }
         )
+        MainViewControllerKt.setUsageWidgetReloader {
+            WidgetCenter.shared.reloadTimelines(ofKind: "CCPocketUsageWidget")
+        }
         // Push registration lives in Swift (UIKit symbols aren't uniform across Kotlin/Native targets).
         // Kotlin's PushController calls this when registration starts (after pairing), so the prompt
         // follows pairing rather than firing at cold launch.

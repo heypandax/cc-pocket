@@ -47,3 +47,7 @@ fun setTelemetrySink(
     TelemetrySink.onEvent = onEvent
     TelemetrySink.onError = onError
 }
+
+/** Lets Kotlin notify WidgetKit after a fresh daemon usage snapshot reaches the shared App Group. */
+@Suppress("unused")
+fun setUsageWidgetReloader(reload: () -> Unit) { usageWidgetReloader = reload }

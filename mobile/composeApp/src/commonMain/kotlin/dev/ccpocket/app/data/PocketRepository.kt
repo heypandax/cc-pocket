@@ -1473,7 +1473,11 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 renameSupported.value = f.renameSupported
                 sessionsDir.value = f.workdir; replace(sessions, f.items); sessionsRefreshing.value = false
             }
-            is Usage -> { usage.value = f; usageLoading.value = false }
+            is Usage -> {
+                usage.value = f
+                usageLoading.value = false
+                dev.ccpocket.app.publishUsageWidgetSnapshot(f)
+            }
             is CodexLimitResetResult -> {
                 codexResetting.value = false
                 codexResetOutcome.value = f.outcome

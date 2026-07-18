@@ -70,10 +70,13 @@ jobs:
           BUILD_NUMBER: ${{ github.run_number }}
         run: |
           PLIST=iosApp/iosApp/Info.plist
+          WIDGET_PLIST=iosApp/CCPocketUsageWidget/Info.plist
           REPO_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST")
           VERSION="${MARKETING_VERSION:-$REPO_VERSION}"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$PLIST"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$WIDGET_PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$WIDGET_PLIST"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "building $VERSION ($BUILD_NUMBER)"
 
