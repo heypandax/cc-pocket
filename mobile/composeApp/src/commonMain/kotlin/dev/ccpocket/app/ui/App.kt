@@ -1607,7 +1607,7 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                             it.categoryZh.contains(q, true) || it.id.contains(q, true)
                     }.take(50)
                 }
-                val composerDockShape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+                val composerDockShape = RoundedCornerShape(20.dp)
                 // The dock and the system-bar inset are one continuous bottom surface. A regular glassPanel
                 // double-composited its translucent raised fill and drew a bottom border right above the
                 // Home Indicator, splitting the bottom into two visibly different strips in light mode.
