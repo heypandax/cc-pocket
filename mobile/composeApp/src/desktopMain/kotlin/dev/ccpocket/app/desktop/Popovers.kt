@@ -161,8 +161,8 @@ fun NewSessionPopover(
 private enum class QaPage { MAIN, MODEL, EFFORT, MODE }
 
 @Composable
-fun QuickActionsPopover(model: DesktopModel, onDismiss: () -> Unit) {
-    var page by remember { mutableStateOf(QaPage.MAIN) }
+fun QuickActionsPopover(model: DesktopModel, initialModelPage: Boolean = false, onDismiss: () -> Unit) {
+    var page by remember(initialModelPage) { mutableStateOf(if (initialModelPage) QaPage.MODEL else QaPage.MAIN) }
     var clearArmed by remember { mutableStateOf(false) }
     Column(
         Modifier.width(280.dp).glassPanel(RoundedCornerShape(14.dp), elevated = true, elevation = 18.dp).padding(15.dp),
