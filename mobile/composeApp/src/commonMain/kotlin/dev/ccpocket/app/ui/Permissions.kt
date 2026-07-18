@@ -151,7 +151,14 @@ fun ModeSheet(
     var confirmBypass by remember(confirmBypassInitially) { mutableStateOf(confirmBypassInitially) }
     PocketSheet(onDismiss) {
         if (confirmBypass) {
-            BypassConfirm(workdir, onCancel = { confirmBypass = false }, onConfirm = { confirmBypass = false; onSelect(PermissionMode.BYPASS_PERMISSIONS) })
+            BypassConfirm(
+                workdir,
+                onCancel = { confirmBypass = false },
+                onConfirm = {
+                    onSelect(PermissionMode.BYPASS_PERMISSIONS)
+                    onDismiss()
+                },
+            )
         } else {
             Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp, top = 4.dp)) {
                 Text(stringResource(Res.string.exec_mode_title), color = Tok.tx, fontSize = 20.sp, fontWeight = FontWeight.Bold)
