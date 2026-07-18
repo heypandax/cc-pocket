@@ -69,7 +69,13 @@ jobs:
           fi
 
       - name: Generate Xcode project from project.yml
-        run: cd iosApp && xcodegen generate
+        run: |
+          cd iosApp
+          xcodegen generate
+          # Current XcodeGen writes objectVersion 77 even when the spec declares xcodeVersion 15.4.
+          # This project uses no format-77-only objects, so lower the compatibility marker explicitly.
+          sed -i '' 's/objectVersion = 77;/objectVersion = 56;/' iosApp.xcodeproj/project.pbxproj
+          grep -q 'objectVersion = 56;' iosApp.xcodeproj/project.pbxproj
 
       - name: Stamp version & build number
         id: stamp
