@@ -34,10 +34,10 @@ APP="$ROOT/daemon/build/jpackage/cc-pocket-daemon"
 # (1.3.29 therefore printed Java/usage output even though MainKt handled the flag). Keep the native
 # launcher beside a tiny stable wrapper: intercept exactly --version, forward every other invocation
 # byte-for-byte. The service/updater still anchors on bin/cc-pocket-daemon as before.
-NATIVE="$APP/bin/cc-pocket-daemon.bin"
-mv "$APP/bin/cc-pocket-daemon" "$NATIVE"
-# The native launcher resolves its cfg from its own basename after the rename.
-cp "$APP/lib/app/cc-pocket-daemon.cfg" "$APP/lib/app/cc-pocket-daemon.bin.cfg"
+NATIVE_APP="$APP.native"
+mv "$APP" "$NATIVE_APP"
+mkdir -p "$APP/bin"
+mv "$NATIVE_APP" "$APP/native"
 printf '%s\n' \
   '#!/bin/sh' \
   'if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then' \
@@ -45,7 +45,7 @@ printf '%s\n' \
   '  exit 0' \
   'fi' \
   'DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)' \
-  'exec "$DIR/cc-pocket-daemon.bin" "$@"' \
+  'exec "$DIR/../native/bin/cc-pocket-daemon" "$@"' \
   > "$APP/bin/cc-pocket-daemon"
 chmod 0755 "$APP/bin/cc-pocket-daemon"
 
