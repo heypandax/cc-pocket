@@ -55,6 +55,7 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -1284,6 +1285,7 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
     var videoViewer by remember { mutableStateOf<dev.ccpocket.app.data.SentFile?>(null) } // tapped sent video → player (issue #98)
     var showSwitcher by remember { mutableStateOf(false) } // machine name in the connection bar → switch computer
     var showModeSheet by remember { mutableStateOf(false) }
+    var confirmBypassOnModeOpen by remember { mutableStateOf(false) }
     var showSessionInfo by remember { mutableStateOf(false) }
     var showQuickActions by remember { mutableStateOf(false) }
     var quickActionSection by remember { mutableStateOf(QuickActionSection.MAIN) }
@@ -1613,7 +1615,7 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                     BackgroundJobsStrip(repo.backgroundJobs) { showBgJobs = true } // ≥1 running bg task → tap to expand
                     ComposerStatusBar(
                         repo = repo,
-                        onMode = { showModeSheet = true },
+                        onMode = { confirmBypassOnModeOpen = true; showModeSheet = true },
                     )
                     val capturing = voiceState is VoiceState.Recording || voiceState is VoiceState.Transcribing
                     LaunchedEffect(capturing) { if (capturing) attachSheet = false }
@@ -1758,9 +1760,10 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
         if (showModeSheet) {
             ModeSheet(
                 current = repo.mode.value, rules = repo.allowRules, switching = repo.switching.value, workdir = repo.workdir.value,
+                confirmBypassInitially = confirmBypassOnModeOpen,
                 onSelect = { repo.switchMode(it) }, // keep the sheet open so the "switching" state shows
                 onClearRule = { repo.clearRule(it) }, onClearAll = { repo.clearAllRules() },
-                onDismiss = { showModeSheet = false },
+                onDismiss = { showModeSheet = false; confirmBypassOnModeOpen = false },
             )
         }
         if (showSessionInfo) SessionInfoSheet(repo) { showSessionInfo = false }
@@ -1768,7 +1771,7 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
             QuickActionsSheet(
                 repo,
                 onTerminal = { showTerminal = true },
-                onMode = { showModeSheet = true },
+                onMode = { confirmBypassOnModeOpen = false; showModeSheet = true },
                 onFiles = { repo.fetchChangedFiles(); showChangedFiles = true },
                 initialSection = quickActionSection,
             ) { showQuickActions = false }
@@ -2126,6 +2129,7 @@ private fun ComposerStatusBar(repo: PocketRepository, onMode: () -> Unit) {
         else -> EFFORT_OPTIONS.map { it to it }
     }
     val selectedEffort = cursorVariant?.id ?: repo.effort.value.orEmpty()
+    val modeOptions = MODES.map { stringResource(it.short) to it.key.name }
     val used = repo.contextUsed.value ?: 0L
     val window = repo.contextWindow.value
     val fraction = if (window != null && window > 0) (used.toFloat() / window).coerceIn(0f, 1f) else 0f
@@ -2150,6 +2154,19 @@ private fun ComposerStatusBar(repo: PocketRepository, onMode: () -> Unit) {
                 if (agent == AgentKind.CURSOR) repo.switchModel(id) else repo.switchEffort(id)
                 openMenu = null
             }
+        } else if (openMenu == "mode") {
+            HappyStatusOptionMenu(
+                options = modeOptions,
+                selectedKey = repo.mode.value.name,
+                onDismiss = { openMenu = null },
+            ) { (_, id) ->
+                val selected = PermissionMode.valueOf(id)
+                openMenu = null
+                // Full-auto retains the existing second-step warning; the safe modes switch directly,
+                // matching the model/effort popup interaction without weakening the permission boundary.
+                if (selected == PermissionMode.BYPASS_PERMISSIONS && repo.mode.value != selected) onMode()
+                else repo.switchMode(selected)
+            }
         }
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 4.dp, bottom = 2.dp),
@@ -2164,7 +2181,9 @@ private fun ComposerStatusBar(repo: PocketRepository, onMode: () -> Unit) {
                 if (effortOptions.isNotEmpty()) openMenu = if (openMenu == "effort") null else "effort"
             }
             Spacer(Modifier.width(12.dp))
-            StatusBarChip("◇", mode, onMode)
+            HappyStatusChip(Icons.Outlined.Shield, mode, active = openMenu == "mode") {
+                openMenu = if (openMenu == "mode") null else "mode"
+            }
             Spacer(Modifier.width(12.dp))
             Canvas(Modifier.size(18.dp).semantics { contentDescription = contextDescription }) {
             val stroke = 3.dp.toPx()
@@ -2217,8 +2236,9 @@ private fun HappyStatusOptionMenu(
         ) {
             options.forEach { option ->
                 val selected = option.second.equals(selectedKey, ignoreCase = true)
+                val selectWithHaptic = rememberHapticClick { onSelect(option) }
                 Row(
-                    Modifier.fillMaxWidth().heightIn(min = 42.dp).clickable { onSelect(option) }
+                    Modifier.fillMaxWidth().heightIn(min = 42.dp).clickable(onClick = selectWithHaptic)
                         .padding(horizontal = 12.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.Top,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),

@@ -3,6 +3,7 @@ package dev.ccpocket.app
 import dev.ccpocket.protocol.Usage
 import platform.Foundation.NSDate
 import platform.Foundation.NSUserDefaults
+import platform.Foundation.timeIntervalSince1970
 
 private const val WIDGET_GROUP = "group.com.panda.ccpocket"
 internal var usageWidgetReloader: (() -> Unit)? = null

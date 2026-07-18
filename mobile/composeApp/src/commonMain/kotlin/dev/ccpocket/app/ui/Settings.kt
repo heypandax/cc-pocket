@@ -107,19 +107,9 @@ fun SettingsScreen(repo: PocketRepository, onBack: () -> Unit) {
             }
 
             SectionLabel(stringResource(Res.string.default_mode_section))
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(12.dp))) {
-                MODES.forEachIndexed { i, m ->
-                    if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(Tok.hair))
-                    val sel = repo.defaultMode.value == m.key
-                    Row(
-                        Modifier.fillMaxWidth().clickable { repo.setDefaultMode(m.key) }.padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text("●", color = m.color, fontSize = 9.sp, modifier = Modifier.padding(end = 10.dp))
-                        Text(stringResource(m.label), color = if (sel) Tok.accent else Tok.tx, fontSize = 14.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal, modifier = Modifier.weight(1f))
-                        if (sel) Text("✓", color = Tok.accent, fontSize = 13.5.sp)
-                    }
-                }
+            val modeLabels = MODES.associate { it.key to stringResource(it.short) }
+            SegmentedRow(MODES.map { it.key }, repo.defaultMode.value, label = { modeLabels.getValue(it) }) {
+                repo.setDefaultMode(it)
             }
 
             // Security (issue #109): access controls sit right under the permission mode, kept contiguous.

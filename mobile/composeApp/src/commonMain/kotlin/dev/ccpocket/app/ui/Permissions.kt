@@ -145,9 +145,10 @@ fun PocketSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Un
 @Composable
 fun ModeSheet(
     current: PermissionMode, rules: List<String>, switching: Boolean, workdir: String? = null,
+    confirmBypassInitially: Boolean = false,
     onSelect: (PermissionMode) -> Unit, onClearRule: (String) -> Unit, onClearAll: () -> Unit, onDismiss: () -> Unit,
 ) {
-    var confirmBypass by remember { mutableStateOf(false) }
+    var confirmBypass by remember(confirmBypassInitially) { mutableStateOf(confirmBypassInitially) }
     PocketSheet(onDismiss) {
         if (confirmBypass) {
             BypassConfirm(workdir, onCancel = { confirmBypass = false }, onConfirm = { confirmBypass = false; onSelect(PermissionMode.BYPASS_PERMISSIONS) })
