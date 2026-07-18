@@ -129,7 +129,7 @@ struct iOSApp: App {
             }
         )
         MainViewControllerKt.setUsageWidgetReloader {
-            WidgetCenter.shared.reloadTimelines(ofKind: "CCPocketUsageWidget")
+            WidgetCenter.shared.reloadTimelines(ofKind: "CCPocketUsageWidgetV2")
         }
         // Push registration lives in Swift (UIKit symbols aren't uniform across Kotlin/Native targets).
         // Kotlin's PushController calls this when registration starts (after pairing), so the prompt
