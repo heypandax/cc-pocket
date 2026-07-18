@@ -1614,6 +1614,7 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                 val composerDockFill = Tok.raised.compositeOver(Tok.base)
                 Column(
                     Modifier.fillMaxWidth()
+                        .padding(6.dp)
                         .shadow(18.dp, composerDockShape, clip = false)
                         .clip(composerDockShape)
                         .background(composerDockFill),
