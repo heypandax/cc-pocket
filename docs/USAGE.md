@@ -11,17 +11,18 @@ CC Pocket 让手机成为电脑或服务器上 Claude Code、OpenAI Codex 与 Cu
 ## 准备条件
 
 - 一台可运行 daemon 的 Mac、Linux 或 Windows 电脑/服务器，并至少安装、登录一种受支持的 Agent CLI；
+- Claude、Codex、Cursor 均为可选后端；只安装其中任意一种时 daemon 也应正常启动，选择未安装的后端才会显示错误；
 - 一部手机：iPhone（App Store 搜「CC Pocket」）或 Android（从 [GitHub Releases](https://github.com/ac54u-mobile/cc-pocket/releases) 下载 APK 安装）。
 
 ## 一、安装电脑端（daemon）
 
 ```bash
-brew install --cask heypandax/tap/cc-pocket
+brew install --cask ac54u-mobile/tap/cc-pocket
 cc-pocket-daemon service-install --apply   # 注册为登录自启服务，断线自动重连
 cc-pocket-daemon pair                      # 打出二维码 + 6 位配对码
 ```
 
-- 升级：`brew upgrade --cask heypandax/tap/cc-pocket`（**必须用全名**——Homebrew 官方仓有个不相关的同名 `cc-pocket` cask，裸名会操作到那个包）；
+- 升级：`brew upgrade --cask ac54u-mobile/tap/cc-pocket`（**必须用全名**——Homebrew 官方仓有个不相关的同名 `cc-pocket` cask，裸名会操作到那个包）；
 - 可选（语音输入给 Android／桌面客户端用，iPhone 不需要）：`brew install whisper-cpp`。
 
 ## 二、配对手机
@@ -215,7 +216,7 @@ cc-pocket-daemon config --isolated-claude-auth on
 ```bash
 launchctl unload ~/Library/LaunchAgents/dev.ccpocket.daemon.plist
 rm ~/Library/LaunchAgents/dev.ccpocket.daemon.plist
-brew uninstall --cask heypandax/tap/cc-pocket
+brew uninstall --cask ac54u-mobile/tap/cc-pocket
 ```
 
 手机端直接删 App 即可。

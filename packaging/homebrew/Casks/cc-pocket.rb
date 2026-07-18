@@ -1,8 +1,8 @@
 # Homebrew CASK for the cc-pocket daemon (a prebuilt, notarized binary — NOT a buildable formula,
 # so it needs no Command Line Tools). The cask file lives in the tap repo
-# (heypandax/homebrew-tap → Casks/cc-pocket.rb); the artifact (.tar.gz) is hosted on the MAIN repo's
-# Releases (heypandax/cc-pocket) — the url below points there. The tap holds only this description.
-# Users: brew install --cask heypandax/tap/cc-pocket
+# (ac54u-mobile/homebrew-tap → Casks/cc-pocket.rb); the artifact (.tar.gz) is hosted on the MAIN repo's
+# Releases (ac54u-mobile/cc-pocket) — the url below points there. The tap holds only this description.
+# Users: brew install --cask ac54u-mobile/tap/cc-pocket
 cask "cc-pocket" do
   version "1.3.0"
 
@@ -19,10 +19,10 @@ cask "cc-pocket" do
     sha256 "52158c47f55ad0c3ca48866af53599aef79250f7dcc682fa95fc3668e4ef8d32"
   end
 
-  url "https://github.com/heypandax/cc-pocket/releases/download/v#{version}/cc-pocket-daemon-#{version}-macos-#{arch}.tar.gz"
+  url "https://github.com/ac54u-mobile/cc-pocket/releases/download/v#{version}/cc-pocket-daemon-#{version}-macos-#{arch}.tar.gz"
   name "CC Pocket daemon"
-  desc "Drive Claude Code on your Mac from your phone over a zero-knowledge E2E relay"
-  homepage "https://github.com/heypandax/cc-pocket"
+  desc "Drive Claude Code, Codex, or Cursor from your phone over a zero-knowledge E2E relay"
+  homepage "https://github.com/ac54u-mobile/cc-pocket"
 
   # the launcher lives in a self-contained .app (bundled JRE); symlink it onto PATH
   binary "cc-pocket-daemon.app/Contents/MacOS/cc-pocket-daemon"

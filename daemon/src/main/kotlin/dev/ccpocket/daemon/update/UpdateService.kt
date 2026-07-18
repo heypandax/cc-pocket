@@ -28,7 +28,7 @@ private typealias Release = ReleaseClient.Release
  * is separated out for unit tests; the effectful parts are thin wrappers over tar/zip + Files.move.
  */
 object UpdateService {
-    private const val REPO = "heypandax/cc-pocket"
+    private const val REPO = ReleaseClient.DEFAULT_REPO
     private val log = logger("Update")
 
     /** A curl/irm-managed install: the versions dir, the stable launcher path the service runs, and
@@ -98,7 +98,7 @@ object UpdateService {
     fun ownerHint(exe: Path?): String {
         val s = exe?.toString()?.lowercase() ?: return genericHint()
         return when {
-            "caskroom" in s || "/homebrew/" in s -> "this install is managed by Homebrew — upgrade with:  brew upgrade --cask heypandax/tap/cc-pocket"
+            "caskroom" in s || "/homebrew/" in s -> "this install is managed by Homebrew — upgrade with:  brew upgrade --cask ac54u-mobile/tap/cc-pocket"
             "scoop" in s -> "this install is managed by Scoop — upgrade with:  scoop update cc-pocket-daemon"
             else -> genericHint()
         }

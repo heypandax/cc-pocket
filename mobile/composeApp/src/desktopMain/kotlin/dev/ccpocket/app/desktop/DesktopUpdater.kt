@@ -23,7 +23,7 @@ import kotlin.system.exitProcess
  * detached-helper shell-out because a process can't overwrite its own running image and then relaunch it.
  */
 object DesktopUpdater {
-    const val RELEASES_URL = "https://github.com/heypandax/cc-pocket/releases/latest"
+    const val RELEASES_URL = "https://github.com/ac54u-mobile/cc-pocket/releases/latest"
     private const val REPO = ReleaseClient.DEFAULT_REPO
 
     private val osName = System.getProperty("os.name").lowercase()
@@ -68,7 +68,7 @@ object DesktopUpdater {
 
     /** The package-manager upgrade command for [source] (to copy), or null when it self-updates / has none. */
     fun upgradeCommandFor(source: DkInstallSource): String? = when (source) {
-        DkInstallSource.BREW -> "brew upgrade --cask heypandax/tap/cc-pocket"
+        DkInstallSource.BREW -> "brew upgrade --cask ac54u-mobile/tap/cc-pocket"
         DkInstallSource.SCOOP -> "scoop update cc-pocket"
         else -> null
     }

@@ -84,15 +84,15 @@ fun OnboardingScreen(onBack: () -> Unit, onPairNow: () -> Unit) {
     // SHOWS the command — a phone-only reader previously had nothing to type on the computer (#23).
     val steps: List<OStep> = when (os) {
         "Windows" -> listOf(
-            OStep(1, stringResource(Res.string.ob_step_install), listOf("irm https://raw.githubusercontent.com/heypandax/cc-pocket/main/scripts/install.ps1 | iex"), stringResource(Res.string.ob_note_win)),
+            OStep(1, stringResource(Res.string.ob_step_install), listOf("irm https://raw.githubusercontent.com/ac54u-mobile/cc-pocket/main/scripts/install.ps1 | iex"), stringResource(Res.string.ob_note_win)),
             OStep(2, stringResource(Res.string.ob_step_pair), listOf("cc-pocket-daemon pair"), stringResource(Res.string.ob_pair_hint), last = true),
         )
         "Linux" -> listOf(
-            OStep(1, stringResource(Res.string.ob_step_install), listOf("curl -fsSL https://raw.githubusercontent.com/heypandax/cc-pocket/main/scripts/install.sh | bash"), stringResource(Res.string.ob_note_linux)),
+            OStep(1, stringResource(Res.string.ob_step_install), listOf("curl -fsSL https://raw.githubusercontent.com/ac54u-mobile/cc-pocket/main/scripts/install.sh | bash"), stringResource(Res.string.ob_note_linux)),
             OStep(2, stringResource(Res.string.ob_step_pair), listOf("cc-pocket-daemon pair"), stringResource(Res.string.ob_pair_hint), last = true),
         )
         else -> listOf(
-            OStep(1, stringResource(Res.string.ob_step_install), listOf("curl -fsSL https://raw.githubusercontent.com/heypandax/cc-pocket/main/scripts/install.sh | bash"), stringResource(Res.string.ob_note_mac_run)),
+            OStep(1, stringResource(Res.string.ob_step_install), listOf("curl -fsSL https://raw.githubusercontent.com/ac54u-mobile/cc-pocket/main/scripts/install.sh | bash"), stringResource(Res.string.ob_note_mac_run)),
             OStep(2, stringResource(Res.string.ob_step_pair), listOf("cc-pocket-daemon pair"), stringResource(Res.string.ob_pair_hint), last = true),
         )
     }
@@ -150,7 +150,7 @@ fun OnboardingScreen(onBack: () -> Unit, onPairNow: () -> Unit) {
                     shape = RoundedCornerShape(13.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Tok.accent, contentColor = Tok.base),
                 ) { Text(stringResource(Res.string.ob_pair_now), fontSize = 16.sp, fontWeight = FontWeight.Bold) }
-                TextButton({ uri.openUri("https://heypandax.github.io/cc-pocket/") }, Modifier.fillMaxWidth()) {
+                TextButton({ uri.openUri("https://ac54u-mobile.github.io/cc-pocket/") }, Modifier.fillMaxWidth()) {
                     Text(stringResource(Res.string.ob_guide), color = Tok.tx2, fontSize = 13.5.sp)
                 }
             }

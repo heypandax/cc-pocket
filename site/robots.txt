@@ -1,4 +1,4 @@
-# CC Pocket — https://heypandax.github.io/cc-pocket/
+# CC Pocket — https://ac54u-mobile.github.io/cc-pocket/
 # Open to all crawlers, including AI / answer-engine bots (we want to be cited).
 
 User-agent: *
@@ -50,4 +50,4 @@ Allow: /
 User-agent: Bytespider
 Allow: /
 
-Sitemap: https://heypandax.github.io/cc-pocket/sitemap.xml
+Sitemap: https://ac54u-mobile.github.io/cc-pocket/sitemap.xml

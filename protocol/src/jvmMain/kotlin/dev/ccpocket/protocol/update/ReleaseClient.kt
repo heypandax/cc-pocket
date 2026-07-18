@@ -22,7 +22,7 @@ import java.time.Duration
  * Compose Desktop client adds nothing the daemon didn't already carry.
  */
 object ReleaseClient {
-    const val DEFAULT_REPO = "heypandax/cc-pocket"
+    const val DEFAULT_REPO = "ac54u-mobile/cc-pocket"
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
     private val http: HttpClient = HttpClient.newBuilder()

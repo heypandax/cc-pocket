@@ -64,10 +64,10 @@ The architecture is three parts plus the agent:
 
 ## Links
 
-- [Website](https://heypandax.github.io/cc-pocket/)
-- [Full feature list](https://heypandax.github.io/cc-pocket/features.html)
+- [Website](https://ac54u-mobile.github.io/cc-pocket/)
+- [Full feature list](https://ac54u-mobile.github.io/cc-pocket/features.html)
 - [GitHub repository](https://github.com/ac54u-mobile/cc-pocket)
 - [README / user guide](https://github.com/ac54u-mobile/cc-pocket#readme)
 - [Security model](https://github.com/ac54u-mobile/cc-pocket/blob/main/docs/SECURITY.md)
-- [Privacy policy](https://heypandax.github.io/cc-pocket/privacy.html)
+- [Privacy policy](https://ac54u-mobile.github.io/cc-pocket/privacy.html)
 - [Latest releases & downloads](https://github.com/ac54u-mobile/cc-pocket/releases/latest)

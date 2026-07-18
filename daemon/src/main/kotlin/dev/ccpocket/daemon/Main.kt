@@ -73,7 +73,28 @@ fun daemonHostName(): String? {
 }
 
 private class Root : CliktCommand(name = "cc-pocket-daemon") {
-    override fun run() = Unit
+    private val showVersion by option("--version", help = "print the daemon version and exit").flag()
+
+    override fun run() {
+        if (showVersion) echo("cc-pocket-daemon ${dev.ccpocket.daemon.update.UpdateService.currentVersion()}")
+    }
+}
+
+internal fun backendFactories(
+    claudeExe: java.nio.file.Path?,
+    claudeHome: java.nio.file.Path?,
+    codexExe: java.nio.file.Path?,
+    cursorExe: java.nio.file.Path?,
+): Map<AgentKind, AgentBackendFactory> = buildMap {
+    claudeExe?.let { exe ->
+        put(AgentKind.CLAUDE, AgentBackendFactory { ClaudeBackend(exe, claudeHome) })
+    }
+    codexExe?.let { exe ->
+        put(AgentKind.CODEX, AgentBackendFactory { CodexBackend(exe.toString()) })
+    }
+    cursorExe?.let { exe ->
+        put(AgentKind.CURSOR, AgentBackendFactory { CursorBackend(exe.toString()) })
+    }
 }
 
 private class RunCmd : CliktCommand(name = "run") {
@@ -94,25 +115,26 @@ private class RunCmd : CliktCommand(name = "run") {
     private val autoUpdate by option("--auto-update", help = "apply daemon updates automatically (installer-managed macOS/Linux installs; others get a notification)").flag()
 
     override fun run() {
-        val exe = ClaudeLauncher.resolveExecutable(claudeBin)
-        // codex is optional: probe for the echo, but resolve lazily per session so a missing codex never
-        // blocks startup — a Codex open then fails with a clear PocketError instead.
+        // Every provider is optional. A Codex-only host must not need a fake Claude executable just to
+        // start the relay and pairing services; selecting an unavailable backend is rejected later by
+        // SessionRegistry with an agent_unavailable error.
+        val claudeExe = runCatching { ClaudeLauncher.resolveExecutable(claudeBin) }.getOrNull()
+        // Probe optional providers without making any one of them a startup requirement. Only successfully
+        // resolved CLIs are registered; SessionRegistry reports agent_unavailable for the others.
         val codexExe = runCatching { CodexLauncher.resolveExecutable(codexBin) }.getOrNull()
+        val cursorExe = runCatching { CursorLauncher.resolveExecutable(cursorBin) }.getOrNull()
         // credential isolation (issue #69, opt-in via `config --isolated-claude-auth on` or the env
         // toggle): the daemon's claude gets its own CLAUDE_CONFIG_DIR — its OAuth token refreshes can't
         // log out a terminal claude sharing the machine. History/settings stay shared (symlinks).
         val prefs = DaemonPrefs.load()
-        val wantIsolation = prefs.isolatedClaudeAuth || System.getenv("CC_POCKET_ISOLATED_CLAUDE_AUTH") == "1"
+        val wantIsolation = claudeExe != null &&
+            (prefs.isolatedClaudeAuth || System.getenv("CC_POCKET_ISOLATED_CLAUDE_AUTH") == "1")
         val claudeHome = if (wantIsolation) dev.ccpocket.daemon.claude.ClaudeHome.prepare() else null
         if (wantIsolation && claudeHome == null) {
             echo("⚠ claude credential isolation requested but claude-home setup failed — running WITHOUT isolation (see daemon log)")
         }
         val core = DaemonCore(
-            mapOf(
-                AgentKind.CLAUDE to AgentBackendFactory { ClaudeBackend(exe, claudeHome) },
-                AgentKind.CODEX to AgentBackendFactory { CodexBackend(codexBin) }, // resolves the binary lazily on first launch
-                AgentKind.CURSOR to AgentBackendFactory { CursorBackend(cursorBin) },
-            ),
+            backendFactories(claudeExe, claudeHome, codexExe, cursorExe),
             prefs = prefs,
             claudeConfigDir = claudeHome,
         )
@@ -141,7 +163,10 @@ private class RunCmd : CliktCommand(name = "run") {
             val hostNameLazy = lazy { daemonHostName() }
             val hostName: () -> String? = { hostNameLazy.value }
             val relayClient = RelayClient(relay, identity, core, lanUrl = directUrl, hostname = hostName)
-            echo("cc-pocket daemon — claude=$exe — codex=${codexExe ?: "(not found)"} — relay=$relay")
+            echo(
+                "cc-pocket daemon — claude=${claudeExe ?: "(not found)"} — " +
+                    "codex=${codexExe ?: "(not found)"} — cursor=${cursorExe ?: "(not found)"} — relay=$relay",
+            )
             echo("account id: ${identity.accountId}")
             echo("(run `cc-pocket-daemon pair` in another terminal to add a phone)")
             // E2E-gated direct listener beside the relay: paired devices on this machine/LAN connect
@@ -355,12 +380,15 @@ private class StatusCmd : CliktCommand(name = "status") {
             echo("  service:  $service")
             // 3. agent CLIs resolvable?
             val claude = runCatching { ClaudeLauncher.resolveExecutable(null) }.getOrNull()
-            echo("  claude:   ${claude?.let { "✓ $it" } ?: "✗ not found — install Claude Code first"}")
-            if (claude == null) healthy = false
+            echo("  claude:   ${claude?.let { "✓ $it" } ?: "– not found (optional; Claude sessions unavailable)"}")
             val codex = runCatching { CodexLauncher.resolveExecutable(null) }.getOrNull()
             echo("  codex:    ${codex?.let { "✓ $it" } ?: "– not found (optional; Codex sessions unavailable)"}")
             val cursor = runCatching { CursorLauncher.resolveExecutable(null) }.getOrNull()
             echo("  cursor:   ${cursor?.let { "✓ $it" } ?: "– not found (optional; Cursor sessions unavailable)"}")
+            if (claude == null && codex == null && cursor == null) {
+                healthy = false
+                echo("  agents:   ✗ none installed — install at least one of Claude Code, Codex, or Cursor")
+            }
         } finally {
             client.close()
         }
@@ -398,6 +426,7 @@ private class ServiceInstallCmd : CliktCommand(name = "service-install") {
     private val relay by option("--relay").default(DEFAULT_RELAY)
     private val claudeBin by option("--claude-bin")
     private val codexBin by option("--codex-bin")
+    private val cursorBin by option("--cursor-bin")
     private val apply by option("--apply", help = "actually write + load the service (default: print only)").flag()
 
     override fun run() {
@@ -407,6 +436,7 @@ private class ServiceInstallCmd : CliktCommand(name = "service-install") {
             add("--relay"); add(relay)
             claudeBin?.let { add("--claude-bin"); add(it) }
             codexBin?.let { add("--codex-bin"); add(it) }
+            cursorBin?.let { add("--cursor-bin"); add(it) }
         }
         echo(ServiceInstaller.install(launcher, runArgs, apply))
     }

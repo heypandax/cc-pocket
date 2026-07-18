@@ -6,7 +6,7 @@ on:
       version:
         description: Daemon version
         required: true
-        default: 1.3.22
+        default: 1.3.24
 
 permissions:
   contents: read
@@ -24,12 +24,14 @@ jobs:
       - uses: android-actions/setup-android@v3
       - name: Add placeholder Firebase config
         run: cp mobile/composeApp/google-services.json.template mobile/composeApp/google-services.json
-      - name: Build daemon distribution
-        run: ./gradlew :daemon:installDist -PappVersion=${{ inputs.version }} --no-daemon
-      - name: Package daemon
-        run: tar -C daemon/build/install -czf cc-pocket-daemon-${{ inputs.version }}.tar.gz cc-pocket-daemon
+      - name: Build self-contained Linux daemon (bundled JRE)
+        run: bash scripts/release-linux.sh "${{ inputs.version }}"
+      - name: Write checksum manifest
+        run: sha256sum "cc-pocket-daemon-${{ inputs.version }}-linux-x86_64.tar.gz" > SHA256SUMS
       - uses: actions/upload-artifact@v6
         with:
           name: cc-pocket-daemon-${{ inputs.version }}
-          path: cc-pocket-daemon-${{ inputs.version }}.tar.gz
+          path: |
+            cc-pocket-daemon-${{ inputs.version }}-linux-x86_64.tar.gz
+            SHA256SUMS
           retention-days: 7

@@ -38,7 +38,7 @@ class DesktopUpdaterTest {
 
     @Test
     fun upgrade_commands_only_for_package_managers() {
-        assertEquals("brew upgrade --cask heypandax/tap/cc-pocket", DesktopUpdater.upgradeCommandFor(DkInstallSource.BREW))
+        assertEquals("brew upgrade --cask ac54u-mobile/tap/cc-pocket", DesktopUpdater.upgradeCommandFor(DkInstallSource.BREW))
         assertEquals("scoop update cc-pocket", DesktopUpdater.upgradeCommandFor(DkInstallSource.SCOOP))
         assertNull(DesktopUpdater.upgradeCommandFor(DkInstallSource.STANDALONE)) // it self-updates
         assertNull(DesktopUpdater.upgradeCommandFor(DkInstallSource.UNKNOWN))

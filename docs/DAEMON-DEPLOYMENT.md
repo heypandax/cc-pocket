@@ -6,7 +6,8 @@
 
 1. 打开 GitHub 仓库的 **Actions → daemon-artifact**。
 2. 选择 **Run workflow**，填写要发布的 daemon 版本。
-3. 等工作流成功后，在该次运行的 **Artifacts** 下载 daemon 压缩包。
+3. 等工作流成功后，在该次运行的 **Artifacts** 下载 daemon 压缩包。产物名为
+   `cc-pocket-daemon-<version>-linux-x86_64.tar.gz`，内置 JRE，生产服务器不需要安装 Java。
 4. 校验下载来源和文件完整性后再传到服务器。
 
 App 与 daemon 使用独立版本号。是否兼容应以协议和功能要求为准，不要因为 App 版本较小就把较新的 daemon 降级。
@@ -22,7 +23,7 @@ systemctl --user status cc-pocket-daemon
 
 升级时：
 
-1. 解压 artifact 到临时目录。
+1. 使用同包 `SHA256SUMS` 校验后，解压 artifact 到临时目录。
 2. 备份当前安装目录。
 3. 停止服务，只替换 artifact 中的 `bin/`、`lib/` 及其随包资源。
 4. 恢复本机密钥配置，不要用仓库示例覆盖生产凭据。

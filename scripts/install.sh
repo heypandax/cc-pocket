@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-shot installer for the cc-pocket daemon — macOS (arm64/x86_64) and Linux (x86_64/arm64):
 #
-#   curl -fsSL https://raw.githubusercontent.com/heypandax/cc-pocket/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/ac54u-mobile/cc-pocket/main/scripts/install.sh | bash
 #
 # The Claude Code distribution model: downloads the self-contained build (bundled JRE — no system
 # Java), verifies it against the release's SHA256SUMS, installs it under
@@ -15,7 +15,7 @@
 # CC_POCKET_BIN, CC_POCKET_NO_SERVICE=1 (install files only — used by CI/tests).
 set -euo pipefail
 
-REPO="heypandax/cc-pocket"
+REPO="ac54u-mobile/cc-pocket"
 BIN="cc-pocket-daemon"
 ROOT="${CC_POCKET_ROOT:-$HOME/.local/share/cc-pocket}"
 BINDIR="${CC_POCKET_BIN:-$HOME/.local/bin}"
@@ -140,10 +140,10 @@ cat <<EOF
 
   Next — pair your phone:
 
-      $BIN pair
+      $BINDIR/$BIN pair
 
   (prints a QR + 6-digit code; scan it in the CC Pocket app)
 
   Logs:    $logs
-  Upgrade: $BIN update   (the daemon also checks daily and notifies your phone)
+  Upgrade: $BINDIR/$BIN update   (the daemon also checks daily and notifies your phone)
 EOF

@@ -1,6 +1,6 @@
 # cc-pocket daemon — one-command Windows install (x86_64):
 #
-#   irm https://raw.githubusercontent.com/heypandax/cc-pocket/main/scripts/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/ac54u-mobile/cc-pocket/main/scripts/install.ps1 | iex
 #
 # The Claude Code distribution model: downloads the latest self-contained release (bundled JRE — no
 # system Java), verifies it against the release's SHA256SUMS, installs it under
@@ -10,7 +10,7 @@
 # checks daily and can update itself. Scoop users can keep `scoop install cc-pocket-daemon` instead.
 $ErrorActionPreference = "Stop"
 
-$repo = "heypandax/cc-pocket"
+$repo = "ac54u-mobile/cc-pocket"
 $root = Join-Path $env:LOCALAPPDATA "cc-pocket"
 
 Write-Host "-- cc-pocket daemon installer --"

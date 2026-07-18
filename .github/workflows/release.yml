@@ -28,7 +28,20 @@ permissions:
   contents: write
 
 jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create release v${{ inputs.version }} when missing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "v${{ inputs.version }}" --repo "${{ github.repository }}" >/dev/null 2>&1 || \
+            gh release create "v${{ inputs.version }}" --repo "${{ github.repository }}" \
+              --target "${{ github.sha }}" --title "v${{ inputs.version }}" \
+              --generate-notes
+
   macos:
+    needs: [prepare-release]
     if: ${{ !inputs.only_android }}
     strategy:
       fail-fast: false
@@ -93,6 +106,7 @@ jobs:
           gh release upload "v${{ inputs.version }}" "$ARTIFACT" --clobber
 
   windows:
+    needs: [prepare-release]
     if: ${{ !inputs.only_android }}
     runs-on: windows-latest
     steps:
@@ -117,6 +131,7 @@ jobs:
           gh release upload "v${{ inputs.version }}" $artifact --clobber
 
   linux:
+    needs: [prepare-release]
     if: ${{ !inputs.only_android }}
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -151,6 +166,7 @@ jobs:
           gh release upload "v${{ inputs.version }}" "$ARTIFACT" --clobber
 
   android:
+    needs: [prepare-release]
     # Builds the signed phone app (:mobile:composeApp) and attaches the APK to the release, so the
     # website's "newest .apk" link always resolves to a current, release-signed build. The signing
     # key is injected from repo secrets; if any are missing the build.gradle signing config is
@@ -225,6 +241,7 @@ jobs:
           gh release upload "v${{ inputs.version }}" "$ARTIFACT" --clobber
 
   macos-desktop:
+    needs: [prepare-release]
     # The Compose Desktop APP (.dmg) for macOS — signed + notarized, attached to the release under a stable
     # version-less name (so releases/latest/download/cc-pocket-desktop-macos-<arch>.dmg is a permanent link).
     # BOTH arches build on Apple Silicon (macos-14): an x86_64 Temurin JDK under Rosetta makes packageDmg
@@ -318,6 +335,7 @@ jobs:
           gh release upload "v${VER}" "$VERSIONED" "cc-pocket-desktop-macos-${ARCH}.dmg" --clobber
 
   windows-desktop:
+    needs: [prepare-release]
     # The Compose Desktop APP (.msi installer) for Windows, attached to the release under a stable version-less
     # name. jpackage can't cross-compile, so this runs on windows-latest (which ships WiX, so the MSI builds).
     # Mirrors build-windows.yml's windows-app job but uploads to the release instead of a workflow artifact.
@@ -382,11 +400,11 @@ jobs:
           cp "$MSI" cc-pocket-desktop-windows-x86_64.msi
           gh release upload "v${{ inputs.version }}" cc-pocket-desktop-windows-x86_64.msi --clobber
 
-  # Keep the Scoop bucket (heypandax/scoop-bucket) on the release we just published: without this the
+  # Keep the Scoop bucket (ac54u-mobile/scoop-bucket) on the release we just published: without this the
   # manifest stays pinned to an old version forever (its checkver/autoupdate fields are inert — no
   # excavator runs on a personal bucket), which stranded every Windows user on 1.1.9 (issue #25).
   # Needs a repo secret SCOOP_BUCKET_TOKEN: a fine-grained PAT with contents:write on
-  # heypandax/scoop-bucket. Skips gracefully (with a warning) when the secret is absent.
+  # ac54u-mobile/scoop-bucket. Skips gracefully (with a warning) when the secret is absent.
   bump-scoop:
     if: ${{ !inputs.only_android }}
     needs: [windows]
@@ -399,7 +417,7 @@ jobs:
           BUCKET_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
         run: |
           if [ -z "$BUCKET_TOKEN" ]; then
-            echo "::warning::SCOOP_BUCKET_TOKEN not set — scoop bucket NOT bumped. Update heypandax/scoop-bucket by hand (bucket/cc-pocket-daemon.json: version/url/hash)."
+            echo "::warning::SCOOP_BUCKET_TOKEN not set — scoop bucket NOT bumped. Update ac54u-mobile/scoop-bucket by hand (bucket/cc-pocket-daemon.json: version/url/hash)."
             exit 0
           fi
           VER="${{ inputs.version }}"
@@ -409,14 +427,14 @@ jobs:
           # keep the repo's template manifest in lockstep, then push the same content to the bucket repo
           jq --arg v "$VER" --arg sha "$SHA" \
              '.version=$v
-              | .architecture."64bit".url="https://github.com/heypandax/cc-pocket/releases/download/v\($v)/cc-pocket-daemon-\($v)-windows-x86_64.zip"
+              | .architecture."64bit".url="https://github.com/ac54u-mobile/cc-pocket/releases/download/v\($v)/cc-pocket-daemon-\($v)-windows-x86_64.zip"
               | .architecture."64bit".hash=$sha' \
              packaging/scoop/cc-pocket-daemon.json > manifest.json
           CONTENT=$(base64 -w0 manifest.json)
           CUR_SHA=$(curl -fsS -H "Authorization: Bearer $BUCKET_TOKEN" \
-            "https://api.github.com/repos/heypandax/scoop-bucket/contents/bucket/cc-pocket-daemon.json" | jq -r '.sha')
+            "https://api.github.com/repos/ac54u-mobile/scoop-bucket/contents/bucket/cc-pocket-daemon.json" | jq -r '.sha')
           curl -fsS -X PUT -H "Authorization: Bearer $BUCKET_TOKEN" \
-            "https://api.github.com/repos/heypandax/scoop-bucket/contents/bucket/cc-pocket-daemon.json" \
+            "https://api.github.com/repos/ac54u-mobile/scoop-bucket/contents/bucket/cc-pocket-daemon.json" \
             -d "$(jq -n --arg msg "cc-pocket-daemon $VER" --arg content "$CONTENT" --arg sha "$CUR_SHA" \
                   '{message:$msg, content:$content, sha:$sha}')" >/dev/null
           echo "scoop bucket bumped to $VER (sha256 $SHA)"

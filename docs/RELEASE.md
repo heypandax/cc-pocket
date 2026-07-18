@@ -7,7 +7,7 @@
 用户最终体验：
 
 ```
-brew install --cask heypandax/tap/cc-pocket
+brew install --cask ac54u-mobile/tap/cc-pocket
 cc-pocket-daemon service-install --apply    # 开机自启、断线重连
 cc-pocket-daemon pair                        # 出二维码 → 手机扫
 ```
@@ -55,7 +55,7 @@ security find-identity -v -p codesigning
 
 ### 5. GitHub 仓库
 - 主仓库 `ac54u-mobile/cc-pocket`（当前定制版）—— **artifact（`.tar.gz`）挂在它的 GitHub Release**，cask 的 `url` 指向这里；Android APK 也放主仓 Release。
-- tap 仓库 **`heypandax/homebrew-tap`**（已建）—— **只放 `Casks/cc-pocket.rb`**（用 `packaging/homebrew/Casks/cc-pocket.rb` 当模板），不挂任何 artifact。tap 名即 `heypandax/tap`。
+- tap 仓库 **`ac54u-mobile/homebrew-tap`**（已建）—— **只放 `Casks/cc-pocket.rb`**（用 `packaging/homebrew/Casks/cc-pocket.rb` 当模板），不挂任何 artifact。tap 名即 `ac54u-mobile/tap`。
 
 > 证书私钥**只在你创建它的那台 Mac**。换机器：钥匙串访问里选中证书+私钥 → 导出为 `.p12`（带密码）→ 在新机导入。Developer ID 证书一个 Team 数量有限（一般 2 个），别乱删。
 
@@ -85,12 +85,12 @@ security find-identity -v -p codesigning
 
 3. **在主仓 `ac54u-mobile/cc-pocket` 建 GitHub Release** `v<X>`（tag 用发布版本号），把上面的产物作为附件上传。⚠️ 别传到 tap 仓库——tap 只放 cask。
 
-4. **更新 cask**：把 `packaging/homebrew/Casks/cc-pocket.rb` 的 `version` + `sha256` 填好（`url` 已模板化为 `#{version}` 且指向主仓 Release，不用动），提交到 `heypandax/homebrew-tap` 的 `Casks/cc-pocket.rb`。
+4. **更新 cask**：把 `packaging/homebrew/Casks/cc-pocket.rb` 的 `version` + `sha256` 填好（`url` 已模板化为 `#{version}` 且指向主仓 Release，不用动），提交到 `ac54u-mobile/homebrew-tap` 的 `Casks/cc-pocket.rb`。
 
 5. **验收**：
 
    ```bash
-   brew install --cask heypandax/tap/cc-pocket   # 干净机器上
+   brew install --cask ac54u-mobile/tap/cc-pocket   # 干净机器上
    cc-pocket-daemon --help                      # 应正常输出（已公证，无 Gatekeeper 警告）
    ```
 
@@ -99,7 +99,7 @@ security find-identity -v -p codesigning
 ## 写进面向用户的 README
 
 - **前置**：先装并登录 [Claude Code](https://claude.com/claude-code)（跑一次 `claude` 完成鉴权）。daemon 会自动找到系统的 `claude`。
-- **装**：`brew install --cask heypandax/tap/cc-pocket`
+- **装**：`brew install --cask ac54u-mobile/tap/cc-pocket`
 - **跑 + 配对**：`cc-pocket-daemon service-install --apply` 然后 `cc-pocket-daemon pair`，手机 App 扫码。
 - **卸载服务**：`launchctl unload ~/Library/LaunchAgents/dev.ccpocket.daemon.plist`
 - **双语同步**：中文默认页 `README.md` 与英文 `README.en.md` 必须一起检查（功能列表 / 安装章节 / 支持平台）；发版前对照两份文件的章节结构。
@@ -112,7 +112,7 @@ security find-identity -v -p codesigning
 - **默认 relay 已烤进 daemon**（`DEFAULT_RELAY`），`run` / `service-install` 不用传 `--relay`；本地 LAN 调试用 `run --local`。
 - **双架构**：jpackage 打的是构建机的 arch，所以 arm64 / x86_64 要各打一份；cask 用 `depends_on arch: :arm64` 限制，要支持 Intel 再按 arch 给不同 `url`/`sha256`。
 - **必须用 Cask 不用 Formula**：产物是预编译 + 已公证的二进制。Homebrew **Formula** 会强制跑「Command Line Tools 体检」（哪怕不编译，且常误报 CLT 过旧 → 装不上），**Cask** 是预编译通道、不碰 CLT。所以分发用 `Casks/cc-pocket.rb` + `brew install --cask`。
-- **tap-trust 提示**：`heypandax/tap` 是第三方 tap，brew 会打一行 "not trusted" 警告（非阻塞）；Homebrew 6.0 后会要求 `brew trust`，到时文档补一句即可。
+- **tap-trust 提示**：`ac54u-mobile/tap` 是第三方 tap，brew 会打一行 "not trusted" 警告（非阻塞）；Homebrew 6.0 后会要求 `brew trust`，到时文档补一句即可。
 - **公证 vs 不公证**：叠加公证后**任何下载路径都零 Gatekeeper 警告**，最稳。
 
 ---
