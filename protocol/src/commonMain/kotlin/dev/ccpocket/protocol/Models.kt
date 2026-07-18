@@ -413,6 +413,15 @@ data class CodexPlugin(
 )
 
 @Serializable
+data class CodexMcpEntry(
+    val name: String,
+    val title: String? = null,
+    val description: String? = null,
+    val uri: String? = null,
+    val mimeType: String? = null,
+)
+
+@Serializable
 data class CodexMcpServer(
     val name: String,
     val title: String? = null,
@@ -422,6 +431,9 @@ data class CodexMcpServer(
     val toolCount: Int = 0,
     val resourceCount: Int = 0,
     val templateCount: Int = 0,
+    val tools: List<CodexMcpEntry> = emptyList(),
+    val resources: List<CodexMcpEntry> = emptyList(),
+    val templates: List<CodexMcpEntry> = emptyList(),
 )
 
 @Serializable

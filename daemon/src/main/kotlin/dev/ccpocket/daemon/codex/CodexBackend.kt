@@ -691,13 +691,28 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
         val servers = (result?.get("data") as? JsonArray).orEmpty().mapNotNull { raw ->
             val s = raw as? JsonObject ?: return@mapNotNull null
             val info = s.obj("serverInfo")
+            fun entry(value: JsonObject, fallbackName: String? = null) = dev.ccpocket.protocol.CodexMcpEntry(
+                name = value.str("name") ?: fallbackName ?: value.str("uri") ?: value.str("uriTemplate") ?: "—",
+                title = value.str("title"),
+                description = value.str("description"),
+                uri = value.str("uri") ?: value.str("uriTemplate"),
+                mimeType = value.str("mimeType"),
+            )
+            val tools = (s["tools"] as? JsonObject).orEmpty().mapNotNull { (key, value) ->
+                (value as? JsonObject)?.let { entry(it, key) }
+            }
+            val resources = (s["resources"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.let(::entry) }
+            val templates = (s["resourceTemplates"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.let(::entry) }
             dev.ccpocket.protocol.CodexMcpServer(
                 name = s.str("name") ?: return@mapNotNull null,
                 title = info?.str("title"), description = info?.str("description"), version = info?.str("version"),
                 authStatus = s.str("authStatus") ?: "unsupported",
-                toolCount = (s["tools"] as? JsonObject)?.size ?: 0,
-                resourceCount = (s["resources"] as? JsonArray)?.size ?: 0,
-                templateCount = (s["resourceTemplates"] as? JsonArray)?.size ?: 0,
+                toolCount = tools.size,
+                resourceCount = resources.size,
+                templateCount = templates.size,
+                tools = tools,
+                resources = resources,
+                templates = templates,
             )
         }
         return AgentEvent.IntegrationsChanged(servers = servers)

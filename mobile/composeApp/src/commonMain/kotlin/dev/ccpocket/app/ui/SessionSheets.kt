@@ -302,9 +302,14 @@ fun QuickActionsSheet(
 private fun IntegrationsView(repo: PocketRepository, onBack: () -> Unit) {
     val uri = LocalUriHandler.current
     var tab by remember { mutableStateOf("mcp") }
+    var selectedServer by remember { mutableStateOf<dev.ccpocket.protocol.CodexMcpServer?>(null) }
     LaunchedEffect(Unit) { repo.loadCodexIntegrations() }
     val authUrl = repo.codexAuthorizationUrl.value
     LaunchedEffect(authUrl) { authUrl?.let { uri.openUri(it); repo.consumeCodexAuthorizationUrl() } }
+    selectedServer?.let { server ->
+        McpServerDetail(server) { selectedServer = null }
+        return
+    }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("‹ ", color = Tok.tx2, fontSize = 18.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 4.dp))
         Text(stringResource(Res.string.integrations_title), color = Tok.tx, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -325,17 +330,26 @@ private fun IntegrationsView(repo: PocketRepository, onBack: () -> Unit) {
             Text(stringResource(Res.string.mcp_reload), color = Tok.accent, fontSize = 11.5.sp, modifier = Modifier.clickable { repo.reloadCodexMcp() }.padding(8.dp))
         }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { repo.codexMcpServers.forEach { server ->
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(10.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(10.dp)).clickable { selectedServer = server }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(server.title ?: server.name, color = Tok.tx, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     server.description?.let { Text(it, color = Tok.tx2, fontSize = 11.5.sp, maxLines = 2) }
                     Text(stringResource(Res.string.mcp_counts, server.toolCount, server.resourceCount, server.templateCount), color = Tok.muted, fontSize = 9.5.sp, modifier = Modifier.padding(top = 3.dp))
                 }
                 val login = server.authStatus == "notLoggedIn"
-                Text(if (login) stringResource(Res.string.mcp_login) else server.authStatus, color = if (login) Tok.accent else Tok.ok, fontSize = 11.sp,
+                val authenticated = server.authStatus == "bearerToken" || server.authStatus == "oAuth"
+                val authLabel = when {
+                    login -> stringResource(Res.string.mcp_login)
+                    authenticated -> stringResource(Res.string.app_connected)
+                    else -> server.authStatus
+                }
+                Text(authLabel, color = if (login) Tok.accent else if (authenticated) Tok.ok else Tok.muted, fontSize = 11.sp,
                     modifier = Modifier.clickable(enabled = login) { repo.loginCodexMcp(server.name) }.padding(8.dp))
+                Text("›", color = Tok.muted, fontSize = 18.sp)
             }
         } }
+    } else if (!repo.codexIntegrationsLoading.value && repo.codexIntegrationsError.value == null && repo.codexApps.isEmpty()) {
+        Text(stringResource(Res.string.apps_empty), color = Tok.tx2, fontSize = 12.5.sp, modifier = Modifier.padding(vertical = 18.dp))
     } else Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { repo.codexApps.forEach { app ->
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(10.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -348,6 +362,40 @@ private fun IntegrationsView(repo: PocketRepository, onBack: () -> Unit) {
                 modifier = Modifier.clickable(enabled = link) { app.installUrl?.let(uri::openUri) }.padding(8.dp))
         }
     } }
+}
+
+@Composable
+private fun McpServerDetail(server: dev.ccpocket.protocol.CodexMcpServer, onBack: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("‹ ", color = Tok.tx2, fontSize = 18.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 4.dp))
+        Column(Modifier.weight(1f)) {
+            Text(server.title ?: server.name, color = Tok.tx, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            server.description?.let { Text(it, color = Tok.tx2, fontSize = 11.5.sp, maxLines = 2) }
+        }
+    }
+    Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        McpEntrySection(stringResource(Res.string.mcp_tools), server.tools)
+        McpEntrySection(stringResource(Res.string.mcp_resources), server.resources)
+        McpEntrySection(stringResource(Res.string.mcp_templates), server.templates)
+    }
+}
+
+@Composable
+private fun McpEntrySection(title: String, entries: List<dev.ccpocket.protocol.CodexMcpEntry>) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("$title · ${entries.size}", color = Tok.tx2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        if (entries.isEmpty()) {
+            Text(stringResource(Res.string.mcp_none), color = Tok.muted, fontSize = 11.5.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp))
+        } else entries.forEach { entry ->
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(9.dp)).padding(10.dp)) {
+                Text(entry.title ?: entry.name, color = Tok.tx, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                if (entry.title != null && entry.title != entry.name) Text(entry.name, color = Tok.muted, fontSize = 10.sp)
+                entry.description?.let { Text(it, color = Tok.tx2, fontSize = 11.sp, maxLines = 3) }
+                entry.uri?.let { Text(it, color = Tok.accent, fontSize = 10.sp, fontFamily = FontFamily.Monospace, maxLines = 2) }
+                entry.mimeType?.let { Text(it, color = Tok.muted, fontSize = 9.5.sp) }
+            }
+        }
+    }
 }
 
 @Composable

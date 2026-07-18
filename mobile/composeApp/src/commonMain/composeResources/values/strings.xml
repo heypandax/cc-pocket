@@ -483,6 +483,11 @@
     <string name="mcp_reload">Reload configuration</string>
     <string name="mcp_login">Log in</string>
     <string name="mcp_counts">%1$d tools · %2$d resources · %3$d templates</string>
+    <string name="mcp_tools">Tools</string>
+    <string name="mcp_resources">Resources</string>
+    <string name="mcp_templates">Templates</string>
+    <string name="mcp_none">None</string>
+    <string name="apps_empty">No Codex Apps are available for this account. Apps appear here when the Codex service offers an integration you can connect.</string>
     <string name="app_connected">Connected</string>
     <string name="app_connect">Connect</string>
     <string name="extensions_title">Skills &amp; plugins</string>

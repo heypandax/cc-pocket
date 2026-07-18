@@ -12,3 +12,4 @@ New and improved since 1.3.4
 • Updated OpenAI Codex branding, a clean native iOS photo symbol, and letter-free project avatars
 
 Compatibility: daemon-backed additions require daemon 1.3.5 or newer. An installed 1.3.18 daemon should not be downgraded.
+Adds a manageable prompt queue, unified workspace, plan and sub-agent progress, per-project agent/model preferences, and the connected daemon version in Settings. Also improves onboarding, themes, file/video attachments, the usage widget, Face ID lock, and connection reliability.

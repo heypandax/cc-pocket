@@ -483,6 +483,11 @@
     <string name="mcp_reload">重新加载配置</string>
     <string name="mcp_login">登录</string>
     <string name="mcp_counts">%1$d 个工具 · %2$d 个资源 · %3$d 个模板</string>
+    <string name="mcp_tools">工具</string>
+    <string name="mcp_resources">资源</string>
+    <string name="mcp_templates">模板</string>
+    <string name="mcp_none">暂无内容</string>
+    <string name="apps_empty">当前 Codex 账号没有可用的 Apps。Codex 服务提供可连接的集成后，会显示在这里。</string>
     <string name="app_connected">已连接</string>
     <string name="app_connect">连接</string>
     <string name="extensions_title">技能与插件</string>
