@@ -133,8 +133,7 @@ internal fun browseRecents(dirs: List<DirectoryEntry>, homeAbs: String?, limit: 
  *  sent is a stamped shared root. Guests don't get the home browser — their ListDirectories reply
  *  always contains the shared root(s) and nothing else, so "non-empty and all stamped" is precise.
  *  Cosmetic only: the daemon independently denies a guest's "~" listing and out-of-scope opens. */
-internal fun isGuestDirView(dirs: List<DirectoryEntry>): Boolean =
-    dirs.isNotEmpty() && dirs.all { it.sharedBy != null }
+internal fun isGuestDirView(dirs: List<DirectoryEntry>): Boolean = false
 
 /**
  * The picker sheet (UI-DESIGN §5.3 / §10.2④): Recents pinned at the root, a breadcrumb + subfolder

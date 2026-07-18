@@ -539,4 +539,5 @@
     <string name="session_status_idle">Online · idle</string>
     <string name="session_rename">Rename session</string>
     <string name="session_rename_hint">Session name</string>
+    <string name="new_path_open_row">Open a project folder…</string>
 </resources>

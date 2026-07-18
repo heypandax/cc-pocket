@@ -539,4 +539,5 @@
     <string name="session_status_idle">在线 · 空闲</string>
     <string name="session_rename">重命名会话</string>
     <string name="session_rename_hint">会话名称</string>
+    <string name="new_path_open_row">打开项目文件夹…</string>
 </resources>
