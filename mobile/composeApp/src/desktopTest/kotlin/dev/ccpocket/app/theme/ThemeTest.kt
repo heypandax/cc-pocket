@@ -39,6 +39,14 @@ class ThemeTest {
     }
 
     @Test
+    fun light_secondary_transcript_text_is_not_a_low_contrast_gray() {
+        // Small monospace tool/event rows use tx2 and muted extensively. Pin them below the old washed-out
+        // values so an innocent palette tweak cannot make the light transcript disappear again on iOS.
+        assertTrue(LightPalette.tx2.red < 0.30f && LightPalette.tx2.green < 0.30f && LightPalette.tx2.blue < 0.32f)
+        assertTrue(LightPalette.muted.red < 0.38f && LightPalette.muted.green < 0.40f && LightPalette.muted.blue < 0.42f)
+    }
+
+    @Test
     fun resolvesToDark_maps_mode_and_os_to_effective_dark() {
         // this polarity feeds the system-bar icon color (issue #117): dark -> light icons, light -> dark icons
         assertFalse(ThemeMode.LIGHT.resolvesToDark(systemDark = true), "LIGHT forces light regardless of OS")

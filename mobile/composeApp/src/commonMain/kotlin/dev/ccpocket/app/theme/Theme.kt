@@ -91,8 +91,10 @@ val LightPalette = Palette(
     glowWarm = Color(0xFFC15F3C),
     glowCool = Color(0xFF1C8B82),
     tx = Color(0xFF1C1D1F),
-    tx2 = Color(0xFF5B6066),
-    muted = Color(0xFF6F757C),
+    // iOS subpixel antialiasing visually thins the many 11–12sp monospace transcript/tool lines.
+    // Keep both secondary tiers distinctly darker than the glass edge so chat history stays readable.
+    tx2 = Color(0xFF3F444A),
+    muted = Color(0xFF555B62),
     accent = Color(0xFFA94E30),
     accentPressed = Color(0xFF8E3F27),
     codex = Color(0xFF14776F),
