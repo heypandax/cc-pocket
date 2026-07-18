@@ -351,8 +351,13 @@ private class UpdateCmd : CliktCommand(name = "update") {
         val newLauncher = dev.ccpocket.daemon.update.UpdateService.apply(latest, install)
         echo("installed ${latest.version} → ${install.versionsDir.resolve(latest.version)}")
         echo("restarting the background service onto it…")
-        dev.ccpocket.daemon.update.UpdateService.restartService(newLauncher)
-        echo("✅ updated to ${latest.version}")
+        val restartWarning = dev.ccpocket.daemon.update.UpdateService.restartService(newLauncher)
+        if (restartWarning == null) {
+            echo("✅ updated to ${latest.version}")
+        } else {
+            echo("⚠️ installed ${latest.version}, but the service was not restarted automatically: $restartWarning")
+            echo("   restart it manually; the stable launcher already points at the new version")
+        }
     }
 }
 
@@ -477,5 +482,12 @@ fun main(args: Array<String>) {
     // timestamp-less lines made the 07-04 observe/fork incident unreconstructable from the logs
     System.setProperty("org.slf4j.simpleLogger.showDateTime", "true")
     System.setProperty("org.slf4j.simpleLogger.dateTimeFormat", "MM-dd HH:mm:ss.SSS")
+    // Clikt validates that a subcommand exists before Root.run(), so a regular root flag never gets
+    // a chance to print. Treat the one root-level eager option before parsing (issue: 1.3.29 printed
+    // Usage instead of its version). Subcommands remain free to define their own --version later.
+    if (args.contentEquals(arrayOf("--version"))) {
+        println("cc-pocket-daemon ${dev.ccpocket.daemon.update.UpdateService.currentVersion()}")
+        return
+    }
     Root().subcommands(RunCmd(), TestClientCmd(), PairCmd(), StatusCmd(), UpdateCmd(), ConfigCmd(), ServiceInstallCmd()).main(args)
 }

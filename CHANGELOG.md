@@ -24,6 +24,8 @@
 
 ### 修复
 
+- 修复根命令 `cc-pocket-daemon --version` 错误显示帮助页；现在无需子命令即可输出内置版本。
+- 修复部分 Debian/systemd 环境升级完成后因 Java 进程未从 PATH 找到 `systemctl` 而抛异常；updater 现在优先使用绝对路径，重启失败时保留已安装版本并给出手动操作提示。
 - 修复安装引导的“完整安装指南”指向未启用的 GitHub Pages 而返回 404；现在直接打开仓库内的使用文档。
 - daemon 启动时将 Claude、Codex、Cursor 都作为可选后端，Codex-only 主机不再因找不到 Claude CLI 而退出；正式 `1.3.28` Release 同时提供 `SHA256SUMS`。
 - 修复 MCP 与 Apps 页面因集成更新通知自触发而持续闪烁，并将 403/HTML 响应整理为可读错误信息。
@@ -40,7 +42,7 @@
 ### 兼容性
 
 - 可管理提示词队列需要匹配的新版 App 与 daemon；旧端会忽略新增协议帧，其余会话功能保持兼容。
-- 可管理提示词队列、文件/视频附件和会话重命名需要匹配的当前 App 与 daemon；本轮 daemon Release 已更新至 **1.3.29**。
+- 可管理提示词队列、文件/视频附件和会话重命名需要匹配的当前 App 与 daemon；daemon 热修复 Release 已更新至 **1.3.30**。
 - iPhone 小组件通过 App Group 读取最近一次用量快照；受 WidgetKit 调度限制，它不会自行保持 daemon WebSocket 长连接。
 
 ## 1.3.7 — 2026-07-18

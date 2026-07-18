@@ -8,6 +8,7 @@ import dev.ccpocket.protocol.update.ReleaseVersions
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.io.File
 import java.util.zip.ZipInputStream
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
@@ -167,7 +168,7 @@ object UpdateService {
 
     /** Restart the background service so the new binary takes over (CLI path; the in-daemon auto path
      *  just exits and lets KeepAlive/Restart=always relaunch through the flipped symlink). */
-    fun restartService(newLauncher: Path) {
+    fun restartService(newLauncher: Path): String? = runCatching {
         val os = System.getProperty("os.name").lowercase()
         when {
             os.contains("mac") -> {
@@ -181,9 +182,26 @@ object UpdateService {
                 runCatching { ProcessBuilder("schtasks", "/End", "/TN", ServiceInstaller.WINDOWS_TASK).start().waitFor() }
                 ProcessBuilder("powershell.exe", "-NoProfile", "-Command", "Start-ScheduledTask -TaskName '${ServiceInstaller.WINDOWS_TASK}'").start().waitFor()
             }
-            else -> ProcessBuilder("systemctl", "--user", "restart", "cc-pocket-daemon").inheritIO().start().waitFor()
+            else -> {
+                val systemctl = resolveSystemctl()
+                    ?: error("systemctl was not found in /usr/bin, /bin, or PATH")
+                val exit = ProcessBuilder(systemctl.toString(), "--user", "restart", "cc-pocket-daemon")
+                    .inheritIO().start().waitFor()
+                check(exit == 0) { "$systemctl exited with status $exit" }
+            }
         }
-    }
+    }.exceptionOrNull()?.message
+
+    /** Resolve systemctl without trusting the launcher's inherited PATH. jpackage/systemd/login shells
+     * can expose different environments; Debian's /usr/bin/systemctl must work even when PATH is sparse. */
+    internal fun resolveSystemctl(
+        wellKnown: List<Path> = listOf(Path.of("/usr/bin/systemctl"), Path.of("/bin/systemctl")),
+        pathValue: String? = System.getenv("PATH"),
+    ): Path? = sequence {
+        yieldAll(wellKnown)
+        pathValue?.split(File.pathSeparator)?.filter { it.isNotBlank() }
+            ?.forEach { yield(Path.of(it).resolve("systemctl")) }
+    }.map { it.toAbsolutePath().normalize() }.distinct().firstOrNull { it.isExecutable() }
 
     // ── internals ────────────────────────────────────────────────────────────────────────────────
 

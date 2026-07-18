@@ -1,6 +1,7 @@
 package dev.ccpocket.daemon.update
 
 import java.nio.file.Path
+import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -62,5 +63,17 @@ class UpdateServiceTest {
         assertEquals("56e51fe0f9674df9d8b246fabf8188c1dd669d7c106930ed4077e3c94e3b60ef", sums["cc-pocket-daemon-1.2.0-windows-x86_64.zip"])
         assertEquals("8ee8fea9b9b8326acd5bfc04e3340b923eaf0d3b22e91d4eea1b67b429842c60", sums["cc-pocket-daemon-1.2.0-macos-x86_64.tar.gz"])
         assertNull(sums["garbage.bin"])
+    }
+
+    @Test
+    fun systemctl_resolution_prefers_absolute_well_known_path_and_falls_back_to_path() {
+        val root = Files.createTempDirectory("ccp-systemctl")
+        val known = root.resolve("usr-bin-systemctl").also { Files.writeString(it, "stub"); it.toFile().setExecutable(true) }
+        val pathDir = Files.createDirectories(root.resolve("bin"))
+        val fromPath = pathDir.resolve("systemctl").also { Files.writeString(it, "stub"); it.toFile().setExecutable(true) }
+
+        assertEquals(known, UpdateService.resolveSystemctl(listOf(known), pathDir.toString()))
+        assertEquals(fromPath, UpdateService.resolveSystemctl(emptyList(), pathDir.toString()))
+        assertNull(UpdateService.resolveSystemctl(emptyList(), root.resolve("missing").toString()))
     }
 }
