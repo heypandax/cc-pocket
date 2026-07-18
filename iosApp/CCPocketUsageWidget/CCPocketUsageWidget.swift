@@ -102,7 +102,7 @@ struct UsageWidgetView: View {
             HStack {
                 Label("\(entry.requests) requests", systemImage: "arrow.up.circle")
                 Spacer()
-                Text(updatedLabel(entry.updatedAt))
+                Text(entry.updatedAt == nil ? "No data" : "Updated")
             }.font(.system(size: 9)).foregroundColor(muted)
         }
         .padding(14)
@@ -117,12 +117,6 @@ struct UsageWidgetView: View {
         return "\(value)"
     }
 
-    private func updatedLabel(_ date: Date?) -> String {
-        guard let date = date else { return "No data" }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: Date())
-    }
 }
 
 @main

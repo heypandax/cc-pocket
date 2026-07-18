@@ -26,7 +26,7 @@
 - 修复浅色模式下聊天记录、工具调用和状态信息的二级文字对比度过低、难以辨认的问题。
 - 修复从主页面会话列表切换时，旧会话迟到的响应覆盖新选择、导致跳回之前对话的问题。
 - 升级 Codex 会话标题：对直接复制首条问题的标题自动去除口语前缀、长链接和冗余尾句，生成简短的会话摘要；手动改名仍保持最高优先级。
-- 修复 TrollStore 安装包未向主 App 与 Widget 扩展注入 App Group entitlement，导致中号 Token Widget 长期显示打码占位、小号 Widget 黑屏的问题；云端打包现在会校验共享组权限后才上传 IPA。
+- 修复 TrollStore Token Widget 打码占位或黑屏：主 App 与 Widget 扩展改用包含 XML/DER entitlement 和完整标识的 ad-hoc 签名，云端打包会同时校验 App Group 与嵌套扩展签名后才上传 IPA。
 - 修复文件附件图标在 Kotlin/Native iosArm64 编译时的符号冲突。
 
 ### 兼容性

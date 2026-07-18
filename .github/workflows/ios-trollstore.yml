@@ -31,7 +31,7 @@ jobs:
           # GitHub's macOS image may carry an unrelated untrusted aws/tap. It is not
           # needed here; remove it instead of weakening Homebrew's tap trust checks.
           brew untap aws/tap 2>/dev/null || true
-          brew install xcodegen ldid
+          brew install xcodegen
 
       - name: Unpin dev-box JDK from gradle.properties
         run: sed -i '' '/^org\.gradle\.java\.home=/d' gradle.properties
@@ -115,26 +115,37 @@ jobs:
           find "$APP" -type d -name "_CodeSignature" -exec rm -rf {} + 2>/dev/null || true
           rm -f "$APP/embedded.mobileprovision" 2>/dev/null || true
 
-          # An unsigned Xcode archive does not embed the targets' entitlements. TrollStore can sign an
-          # unsigned top-level executable on-device, but it cannot reconstruct the App Group capability
-          # that WidgetKit needs. The extension then appears in the gallery but never returns a timeline:
-          # medium stays redacted and small renders as a black tile. Fake-sign nested code first, then the
-          # containing app, preserving each target's declared entitlements for TrollStore to retain.
+          # An unsigned Xcode archive does not embed the targets' entitlements. Use Apple's codesign to
+          # create ad-hoc signatures (nested extension first) with both XML and DER entitlement slots.
+          # ldid-only signing left WidgetKit extensions launchable-looking but black on current iOS because
+          # the extension signature lacked the modern DER entitlement representation and full identifiers.
           WIDGET="$APP/PlugIns/CCPocketUsageWidget.appex"
           if [ ! -x "$WIDGET/CCPocketUsageWidget" ]; then
             echo "::error::Widget extension executable missing at $WIDGET"
             find "$APP" -maxdepth 4 -print
             exit 1
           fi
-          ldid -S"$GITHUB_WORKSPACE/iosApp/CCPocketUsageWidget/CCPocketUsageWidget.entitlements" \
-            "$WIDGET/CCPocketUsageWidget"
-          ldid -S"$GITHUB_WORKSPACE/iosApp/iosApp/iosApp.entitlements" "$APP/cc-pocket"
+          APP_ENTITLEMENTS="$RUNNER_TEMP/app-trollstore.entitlements"
+          WIDGET_ENTITLEMENTS="$RUNNER_TEMP/widget-trollstore.entitlements"
+          cp "$GITHUB_WORKSPACE/iosApp/iosApp/iosApp.entitlements" "$APP_ENTITLEMENTS"
+          cp "$GITHUB_WORKSPACE/iosApp/CCPocketUsageWidget/CCPocketUsageWidget.entitlements" "$WIDGET_ENTITLEMENTS"
+          /usr/libexec/PlistBuddy -c "Add :application-identifier string TROLLSTORE.com.panda.ccpocket" "$APP_ENTITLEMENTS"
+          /usr/libexec/PlistBuddy -c "Add :com.apple.developer.team-identifier string TROLLSTORE" "$APP_ENTITLEMENTS"
+          /usr/libexec/PlistBuddy -c "Add :application-identifier string TROLLSTORE.com.panda.ccpocket.usage-widget" "$WIDGET_ENTITLEMENTS"
+          /usr/libexec/PlistBuddy -c "Add :com.apple.developer.team-identifier string TROLLSTORE" "$WIDGET_ENTITLEMENTS"
+
+          codesign --force --sign - --timestamp=none --generate-entitlement-der \
+            --entitlements "$WIDGET_ENTITLEMENTS" "$WIDGET"
+          codesign --force --sign - --timestamp=none --generate-entitlement-der \
+            --entitlements "$APP_ENTITLEMENTS" "$APP"
 
           # Fail the build instead of publishing another visually present but unusable widget.
-          ldid -e "$WIDGET/CCPocketUsageWidget" > "$RUNNER_TEMP/widget-entitlements.plist"
-          ldid -e "$APP/cc-pocket" > "$RUNNER_TEMP/app-entitlements.plist"
+          codesign -d --entitlements :- "$WIDGET" > "$RUNNER_TEMP/widget-entitlements.plist" 2>&1
+          codesign -d --entitlements :- "$APP" > "$RUNNER_TEMP/app-entitlements.plist" 2>&1
           grep -q "group.com.panda.ccpocket" "$RUNNER_TEMP/widget-entitlements.plist"
           grep -q "group.com.panda.ccpocket" "$RUNNER_TEMP/app-entitlements.plist"
+          codesign --verify --strict "$WIDGET"
+          codesign --verify --strict "$APP"
 
           # Classic unsigned IPA: Payload/<AppName>.app + zip
           IPA_OUT="cc-pocket-${VERSION}-build${BUILD}-trollstore.ipa"
