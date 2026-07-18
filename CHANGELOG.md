@@ -26,6 +26,7 @@
 
 ### 修复
 
+- README、完整使用指南、daemon 部署和运维文档新增可直接检索的 `cc-pocket-daemon update` 升级说明、版本验证及 systemd 手动重启方法。
 - 修复根命令 `cc-pocket-daemon --version` 错误显示帮助页；现在无需子命令即可输出内置版本。
 - 修复部分 Debian/systemd 环境升级完成后因 Java 进程未从 PATH 找到 `systemctl` 而抛异常；updater 现在优先使用绝对路径，重启失败时保留已安装版本并给出手动操作提示。
 - 修复安装引导的“完整安装指南”指向未启用的 GitHub Pages 而返回 404；现在直接打开仓库内的使用文档。

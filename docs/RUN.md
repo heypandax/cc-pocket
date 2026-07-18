@@ -59,7 +59,7 @@ quit
 
 **新会话默认值**：全新安装使用 Claude + `default`；之后读取 App Settings 中持久化的默认 Agent 与模式。Claude、Codex、Cursor 在客户端共用相同的四级模式 UI，daemon 再按后端翻译成对应 approval/sandbox 参数。
 
-**生产服务器升级**：不要在资源紧张的服务器现场运行 Gradle。使用 GitHub Actions 的 `daemon-artifact` 产物替换并重启，步骤见 [DAEMON-DEPLOYMENT.md](./DAEMON-DEPLOYMENT.md)。
+**生产服务器升级**：安装发行版后直接运行 `cc-pocket-daemon update`，再用 `cc-pocket-daemon --version` 验证；不需要重新配对。不要在资源紧张的服务器现场运行 Gradle。自动更新失败、手动 artifact 部署和回滚步骤见 [DAEMON-DEPLOYMENT.md](./DAEMON-DEPLOYMENT.md)。
 
 ---
 

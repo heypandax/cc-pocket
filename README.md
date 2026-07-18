@@ -92,6 +92,31 @@ cp mobile/composeApp/google-services.json.template mobile/composeApp/google-serv
 cp iosApp/iosApp/GoogleService-Info.plist.template iosApp/iosApp/GoogleService-Info.plist
 ```
 
+## 安装、升级与配对 daemon
+
+Linux 首次安装：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ac54u-mobile/cc-pocket/main/scripts/install.sh | bash
+```
+
+以后升级不需要重新安装或重新配对，直接运行：
+
+```bash
+cc-pocket-daemon update
+cc-pocket-daemon --version
+```
+
+升级器通常会自动重启后台服务。如果提示已经安装成功但自动重启失败，在 Linux 上运行：
+
+```bash
+/usr/bin/systemctl --user daemon-reload
+/usr/bin/systemctl --user restart cc-pocket-daemon
+/usr/bin/systemctl --user status cc-pocket-daemon --no-pager
+```
+
+首次安装后才需要运行 `cc-pocket-daemon pair`，并在 App 中扫描二维码或输入六位配对码。完整说明见[使用与安装指南](docs/USAGE.md#daemon-升级)。
+
 ## 构建与运行
 
 ```bash

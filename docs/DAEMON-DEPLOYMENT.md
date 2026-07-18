@@ -8,6 +8,23 @@
 curl -fsSL https://raw.githubusercontent.com/ac54u-mobile/cc-pocket/main/scripts/install.sh | bash
 ```
 
+已经通过安装器安装的机器，日常升级优先使用内置更新命令，无需重新配对：
+
+```bash
+cc-pocket-daemon update
+cc-pocket-daemon --version
+```
+
+升级器会保留 `~/.cc-pocket/` 中的身份与配对数据，并尝试自动重启服务。如果版本已安装但自动重启失败：
+
+```bash
+/usr/bin/systemctl --user daemon-reload
+/usr/bin/systemctl --user restart cc-pocket-daemon
+/usr/bin/systemctl --user status cc-pocket-daemon --no-pager
+```
+
+只有内置更新不可用、需要指定 artifact 或执行回滚时，才使用本文后面的手动替换流程。
+
 安装后运行 `cc-pocket-daemon pair`，再在 App 中扫描二维码或输入终端显示的六位配对码。`cc-pocket-daemon pair` 必须在服务器终端执行，不能填进 App 的配对码输入框。
 
 跨服务器迁移、Relay 数据库复制和 App 协调切换见 [SERVER-MIGRATION.md](./SERVER-MIGRATION.md)。
@@ -56,6 +73,7 @@ systemctl --user is-active cc-pocket-daemon
 systemctl --user status cc-pocket-daemon --no-pager
 journalctl --user -u cc-pocket-daemon -n 80 --no-pager
 cc-pocket-daemon status
+cc-pocket-daemon --version
 ```
 
 至少确认：服务为 `active`、只有一个 daemon 实例、版本与 artifact 一致、relay 已连接。然后在 App 中重新进入电脑，验证项目列表和一个短会话。
