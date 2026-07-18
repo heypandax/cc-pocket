@@ -4,6 +4,7 @@ import dev.ccpocket.daemon.DaemonPrefs
 import dev.ccpocket.daemon.claude.AuthService
 import dev.ccpocket.daemon.conversation.OutboundSink
 import dev.ccpocket.daemon.disk.DirectoryService
+import dev.ccpocket.daemon.disk.FileInboxService
 import dev.ccpocket.daemon.disk.SessionFilesService
 import dev.ccpocket.daemon.disk.UsageService
 import dev.ccpocket.daemon.session.SessionRegistry
@@ -35,6 +36,8 @@ import dev.ccpocket.protocol.Directories
 import dev.ccpocket.protocol.FetchAuthStatus
 import dev.ccpocket.protocol.FetchUsage
 import dev.ccpocket.protocol.ConsumeCodexLimitReset
+import dev.ccpocket.protocol.FileChunk
+import dev.ccpocket.protocol.FileUploadCancel
 import dev.ccpocket.protocol.Frame
 import dev.ccpocket.protocol.ListDirectories
 import dev.ccpocket.protocol.ListCursorModels
@@ -69,6 +72,7 @@ class RequestRouter(
     private val registry: SessionRegistry,
     private val dirs: DirectoryService,
     private val transcribe: TranscribeService,
+    private val inbox: FileInboxService,
     private val shell: ShellService,
     private val scope: CoroutineScope,
     private val auth: AuthService,
@@ -254,6 +258,11 @@ class RequestRouter(
             // voice capture: buffer fast here; whisper runs on the service's own scope
             is AudioChunk -> transcribe.onChunk(frame, sink)
             is AudioCancel -> transcribe.onCancel(frame)
+
+            // file upload (issue #90): stream each chunk into the live session's workspace inbox;
+            // the FileUploaded receipt rides the same sink the chunks arrived on
+            is FileChunk -> inbox.onChunk(frame, sink)
+            is FileUploadCancel -> inbox.onCancel(frame)
 
             // account switching: each spawns a `claude auth …` child — off the inbound pump, like FetchUsage
             is FetchAuthStatus -> scope.launch { auth.sendStatus(sink::emit) }

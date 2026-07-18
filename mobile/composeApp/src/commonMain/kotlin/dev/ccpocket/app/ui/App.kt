@@ -87,6 +87,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import dev.ccpocket.app.media.rememberFileAttacher
 import dev.ccpocket.app.media.rememberImageAttacher
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -1266,6 +1267,8 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
     }
     // platform picker resizes/compresses on-device; the repo budgets the picked photos against the 256 KiB frame
     val launchPicker = rememberImageAttacher { added -> repo.attachImages(added) }
+    val launchFilePicker = rememberFileAttacher { picked -> repo.attachFiles(picked) }
+    var attachSheet by remember { mutableStateOf(false) }
     val scrollKey = repo.convoId.value ?: draftKey ?: "new:${repo.workdir.value.orEmpty()}"
     // A conversation always opens at its live tail. Restoring an old reading position made a resumed
     // session look stale and hid new work below the fold; history remains available by scrolling up.
@@ -1532,6 +1535,8 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                 }
             } else {
                 val hasReady = repo.hasReadyImages()
+                val hasLanded = repo.hasLandedFiles()      // files already in the workspace inbox (issue #90)
+                val uploadsBusy = repo.uploadsBusy()       // uploads still moving → send waits
                 val voiceState = repo.voice.value
                 // the timer stays visible (frozen) through S3, after Recording stopped carrying it
                 var recElapsed by remember { mutableStateOf(0L) }
@@ -1575,6 +1580,7 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                         onMode = { showModeSheet = true },
                     )
                     val capturing = voiceState is VoiceState.Recording || voiceState is VoiceState.Transcribing
+                    LaunchedEffect(capturing) { if (capturing) attachSheet = false }
                     if (suggestions.isNotEmpty() && !capturing) {
                         SlashCommandMenu(suggestions) { cmd -> input = cmd.completion() }
                     } else if ((atAgentMatches.isNotEmpty() || atFileMatches.isNotEmpty()) && !capturing) {
@@ -1588,6 +1594,14 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                             },
                         )
                     }
+                    // attach sheet (issue #90): Photo keeps the image flow, File opens the document picker
+                    if (attachSheet && !capturing) {
+                        AttachSheet(
+                            onPhoto = { attachSheet = false; launchPicker() },
+                            onFile = { attachSheet = false; launchFilePicker() },
+                        )
+                    }
+                    PendingFilesStrip(repo.pendingFiles, onCancel = repo::removePendingFile, onRetry = repo::retryPendingFile)
                     AttachTray(repo.pendingImages, repo::removePendingImage)
                     repo.voiceNotice.value?.let { n ->
                         Text(stringResource(n), color = Tok.tx2, fontSize = 12.sp, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
@@ -1609,11 +1623,13 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.Bottom) {
                             val attachInteraction = remember { MutableInteractionSource() }
                             val attachPressed by attachInteraction.collectIsPressedAsState()
-                            IconButton(onClick = { launchPicker() }, interactionSource = attachInteraction, modifier = Modifier.size(44.dp)) {
-                                AttachImageGlyph(
-                                    contentDescription = stringResource(Res.string.attach_image),
-                                    tint = if (repo.pendingImages.isNotEmpty() || attachPressed) Tok.accent else Tok.tx2,
-                                    modifier = Modifier.size(24.dp),
+                            // "+" now opens the attach sheet (Photo · File) and rotates into "×" while
+                            // it's up (issue #90, design: file-attach.jsx); the image flow is one tap
+                            // deeper but unchanged.
+                            IconButton(onClick = { attachSheet = !attachSheet }, interactionSource = attachInteraction, modifier = Modifier.size(44.dp)) {
+                                AttachPlusGlyph(
+                                    open = attachSheet,
+                                    tint = if (attachSheet || repo.pendingImages.isNotEmpty() || repo.pendingFiles.isNotEmpty() || attachPressed) Tok.accent else Tok.tx2,
                                 )
                             }
                             Spacer(Modifier.width(8.dp))
@@ -1628,7 +1644,7 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                                 // or an editable composer under a "running" session reads as disconnected (issue #52)
                                 placeholder = stringResource(
                                     when {
-                                        repo.pendingImages.isNotEmpty() -> Res.string.add_message_hint
+                                        repo.pendingImages.isNotEmpty() || repo.pendingFiles.isNotEmpty() -> Res.string.add_message_hint
                                         repo.streaming.value -> Res.string.message_queued_hint
                                         else -> when (repo.sessionAgent.value ?: AgentKind.CLAUDE) {
                                             AgentKind.CLAUDE -> Res.string.message_claude_hint
@@ -1646,19 +1662,30 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                             // replacing it — mirrors Claude Code, where interrupt (Esc) and queue-a-message
                             // (Enter) coexist. Claude's stream-json input queues a mid-turn user message and
                             // weaves it into the running turn at the next tool boundary (verified on 2.1.201).
-                            if (repo.streaming.value && (input.isNotBlank() || hasReady)) {
+                            if (repo.streaming.value && (input.isNotBlank() || hasReady || hasLanded)) {
                                 StopButton { repo.cancelTurn() }
                                 Spacer(Modifier.width(8.dp))
                             }
                             when {
-                                // text/image staged -> SEND, even mid-turn (claude queues it; see above)
-                                input.isNotBlank() || hasReady -> {
+                                // uploads still moving → send WAITS (spinner ring around a muted arrow,
+                                // design: file-attach.jsx) — landing must finish before the @-refs exist
+                                uploadsBusy -> {
+                                    Box(
+                                        Modifier.size(44.dp).clip(CircleShape).background(Tok.base).border(1.dp, Tok.hair, CircleShape),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        SpinnerRing(30.dp, 2.dp)
+                                        Icon(SendArrowIcon, null, tint = Tok.muted, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                                // text/image/file staged -> SEND, even mid-turn (claude queues it; see above)
+                                input.isNotBlank() || hasReady || hasLanded -> {
                                     val sendLabel = stringResource(Res.string.send)
                                     RoundActionButton(
                                         onClick = {
                                             val t = input.trim()
                                             // a gated send (degraded session, issue #65) returns false — keep the text for the retry
-                                            if ((t.isNotBlank() || hasReady) && repo.sendPrompt(t)) {
+                                            if ((t.isNotBlank() || hasReady || hasLanded) && repo.sendPrompt(t)) {
                                                 input = ""
                                                 repo.clearDraft(draftKey)
                                                 revealLatest()
@@ -1860,6 +1887,8 @@ private fun MessageItem(m: ChatItem, live: Boolean = false, onOpenImages: (List<
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (m.images.isNotEmpty()) SentImages(m.images) { i -> onOpenImages(m.images, i) }
+                // uploaded files (issue #90): chip per file with its @inbox landing path
+                m.files.forEach { f -> SentFileChip(f) }
                 if (m.text.isNotBlank()) {
                     // renderClip: this row is a single Text paragraph — an ~800 KB replayed prompt
                     // (skill injection) OOM'd iOS on open; render a prefix, copy keeps the whole thing
