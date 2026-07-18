@@ -303,7 +303,15 @@ private fun IntegrationsView(repo: PocketRepository, onBack: () -> Unit) {
     val uri = LocalUriHandler.current
     var tab by remember { mutableStateOf("mcp") }
     var selectedServer by remember { mutableStateOf<dev.ccpocket.protocol.CodexMcpServer?>(null) }
+    var sawRunningTurn by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { repo.loadCodexIntegrations() }
+    LaunchedEffect(repo.streaming.value) {
+        if (repo.streaming.value) sawRunningTurn = true
+        else if (sawRunningTurn && !repo.codexIntegrationsThreadReady.value) {
+            sawRunningTurn = false
+            repo.loadCodexIntegrations()
+        }
+    }
     val authUrl = repo.codexAuthorizationUrl.value
     LaunchedEffect(authUrl) { authUrl?.let { uri.openUri(it); repo.consumeCodexAuthorizationUrl() } }
     selectedServer?.let { server ->
@@ -323,11 +331,20 @@ private fun IntegrationsView(repo: PocketRepository, onBack: () -> Unit) {
         }
     }
     if (repo.codexIntegrationsLoading.value) CircularProgressIndicator(Modifier.padding(20.dp).size(22.dp), strokeWidth = 2.dp)
-    repo.codexIntegrationsError.value?.let { Text(it, color = Tok.danger, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp)) }
+    repo.codexIntegrationsError.value?.let { error ->
+        Text(
+            if (error == "Codex integrations are available after the thread has started") stringResource(Res.string.mcp_start_thread) else error,
+            color = if (repo.codexIntegrationsThreadReady.value) Tok.danger else Tok.tx2,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
+    }
     repo.codexIntegrationsNotice.value?.let { Text(it, color = Tok.ok, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp)) }
     if (tab == "mcp") {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            Text(stringResource(Res.string.mcp_reload), color = Tok.accent, fontSize = 11.5.sp, modifier = Modifier.clickable { repo.reloadCodexMcp() }.padding(8.dp))
+            val canReload = repo.codexIntegrationsThreadReady.value && !repo.codexIntegrationsLoading.value
+            Text(stringResource(Res.string.mcp_reload), color = if (canReload) Tok.accent else Tok.muted, fontSize = 11.5.sp,
+                modifier = Modifier.clickable(enabled = canReload) { repo.reloadCodexMcp() }.padding(8.dp))
         }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { repo.codexMcpServers.forEach { server ->
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(10.dp)).clickable { selectedServer = server }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -577,6 +577,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     val codexIntegrationsError = mutableStateOf<String?>(null)
     val codexIntegrationsNotice = mutableStateOf<String?>(null)
     val codexAuthorizationUrl = mutableStateOf<String?>(null)
+    val codexIntegrationsThreadReady = mutableStateOf(false)
     val workdir = mutableStateOf<String?>(null)
     val chatTitle = mutableStateOf<String?>(null)            // session title for the chat header (client-side)
     private var thinkStartMs: Long? = null                   // first Thinking chunk of the in-progress block
@@ -1559,10 +1560,11 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
             is CodexIntegrationsState -> if (f.convoId == convoId.value) {
                 codexIntegrationsLoading.value = f.loading
                 codexIntegrationsError.value = f.error
+                if (f.error == CODEX_INTEGRATIONS_NOT_STARTED) codexIntegrationsThreadReady.value = false
                 f.notice?.let { codexIntegrationsNotice.value = it }
                 f.authorizationUrl?.let { codexAuthorizationUrl.value = it }
-                f.servers?.let { codexMcpServers.clear(); codexMcpServers.addAll(it) }
-                f.apps?.let { codexApps.clear(); codexApps.addAll(it) }
+                f.servers?.let { codexIntegrationsThreadReady.value = true; codexMcpServers.clear(); codexMcpServers.addAll(it) }
+                f.apps?.let { codexIntegrationsThreadReady.value = true; codexApps.clear(); codexApps.addAll(it) }
             }
             is AuthState -> authState.value = f
             is PushPrefs -> pushPrefs.value = f.enabled
@@ -2003,10 +2005,16 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     fun loadCodexIntegrations(forceReload: Boolean = false) {
         val id = convoId.value ?: return
         codexIntegrationsLoading.value = true
+        codexIntegrationsError.value = null
         scope.launch { send(ListCodexIntegrations(id, forceReload)) }
     }
 
-    fun reloadCodexMcp() { val id = convoId.value ?: return; scope.launch { send(ReloadCodexMcp(id)) } }
+    fun reloadCodexMcp() {
+        if (!codexIntegrationsThreadReady.value) return
+        val id = convoId.value ?: return
+        codexIntegrationsError.value = null
+        scope.launch { send(ReloadCodexMcp(id)) }
+    }
     fun loginCodexMcp(name: String) { val id = convoId.value ?: return; scope.launch { send(LoginCodexMcp(id, name)) } }
     fun consumeCodexAuthorizationUrl(): String? = codexAuthorizationUrl.value.also { codexAuthorizationUrl.value = null }
 
@@ -2088,7 +2096,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         codexGoalError.value = null
         codexSkills.clear(); codexSkillsLoading.value = false; codexSkillsError.value = null
         codexPlugins.clear(); codexPluginsLoading.value = false; codexPluginsError.value = null; codexPluginsNotice.value = null
-        codexMcpServers.clear(); codexApps.clear(); codexIntegrationsLoading.value = false; codexIntegrationsError.value = null; codexIntegrationsNotice.value = null; codexAuthorizationUrl.value = null
+        codexMcpServers.clear(); codexApps.clear(); codexIntegrationsLoading.value = false; codexIntegrationsError.value = null; codexIntegrationsNotice.value = null; codexAuthorizationUrl.value = null; codexIntegrationsThreadReady.value = false
         openTimedOut.value = false
         promptPending = false // the pending marker belongs to the previous conversation's transcript
         promptWatchdog?.cancel(); promptWatchdog = null; sendStalled.value = false // and so does its receipt deadline
@@ -2905,7 +2913,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         codexGoalError.value = null
         codexSkills.clear(); codexSkillsLoading.value = false; codexSkillsError.value = null
         codexPlugins.clear(); codexPluginsLoading.value = false; codexPluginsError.value = null; codexPluginsNotice.value = null
-        codexMcpServers.clear(); codexApps.clear(); codexIntegrationsLoading.value = false; codexIntegrationsError.value = null; codexIntegrationsNotice.value = null; codexAuthorizationUrl.value = null
+        codexMcpServers.clear(); codexApps.clear(); codexIntegrationsLoading.value = false; codexIntegrationsError.value = null; codexIntegrationsNotice.value = null; codexAuthorizationUrl.value = null; codexIntegrationsThreadReady.value = false
         chatTitle.value = null
         messages.clear(); activityEvents.clear()
         pendingImages.clear()
@@ -3026,3 +3034,4 @@ internal fun sessionLiveMatchesPendingOpen(opening: Boolean, expectedSessionId: 
     !opening || expectedSessionId == null || incomingSessionId == expectedSessionId
 
 private const val REFRESH_SPINNER_SAFETY_MS = 4_000L // spinner never outlives a lost reply by more than this
+private const val CODEX_INTEGRATIONS_NOT_STARTED = "Codex integrations are available after the thread has started"

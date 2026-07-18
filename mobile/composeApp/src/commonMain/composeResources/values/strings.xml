@@ -481,6 +481,7 @@
     <string name="mcp_tab">MCP servers</string>
     <string name="apps_tab">Apps</string>
     <string name="mcp_reload">Reload configuration</string>
+    <string name="mcp_start_thread">Send the first message to start this Codex thread. Integrations will load automatically when the turn finishes.</string>
     <string name="mcp_login">Log in</string>
     <string name="mcp_counts">%1$d tools · %2$d resources · %3$d templates</string>
     <string name="mcp_tools">Tools</string>

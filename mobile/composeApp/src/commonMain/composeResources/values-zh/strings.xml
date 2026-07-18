@@ -481,6 +481,7 @@
     <string name="mcp_tab">MCP 服务器</string>
     <string name="apps_tab">应用</string>
     <string name="mcp_reload">重新加载配置</string>
+    <string name="mcp_start_thread">请先发送第一条消息以启动 Codex 线程；本轮完成后会自动加载集成。</string>
     <string name="mcp_login">登录</string>
     <string name="mcp_counts">%1$d 个工具 · %2$d 个资源 · %3$d 个模板</string>
     <string name="mcp_tools">工具</string>
