@@ -40,7 +40,7 @@
 ### 兼容性
 
 - 可管理提示词队列需要匹配的新版 App 与 daemon；旧端会忽略新增协议帧，其余会话功能保持兼容。
-- 文件/视频附件和会话重命名需要匹配的当前 App 与 daemon；本轮 daemon artifact 已更新至 **1.3.28**。
+- 可管理提示词队列、文件/视频附件和会话重命名需要匹配的当前 App 与 daemon；本轮 daemon Release 已更新至 **1.3.29**。
 - iPhone 小组件通过 App Group 读取最近一次用量快照；受 WidgetKit 调度限制，它不会自行保持 daemon WebSocket 长连接。
 
 ## 1.3.7 — 2026-07-18
