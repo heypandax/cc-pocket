@@ -68,8 +68,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -99,7 +97,6 @@ import dev.ccpocket.app.ui.AgentTag
 import dev.ccpocket.app.ui.AttachImageIcon
 import dev.ccpocket.app.ui.LocalPathOpener
 import dev.ccpocket.app.ui.MarkdownText
-import dev.ccpocket.app.ui.ModelChip
 import dev.ccpocket.app.ui.QuestionCard
 import dev.ccpocket.app.ui.TruncatedNote
 import dev.ccpocket.app.ui.renderClip
@@ -115,7 +112,6 @@ import dev.ccpocket.app.ui.atDirOf
 import dev.ccpocket.app.ui.atLeafOf
 import dev.ccpocket.app.ui.atMatches
 import dev.ccpocket.app.ui.atInsertText
-import dev.ccpocket.app.ui.modelChipLabel
 import dev.ccpocket.app.ui.slashQueryOf
 import dev.ccpocket.app.ui.slashSuggestions
 import dev.ccpocket.app.ui.turnDurLabel
@@ -565,7 +561,6 @@ private fun Composer(model: DesktopModel, suppressAutoFocus: Boolean = false) {
         ) {
             Column(Modifier.widthIn(max = Dk.maxStreamWidth).fillMaxWidth()) {
                 val scope = rememberCoroutineScope()
-                var showModelPicker by remember { mutableStateOf(false) }
                 val submit = { if (model.composer.isNotBlank() || model.hasReadyImages()) model.send(model.composer) }
                 val composerFocus = remember { FocusRequester() }
                 var composerFocused by remember { mutableStateOf(false) }
@@ -726,22 +721,6 @@ private fun Composer(model: DesktopModel, suppressAutoFocus: Boolean = false) {
                                 }
                             },
                         )
-                    }
-                    Box(Modifier.height(34.dp), contentAlignment = Alignment.Center) {
-                        ModelChip(
-                            label = modelChipLabel(model.chatModelId.ifBlank { model.chatModel }).ifBlank { "default" },
-                            open = showModelPicker,
-                            enabled = !model.streaming,
-                            contentDescription = "Switch model",
-                        ) { showModelPicker = true }
-                        if (showModelPicker) {
-                            Popup(
-                                onDismissRequest = { showModelPicker = false },
-                                properties = PopupProperties(focusable = true),
-                            ) {
-                                QuickActionsPopover(model, initialModelPage = true) { showModelPicker = false }
-                            }
-                        }
                     }
                     // ■ interrupt rides BESIDE send while a turn runs (send itself never morphs) — the
                     // interrupted prompt returns to the composer via stopTurn (#48); Esc does the same
