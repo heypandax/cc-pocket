@@ -100,6 +100,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -144,7 +145,6 @@ import dev.ccpocket.app.theme.PocketTheme
 import dev.ccpocket.app.theme.PocketMotion
 import dev.ccpocket.app.theme.ThemeMode
 import dev.ccpocket.app.theme.Tok
-import dev.ccpocket.app.theme.glassPanel
 import dev.ccpocket.app.voice.openAppSettings
 import dev.ccpocket.protocol.AgentKind
 import dev.ccpocket.protocol.CommandSource
@@ -1608,9 +1608,15 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                     }.take(50)
                 }
                 val composerDockShape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+                // The dock and the system-bar inset are one continuous bottom surface. A regular glassPanel
+                // double-composited its translucent raised fill and drew a bottom border right above the
+                // Home Indicator, splitting the bottom into two visibly different strips in light mode.
+                val composerDockFill = Tok.raised.compositeOver(Tok.base)
                 Column(
                     Modifier.fillMaxWidth()
-                        .glassPanel(composerDockShape, elevated = true, elevation = 18.dp),
+                        .shadow(18.dp, composerDockShape, clip = false)
+                        .clip(composerDockShape)
+                        .background(composerDockFill),
                 ) {
                     BackgroundJobsStrip(repo.backgroundJobs) { showBgJobs = true } // ≥1 running bg task → tap to expand
                     ComposerStatusBar(
