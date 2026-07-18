@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.FileTime
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.Test
@@ -61,6 +62,9 @@ class SessionRegistryRenameTest {
         val root = Files.createTempDirectory("ccp-reg-root")
         val reg = registry(root, probe = LiveProcesses.ExternalClaude.PRESENT)
         val f = seedTranscript(root, "sid-live") // fresh mtime + PRESENT probe = a terminal claude is writing
+        // CI can create the registry and transcript within the same filesystem timestamp tick. Make the
+        // external write unambiguously newer than daemon startup so the process probe owns this branch.
+        Files.setLastModifiedTime(f, FileTime.fromMillis(System.currentTimeMillis() + 1_000))
 
         val err = reg.renameSession(workdir, "sid-live", "New name")
 
