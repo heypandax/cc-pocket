@@ -1093,6 +1093,7 @@ private fun AgentFilterChip(filter: String, onClear: () -> Unit) {
 @Composable
 internal fun SessionsScreen(repo: PocketRepository) { // internal: driven end-to-end by MobileNewSessionUiTest (demo mode)
     val dir = repo.sessionsDir.value ?: return
+    val projectDefaults = repo.defaultsFor(dir)
     var pickMode by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<SessionSummary?>(null) } // long-pressed row awaiting the delete confirm
     // an open is in flight (the screen only switches once the daemon answers with the live convo).
@@ -1180,13 +1181,13 @@ internal fun SessionsScreen(repo: PocketRepository) { // internal: driven end-to
                                 }
                             }
                             Text(
-                                stringResource(Res.string.start_agent_in, agentName(repo.defaultAgent.value), tilde(dir)),
+                                stringResource(Res.string.start_agent_in, agentName(projectDefaults.agent), tilde(dir)),
                                 color = Tok.muted, fontSize = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(top = 2.dp),
                             )
                         }
                         Spacer(Modifier.width(10.dp))
-                        SessionDefaultsChip(repo.defaultAgent.value, repo.defaultMode.value, enabled = !starting) { pickMode = true }
+                        SessionDefaultsChip(projectDefaults.agent, projectDefaults.mode, enabled = !starting) { pickMode = true }
                     }
                 }
                 items(filtered, key = { it.sessionId }) { s ->
@@ -1261,9 +1262,13 @@ internal fun SessionsScreen(repo: PocketRepository) { // internal: driven end-to
         if (pickMode) {
             StartSessionModeSheet(
                 workdir = dir,
-                selected = repo.defaultMode.value,
-                agent = repo.defaultAgent.value,
-                onPick = { m, a -> pickMode = false; repo.setDefaultAgent(a); repo.openSession(dir, startMode = m, agent = a) },
+                selected = projectDefaults.mode,
+                agent = projectDefaults.agent,
+                onPick = { m, a ->
+                    pickMode = false
+                    repo.setProjectDefaults(dir, a, m)
+                    repo.openSession(dir, startMode = m, agent = a)
+                },
                 onDismiss = { pickMode = false },
             )
         }
@@ -1292,7 +1297,16 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
     var showBgJobs by remember { mutableStateOf(false) }
     var showTerminal by remember { mutableStateOf(false) }
     var showChangedFiles by remember { mutableStateOf(false) }
+    var showWorkspace by remember { mutableStateOf(false) }
     if (showTerminal) { TerminalScreen(repo) { showTerminal = false }; return } // full-screen, replaces chat (issue #3)
+    if (showWorkspace && repo.viewedFilePath.value == null) {
+        WorkspaceHubScreen(
+            repo,
+            onBack = { showWorkspace = false },
+            onTerminal = { showWorkspace = false; showTerminal = true },
+        )
+        return
+    }
     if (repo.viewedFilePath.value != null) { // changed-file viewer (issue #36); back → the still-open files list, ✕ → chat (issue #53)
         FileViewerScreen(repo, onExit = if (showChangedFiles) ({ repo.closeFileViewer(); showChangedFiles = false }) else null) { repo.closeFileViewer() }
         return
@@ -1544,6 +1558,8 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                     StatusBanner(Tok.warn, stringResource(Res.string.context_high_banner, "${(used.toFloat() / window * 100).toInt()}%"))
                 }
             }
+            ActivePlanCard(repo.messages, repo.streaming.value)
+            PromptQueueCard(repo)
             // Claude paused its turn to ask questions — the card docks above the composer; the
             // stream above stays scrollable so the user can re-read context before answering.
             // While one of the card's text fields owns input, the composer hides (design ③).
@@ -1779,7 +1795,7 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                 repo,
                 onTerminal = { showTerminal = true },
                 onMode = { confirmBypassOnModeOpen = false; showModeSheet = true },
-                onFiles = { repo.fetchChangedFiles(); showChangedFiles = true },
+                onFiles = { showWorkspace = true },
                 initialSection = quickActionSection,
             ) { showQuickActions = false }
         }
@@ -1792,6 +1808,97 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
             EdgeSwipeBack {
                 repo.saveDraft(draftKey, input)
                 repo.backToBrowse()
+            }
+        }
+    }
+}
+
+@Composable
+private fun PromptQueueCard(repo: PocketRepository) {
+    if (repo.promptQueue.isEmpty()) return
+    Column(
+        Modifier.fillMaxWidth().background(Tok.surface).padding(horizontal = 14.dp, vertical = 9.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Text("待执行 · ${repo.promptQueue.size}", color = Tok.tx, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        repo.promptQueue.take(3).forEachIndexed { index, prompt ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${index + 1}", color = Tok.muted, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                Spacer(Modifier.width(8.dp))
+                Text(prompt.text.ifBlank { "${prompt.imageCount} 张图片" }, color = Tok.tx2, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                TextButton({ repo.promoteQueuedPrompt(prompt.promptId) }, modifier = Modifier.heightIn(min = 44.dp)) {
+                    Text("立即", color = Tok.accent, fontSize = 12.sp)
+                }
+                TextButton({ repo.removeQueuedPrompt(prompt.promptId) }, modifier = Modifier.heightIn(min = 44.dp)) {
+                    Text("移除", color = Tok.danger, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActivePlanCard(messages: List<ChatItem>, streaming: Boolean) {
+    if (!streaming) return
+    val currentTurn = messages.drop(messages.indexOfLast { it is ChatItem.User }.coerceAtLeast(0))
+    val plan = currentTurn.filterIsInstance<ChatItem.Tool>().lastOrNull { it.tool.equals("ExitPlanMode", true) }
+    val agents = currentTurn.filterIsInstance<ChatItem.Tool>().filter { it.tool == "Task" || it.tool == "Agent" }
+    if (plan == null && agents.isEmpty()) return
+    val running = agents.count { it.ok == null }
+    val done = agents.count { it.ok != null }
+    Column(
+        Modifier.fillMaxWidth().background(Tok.accent.copy(alpha = 0.08f)).padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("执行计划", color = Tok.tx, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            if (agents.isNotEmpty()) Text("子任务 $done/${agents.size}${if (running > 0) " · $running 运行中" else ""}", color = Tok.accent, fontSize = 11.sp)
+        }
+        plan?.preview?.lineSequence()?.firstOrNull { it.isNotBlank() }?.let {
+            Text(it.trim().take(160), color = Tok.tx2, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        agents.lastOrNull()?.let { Text(it.preview, color = Tok.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+    }
+}
+
+@Composable
+private fun WorkspaceHubScreen(repo: PocketRepository, onBack: () -> Unit, onTerminal: () -> Unit) {
+    LaunchedEffect(repo.sessionKey.value) { repo.fetchChangedFiles() }
+    Column(Modifier.fillMaxSize().background(Tok.base)) {
+        Row(Modifier.fillMaxWidth().background(Tok.surface).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onBack) { Text("←", color = Tok.tx2, fontSize = 18.sp) }
+            Column(Modifier.weight(1f)) {
+                Text("工作区", color = Tok.tx, fontWeight = FontWeight.SemiBold)
+                Text(repo.workdir.value.orEmpty(), color = Tok.muted, fontFamily = FontFamily.Monospace, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            TextButton(onTerminal, modifier = Modifier.heightIn(min = 44.dp)) { Text("终端", color = Tok.accent) }
+        }
+        LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            item { Text("本会话改动", color = Tok.tx, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
+            when {
+                repo.changedFilesLoading.value -> item { CircularProgressIndicator(Modifier.size(22.dp), color = Tok.accent, strokeWidth = 2.dp) }
+                repo.changedFiles.isEmpty() -> item { Text("还没有文件改动", color = Tok.muted, fontSize = 13.sp) }
+                else -> items(repo.changedFiles, key = { it.path }) { file ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Tok.surface)
+                            .clickable { repo.openChangedFile(file.path) }.padding(13.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(file.op.take(1).uppercase(), color = Tok.accent, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(file.path.substringAfterLast('/').substringAfterLast('\\'), color = Tok.tx, fontSize = 14.sp, maxLines = 1)
+                            Text(file.path, color = Tok.muted, fontFamily = FontFamily.Monospace, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        if (file.adds != null || file.dels != null) Text("+${file.adds ?: 0} −${file.dels ?: 0}", color = Tok.tx2, fontSize = 11.sp)
+                    }
+                }
+            }
+            if (repo.terminalEntries.isNotEmpty()) {
+                item { Text("最近终端", color = Tok.tx, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp)) }
+                items(repo.terminalEntries.takeLast(3)) { entry ->
+                    Text("$ ${entry.command}", color = Tok.tx2, fontFamily = FontFamily.Monospace, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Tok.surface).padding(12.dp))
+                }
             }
         }
     }

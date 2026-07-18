@@ -11,6 +11,7 @@ import dev.ccpocket.protocol.HistoryMessage
 import dev.ccpocket.protocol.ImageData
 import dev.ccpocket.protocol.PermissionMode
 import dev.ccpocket.protocol.PromptAck
+import dev.ccpocket.protocol.PromptQueueState
 import dev.ccpocket.protocol.SessionSummary
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -87,5 +88,37 @@ class ConversationPromptDedupTest {
             2, frames.count { it is PromptAck },
             "each send is still acked, so a client that lost the first ack is safe to resend",
         )
+    }
+
+    @Test
+    fun aPromptSentDuringAnActiveTurnIsDaemonQueuedAndCanBeRemoved() {
+        if (System.getProperty("os.name").lowercase().contains("win")) return
+        val dir = Files.createTempDirectory("ccp-queue")
+        val frames = CopyOnWriteArrayList<Frame>()
+        val scope = CoroutineScope(Dispatchers.Default)
+        val backend = RecordingBackend()
+        val convo = Conversation(
+            convoId = "cQueue", initialWorkdir = dir, initialMode = PermissionMode.DEFAULT,
+            initialSink = { frames.add(it) }, parentScope = scope, backend = backend,
+        )
+        runBlocking {
+            try {
+                convo.open(null, null)
+                convo.sendPrompt("first", promptId = "p1")
+                convo.sendPrompt("second", promptId = "p2")
+                withTimeout(5_000) {
+                    while (frames.filterIsInstance<PromptQueueState>().lastOrNull()?.items?.singleOrNull()?.promptId != "p2") delay(20)
+                }
+                assertEquals(listOf("first"), backend.prompts.toList())
+                convo.removeQueuedPrompt("p2")
+                withTimeout(5_000) {
+                    while (frames.filterIsInstance<PromptQueueState>().lastOrNull()?.items?.isNotEmpty() != false) delay(20)
+                }
+                assertEquals(listOf("first"), backend.prompts.toList())
+            } finally {
+                convo.close()
+                scope.cancel()
+            }
+        }
     }
 }

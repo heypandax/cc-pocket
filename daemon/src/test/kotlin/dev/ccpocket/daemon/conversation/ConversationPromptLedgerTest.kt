@@ -111,10 +111,12 @@ class ConversationPromptLedgerTest {
             convo.sendPrompt("P1", promptId = "p1")
             convo.sendPrompt("P2", promptId = "p2")
             await(frames) { fs -> fs.any { it is PocketError && it.code == "process_exited" } }
-            // the next prompt respawns — and the fresh process is re-handed P1+P2 first, in order
+            // P2 is daemon-owned (it was never handed to the crashed provider). The next prompt respawns;
+            // only the provider-owned P1 is reinjected, while P2 remains safely visible in the queue.
             convo.sendPrompt("P3", promptId = "p3")
-            await(frames) { backend.prompts.size >= 5 }
-            assertEquals(listOf("P1", "P2", "P1", "P2", "P3"), backend.prompts.toList())
+            await(frames) { backend.prompts.size >= 3 }
+            assertEquals(listOf("P1", "P1", "P3"), backend.prompts.toList())
+            assertEquals(listOf("p2"), frames().filterIsInstance<dev.ccpocket.protocol.PromptQueueState>().last().items.map { it.promptId })
             assertEquals(2, backend.specs.size, backend.specs.toString())
         }
     }

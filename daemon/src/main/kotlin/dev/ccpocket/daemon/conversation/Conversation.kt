@@ -20,6 +20,8 @@ import dev.ccpocket.protocol.PermissionMode
 import dev.ccpocket.protocol.PermissionVerdict
 import dev.ccpocket.protocol.PocketError
 import dev.ccpocket.protocol.PromptAck
+import dev.ccpocket.protocol.PromptQueueState
+import dev.ccpocket.protocol.QueuedPrompt
 import dev.ccpocket.protocol.SessionLive
 import dev.ccpocket.protocol.StreamPiece
 import dev.ccpocket.protocol.TokenUsage
@@ -233,6 +235,21 @@ class Conversation(
     // promptIds already delivered — a client RESEND after a lost ack is re-acked, never double-run
     // (issue #66). Bounded; guarded by its own lock (touched from router + pump scopes).
     private val seenPromptIds = LinkedHashSet<String>()
+
+    private data class WaitingPrompt(
+        val promptId: String,
+        val text: String,
+        val images: List<ImageData>,
+        val createdAt: Long = System.currentTimeMillis(),
+    )
+    private val waitingPrompts = ArrayDeque<WaitingPrompt>()
+
+    private suspend fun emitPromptQueue(to: OutboundSink = sink) {
+        val snapshot = synchronized(waitingPrompts) {
+            waitingPrompts.map { QueuedPrompt(it.promptId, it.text, it.images.size, it.createdAt) }
+        }
+        to.emit(PromptQueueState(convoId, snapshot))
+    }
 
     private fun degraded(): Boolean = failedTurnStreak >= DEGRADED_STREAK
 
@@ -698,6 +715,11 @@ class Conversation(
                             else -> null
                         }
                         sink.emit(TurnDone(convoId, ev.finalText, usage, error = error))
+                        val next = synchronized(waitingPrompts) { waitingPrompts.removeFirstOrNull() }
+                        if (next != null) {
+                            emitPromptQueue()
+                            scope.launch { deliverPrompt(next.text, next.images, next.promptId, alreadyAccepted = true) }
+                        }
                         // Cursor's CLI journals no usage on disk (unlike Claude transcripts / Codex rollouts),
                         // so the Settings usage screen never saw its turns — journal them daemon-side instead.
                         if (backend.kind == dev.ccpocket.protocol.AgentKind.CURSOR && usage != null && error == null) {
@@ -827,6 +849,7 @@ class Conversation(
         if (history.isNotEmpty()) newSink.emit(ConvoHistory(convoId, history))
         emitCommands()
         newSink.emit(BackgroundJobs(convoId, jobs.snapshot())) // a re-opened live session re-shows its running jobs
+        emitPromptQueue(newSink)
         // A permission ask / question still awaiting a verdict is re-shown to the reconnecting device: it fired
         // while this phone was away (in plan mode the AskUserQuestion can land minutes after a premature `result`,
         // so the phone is often backgrounded — socket suspended — when the live frame goes out), and without this
@@ -853,6 +876,35 @@ class Conversation(
             promptId?.let { sink.emit(PromptAck(convoId, it)) } // handled by the daemon = delivered
             return
         }
+        if (executing && promptId != null) {
+            synchronized(waitingPrompts) { waitingPrompts.addLast(WaitingPrompt(promptId, text, images)) }
+            emitPromptQueue()
+            lastActivityMs = System.currentTimeMillis()
+            return
+        }
+        deliverPrompt(text, images, promptId)
+    }
+
+    suspend fun removeQueuedPrompt(promptId: String) {
+        synchronized(waitingPrompts) { waitingPrompts.removeAll { it.promptId == promptId } }
+        emitPromptQueue()
+    }
+
+    suspend fun promoteQueuedPrompt(promptId: String) {
+        val prompt = synchronized(waitingPrompts) {
+            waitingPrompts.firstOrNull { it.promptId == promptId }
+                ?.also { waitingPrompts.remove(it) }
+        } ?: return
+        emitPromptQueue()
+        deliverPrompt(prompt.text, prompt.images, prompt.promptId, alreadyAccepted = true)
+    }
+
+    private suspend fun deliverPrompt(
+        text: String,
+        images: List<ImageData>,
+        promptId: String?,
+        alreadyAccepted: Boolean = false,
+    ) {
         // RELAUNCH-THEN-SEND (issue #84): a mid-session model/mode/effort switch only recorded the desired value
         // + armed pendingRelaunch — relaunching then would have killed the in-flight turn. Now, before this next
         // turn goes out, reconcile a stale process: stop it and re-spawn under the new flags FIRST, then let the
@@ -936,7 +988,7 @@ class Conversation(
         lastActivityMs = System.currentTimeMillis()
         lockForkRetried = false // each user prompt re-arms one heal
         backend.sendPrompt(text, images)
-        promptId?.let {
+        promptId?.takeUnless { alreadyAccepted }?.let {
             sink.emit(PromptAck(convoId, it)) // the turn is in the agent's hands — receipt (issue #66)
             // (issue #104) an ack is NOT a started turn. If the client later reports turnStalled for this prompt,
             // this line pins whether the ack landed during a spawn/relaunch window (write possibly lost) or steady state.

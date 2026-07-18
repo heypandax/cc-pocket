@@ -174,6 +174,12 @@ class RequestRouter(
                     dev.ccpocket.daemon.agent.AgencyAgentService.expand(frame.text, frame.agencyAgentIds)
                 if (!registry.sendPrompt(frame.copy(text = expanded))) sink.emit(SessionGone(frame.convoId))
             }
+            is dev.ccpocket.protocol.RemoveQueuedPrompt -> scope.launch {
+                registry.removeQueuedPrompt(frame.convoId, frame.promptId)
+            }
+            is dev.ccpocket.protocol.PromoteQueuedPrompt -> scope.launch {
+                registry.promoteQueuedPrompt(frame.convoId, frame.promptId)
+            }
             // a verdict may resolve a SHELL ask (issue #3) or an agent tool ask — shell claims its own by askId
             is PermissionVerdict -> if (!shell.onVerdict(frame)) registry.verdict(frame)
             is SwitchMode -> registry.switchMode(frame)

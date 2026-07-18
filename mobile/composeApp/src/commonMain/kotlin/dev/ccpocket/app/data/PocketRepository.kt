@@ -1,6 +1,7 @@
 package dev.ccpocket.app.data
 
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import dev.ccpocket.app.ensureLocalNetworkAccess
@@ -97,6 +98,10 @@ import dev.ccpocket.protocol.PermissionMode
 import dev.ccpocket.protocol.PermissionVerdict
 import dev.ccpocket.protocol.PocketError
 import dev.ccpocket.protocol.PromptAck
+import dev.ccpocket.protocol.PromptQueueState
+import dev.ccpocket.protocol.QueuedPrompt
+import dev.ccpocket.protocol.RemoveQueuedPrompt
+import dev.ccpocket.protocol.PromoteQueuedPrompt
 import dev.ccpocket.protocol.RegisterPush
 import dev.ccpocket.protocol.RunShellCommand
 import dev.ccpocket.protocol.SendPrompt
@@ -391,6 +396,46 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         SecureStore.getString(K_DEFAULT_AGENT)?.let { s -> AgentKind.entries.firstOrNull { it.name == s } } ?: AgentKind.CLAUDE,
     )
 
+    data class ProjectDefaults(
+        val agent: AgentKind,
+        val mode: PermissionMode,
+        val model: String? = null,
+        val effort: String? = null,
+    )
+    private val projectDefaults = mutableStateMapOf<String, ProjectDefaults>()
+
+    init {
+        SecureStore.getString(K_PROJECT_DEFAULTS)?.lineSequence()?.forEach { line ->
+            val t = line.split('\t')
+            if (t.size >= 5) runCatching {
+                projectDefaults[t[0]] = ProjectDefaults(
+                    AgentKind.valueOf(t[1]), PermissionMode.valueOf(t[2]),
+                    t[3].ifEmpty { null }, t[4].ifEmpty { null },
+                )
+            }
+        }
+    }
+
+    fun defaultsFor(workdir: String): ProjectDefaults = projectDefaults[workdir]
+        ?: ProjectDefaults(defaultAgent.value, defaultMode.value, defaultModel.value, defaultEffort.value)
+
+    fun setProjectDefaults(workdir: String, agent: AgentKind, mode: PermissionMode, model: String? = defaultModel.value, effort: String? = defaultEffort.value) {
+        projectDefaults[workdir] = ProjectDefaults(agent, mode, model, effort)
+        persistProjectDefaults()
+    }
+
+    fun clearProjectDefaults(workdir: String) {
+        projectDefaults.remove(workdir)
+        persistProjectDefaults()
+    }
+
+    private fun persistProjectDefaults() = SecureStore.putString(
+        K_PROJECT_DEFAULTS,
+        projectDefaults.entries.joinToString("\n") { (wd, p) ->
+            listOf(wd, p.agent.name, p.mode.name, p.model ?: "", p.effort ?: "").joinToString("\t")
+        },
+    )
+
     /** Session-list agent filter: "both" | "claude" | "codex" (persisted). Hides the other agent's sessions
      *  from the Sessions list; each row keeps its own identity color (issue #31). */
     val agentFilter = mutableStateOf(SecureStore.getString(K_AGENT_FILTER)?.takeIf { it.isNotEmpty() } ?: "both")
@@ -507,6 +552,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     }
     val sessionsDir = mutableStateOf<String?>(null)
     val messages = mutableStateListOf<ChatItem>()
+    val promptQueue = mutableStateListOf<QueuedPrompt>()
     val activityEvents = mutableStateListOf<ActivityEvent>()
     val pendingImages = mutableStateListOf<PendingImage>() // photos staged in the composer (pre-send)
     val pendingFiles = mutableStateListOf<PendingFile>()   // files staged/uploading into the workspace inbox (issue #90)
@@ -1584,6 +1630,16 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 val i = messages.indexOfLast { it is ChatItem.User && it.promptId == f.promptId }
                 (messages.getOrNull(i) as? ChatItem.User)?.let { messages[i] = it.copy(pending = false, delivered = true) }
             }
+            is PromptQueueState -> if (f.convoId == convoId.value) {
+                replace(promptQueue, f.items)
+                f.items.forEach { queued ->
+                    val i = messages.indexOfLast { it is ChatItem.User && it.promptId == queued.promptId }
+                    (messages.getOrNull(i) as? ChatItem.User)?.let { messages[i] = it.copy(pending = false, delivered = true) }
+                }
+                promptWatchdog?.cancel(); promptWatchdog = null
+                sendStalled.value = false
+                promptPending = false
+            }
             // Stream/turn frames carry their source convoId; this single-active-view model has one `messages`
             // list, so a frame from a just-left conversation (its tail still in flight when we switched) must
             // be dropped — else it renders into whatever convo is now open. Reopening the source replays its
@@ -2022,7 +2078,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     }
     // startMode defaults to the persisted default mode (mirrors effort), so tapping a session straight from
     // the list applies it too — not just the new-session picker.
-    fun openSession(wd: String, resumeId: String? = null, startMode: PermissionMode = defaultMode.value, title: String? = null, agent: AgentKind = defaultAgent.value) = scope.launch {
+    fun openSession(wd: String, resumeId: String? = null, startMode: PermissionMode? = null, title: String? = null, agent: AgentKind? = null) = scope.launch {
         opening.value = true // held until the daemon answers (SessionLive/PocketError) — 8s net below
         codexGoal.value = null
         codexGoalError.value = null
@@ -2041,7 +2097,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         // the previous session's in-flight work on every switch. Switching back later resumes by
         // sessionId and reattaches the still-live conversation (registry live-match), no fork.
         convoId.value?.let { if (observing.value || !streaming.value) send(CloseSession(it)) }
-        messages.clear(); activityEvents.clear(); convoId.value = null; replayEcho = false
+        messages.clear(); promptQueue.clear(); activityEvents.clear(); convoId.value = null; replayEcho = false
         sessionKey.value = resumeId // durable draft key known immediately on resume; null for a brand-new session
         composerEpoch.value++ // a REAL context switch — composers re-init from the target's draft (#29/#88); identity flips don't
         terminalEntries.clear(); terminalBusy.value = false // the quick-terminal scrollback is per-session
@@ -2054,15 +2110,16 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         // AND relaunches under them if the daemon closed the process while we were away. A live session's
         // reattach SessionLive still wins as the source of truth right after.
         val saved = resumeId?.let { sessionParams[it] }
+        val project = defaultsFor(wd)
         // Mode intentionally ignores the session's remembered value: resuming applies the caller's mode
         // (default = the persisted Settings mode), so "continue here" honors what Settings says instead of
         // silently reviving a stale per-session mode (issue #50). Model/effort/agent still restore per-session.
-        val openMode = startMode
-        val openEffort = saved?.effort ?: defaultEffort.value // new sessions seed from the persisted default; resumed keep their own
-        val openAgent = saved?.agent ?: agent // resumed sessions keep their backend; new ones use the picked default
+        val openMode = startMode ?: project.mode
+        val openAgent = saved?.agent ?: agent ?: project.agent
+        val openEffort = saved?.effort ?: project.effort // new sessions seed from the project/global default; resumed keep their own
         // new Claude sessions seed from the persisted default model; resumed keep their own, and a Codex launch
         // never inherits the (Claude-shaped) default id — it would be a meaningless --model to the Codex backend
-        val openModel = saved?.model ?: defaultModel.value?.takeIf { openAgent == AgentKind.CLAUDE }
+        val openModel = saved?.model ?: project.model?.takeIf { openAgent == AgentKind.CLAUDE }
         mode.value = openMode; allowRules.clear()
         model.value = openModel; effort.value = openEffort; contextUsed.value = null // reconciled by SessionLive
         sessionAgent.value = openAgent // optimistic; SessionLive corrects from daemon truth
@@ -2301,6 +2358,20 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         scope.launch { send(SendPrompt(c, outText, images, promptId = promptId, agencyAgentIds = selectedAgents)) }
         armPromptWatchdog()
         return true
+    }
+
+    fun removeQueuedPrompt(promptId: String) {
+        val c = convoId.value ?: return
+        promptQueue.removeAll { it.promptId == promptId }
+        messages.indexOfLast { it is ChatItem.User && it.promptId == promptId }
+            .takeIf { it >= 0 }?.let(messages::removeAt)
+        scope.launch { send(RemoveQueuedPrompt(c, promptId)) }
+    }
+
+    fun promoteQueuedPrompt(promptId: String) {
+        val c = convoId.value ?: return
+        promptQueue.removeAll { it.promptId == promptId }
+        scope.launch { send(PromoteQueuedPrompt(c, promptId)) }
     }
 
     /** Bound the wait for a delivery receipt (issue #78): outboxes deliberately buffer across reconnects,
@@ -2935,6 +3006,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         const val K_DEFAULT_MODEL = "default_session_model"   // SecureStore: model id for new Claude sessions ("" = CLI default)
         const val K_CONTEXT_WINDOW_OVERRIDE = "context_window_override" // SecureStore: statusline denominator in tokens ("" = follow derived window)
         const val K_DEFAULT_AGENT = "default_session_agent"   // SecureStore: AgentKind.name new sessions start under (default CLAUDE)
+        const val K_PROJECT_DEFAULTS = "project_session_defaults_v1"
         const val K_AGENT_FILTER = "sessions_agent_filter"    // SecureStore: "both" | "claude" | "codex" — Sessions-list filter (issue #31)
         const val K_PINNED = "pinned_projects"                 // SecureStore: '\n'-joined project paths pinned to the top
         const val K_DRAFT_PREFIX = "draft:"                    // SecureStore: "draft:<sessionId|convoId|workdir>" → unsent composer text for that conversation

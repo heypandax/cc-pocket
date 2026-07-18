@@ -350,6 +350,8 @@ class SessionRegistry(
         convo.sendPrompt(p.text, p.images, p.promptId)
         return true
     }
+    suspend fun removeQueuedPrompt(convoId: String, promptId: String) = get(convoId)?.removeQueuedPrompt(promptId) ?: Unit
+    suspend fun promoteQueuedPrompt(convoId: String, promptId: String) = get(convoId)?.promoteQueuedPrompt(promptId) ?: Unit
     suspend fun compact(convoId: String) = get(convoId)?.compact() ?: Unit
     suspend fun branch(convoId: String) = get(convoId)?.branch() ?: Unit
     suspend fun setGoal(frame: dev.ccpocket.protocol.SetCodexGoal) =

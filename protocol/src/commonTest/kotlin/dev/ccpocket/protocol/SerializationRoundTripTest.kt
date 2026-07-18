@@ -10,6 +10,22 @@ import kotlin.test.assertTrue
 class SerializationRoundTripTest {
 
     @Test
+    fun prompt_queue_commands_and_state_roundtrip() {
+        val frames = listOf(
+            Envelope(id = "q1", ts = 1, body = RemoveQueuedPrompt("c1", "p2")),
+            Envelope(id = "q2", ts = 2, body = PromoteQueuedPrompt("c1", "p3")),
+            Envelope(
+                id = "q3", ts = 3,
+                body = PromptQueueState("c1", listOf(QueuedPrompt("p2", "run tests", 1, 42))),
+            ),
+        )
+        frames.forEach { frame ->
+            val json = PocketJson.encodeToString(frame)
+            assertEquals(frame, PocketJson.decodeFromString<Envelope>(json))
+        }
+    }
+
+    @Test
     fun openSession_discriminator_defaults_and_null_omission() {
         val env = Envelope(id = "1", ts = 7, body = OpenSession(workdir = "/x"))
         val json = PocketJson.encodeToString(env)

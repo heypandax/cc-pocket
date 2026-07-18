@@ -74,6 +74,16 @@ data class SendPrompt(
     val agencyAgentIds: List<String> = emptyList(),
 ) : ToDaemon
 
+/** Remove a prompt that is waiting behind the active turn. Unknown/consumed ids are harmless no-ops. */
+@Serializable
+@SerialName("pocket/prompt.queue.remove")
+data class RemoveQueuedPrompt(val convoId: String, val promptId: String) : ToDaemon
+
+/** Hand a queued prompt to the agent immediately (the provider may treat it as steer/follow-up). */
+@Serializable
+@SerialName("pocket/prompt.queue.promote")
+data class PromoteQueuedPrompt(val convoId: String, val promptId: String) : ToDaemon
+
 /** A base64 image attached to a prompt — downscaled on the phone to fit the relay frame cap. */
 @Serializable
 data class ImageData(val mediaType: String, val base64: String)
@@ -669,6 +679,19 @@ data class TurnDone(
 @Serializable
 @SerialName("pocket/prompt.ack")
 data class PromptAck(val convoId: String, val promptId: String) : ToPhone
+
+/** Authoritative daemon-owned prompts waiting behind the active turn. Re-emitted on every mutation/reattach. */
+@Serializable
+data class QueuedPrompt(
+    val promptId: String,
+    val text: String,
+    val imageCount: Int = 0,
+    val createdAt: Long = 0,
+)
+
+@Serializable
+@SerialName("pocket/prompt.queue")
+data class PromptQueueState(val convoId: String, val items: List<QueuedPrompt> = emptyList()) : ToPhone
 
 /** An error surfaced to the phone. convoId null = connection-level. */
 @Serializable
