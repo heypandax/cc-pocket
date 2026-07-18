@@ -36,6 +36,8 @@ APP="$ROOT/daemon/build/jpackage/cc-pocket-daemon"
 # byte-for-byte. The service/updater still anchors on bin/cc-pocket-daemon as before.
 NATIVE="$APP/bin/cc-pocket-daemon.bin"
 mv "$APP/bin/cc-pocket-daemon" "$NATIVE"
+# The native launcher resolves its cfg from its own basename after the rename.
+cp "$APP/lib/app/cc-pocket-daemon.cfg" "$APP/lib/app/cc-pocket-daemon.bin.cfg"
 printf '%s\n' \
   '#!/bin/sh' \
   'if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then' \
