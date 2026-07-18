@@ -1448,6 +1448,14 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     internal fun receiveForTest(f: Frame) = handle(f)
 
     private fun handle(f: Frame) {
+        // Switching rows can overlap the old conversation's final SessionLive with the new OpenSession
+        // reply. SessionLive used to be accepted unconditionally, so that late old frame replaced the
+        // selected session and made a list tap appear to jump backwards. While a known resume is opening,
+        // only its durable session id is allowed to become the active conversation.
+        if (f is SessionLive && !sessionLiveMatchesPendingOpen(opening.value, sessionKey.value, f.sessionId)) {
+            scope.launch { send(CloseSession(f.convoId)) }
+            return
+        }
         when (f) {
             is Directories -> {
                 replace(directories, f.entries); refreshing.value = false
@@ -2937,5 +2945,8 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         const val FONT_SCALE_MAX = 1.4f                        // largest chat text scale (eye-comfort upper bound)
     }
 }
+
+internal fun sessionLiveMatchesPendingOpen(opening: Boolean, expectedSessionId: String?, incomingSessionId: String?): Boolean =
+    !opening || expectedSessionId == null || incomingSessionId == expectedSessionId
 
 private const val REFRESH_SPINNER_SAFETY_MS = 4_000L // spinner never outlives a lost reply by more than this
