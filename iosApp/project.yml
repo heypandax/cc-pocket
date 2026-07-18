@@ -1,6 +1,9 @@
 name: iosApp
 options:
   bundleIdPrefix: com.panda
+  # Keep the generated project readable by Xcode 15.4. The TrollStore build deliberately uses the
+  # iOS-17-era toolchain so its WidgetKit extension cannot link iOS 18+ SwiftUI runtime symbols.
+  xcodeVersion: "15.4"
   deploymentTarget:
     iOS: "15.0"
 packages:
