@@ -55,11 +55,13 @@ object TranscriptRename {
         }.toString()
         return runCatching {
             val rescueNewline = !endsWithNewline(file)
+            val mtime = runCatching { Files.getLastModifiedTime(file) }.getOrNull()
             val bytes = (if (rescueNewline) "\n$record\n" else "$record\n").toByteArray(Charsets.UTF_8)
             FileChannel.open(file, StandardOpenOption.WRITE, StandardOpenOption.APPEND).use { ch ->
                 val buf = ByteBuffer.wrap(bytes)
                 while (buf.hasRemaining()) ch.write(buf) // one call in practice — a short line never splits
             }
+            mtime?.let { runCatching { Files.setLastModifiedTime(file, it) } }
             true
         }.getOrElse { e ->
             log.warn("rename append failed for $file: ${e.message}")

@@ -398,7 +398,11 @@ class SessionRegistry(
     suspend fun renameSession(workdir: String, sessionId: String, title: String): String? {
         val t = title.trim()
         if (t.isEmpty()) return "title must not be empty"
-        val live = mutex.withLock { convos.values.firstOrNull { it.sessionId == sessionId } }
+        val live = mutex.withLock {
+            convos.values.firstOrNull {
+                it.sessionId == sessionId || (it.sessionId == null && it.resumeAnchor == sessionId)
+            }
+        }
         if (live != null && live.hasLiveProcess()) {
             log.info("rename ${sessionId.take(8)}… via live convo ${live.convoId.take(8)}…")
             return if (live.renameSession(t)) null
