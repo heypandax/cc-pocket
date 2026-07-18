@@ -34,6 +34,18 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
 
+internal fun friendlyIntegrationError(message: String?): String {
+    val raw = message?.trim().orEmpty()
+    if (raw.isEmpty()) return "Integration request failed"
+    if (raw.contains("403", ignoreCase = true) || raw.contains("Forbidden", ignoreCase = true)) {
+        return "Codex Apps access was forbidden (HTTP 403). Check this Codex account's Apps access or network policy."
+    }
+    if (raw.contains("<html", ignoreCase = true) || raw.contains("<!doctype", ignoreCase = true)) {
+        return "Codex Apps returned an unexpected web response. Try again later or check the daemon network policy."
+    }
+    return raw.replace(Regex("\\s+"), " ").take(300)
+}
+
 /**
  * Drives OpenAI Codex via `codex app-server` — newline-delimited JSON-RPC over stdio (NO `jsonrpc` field
  * on the wire). A stateful, per-conversation handshake machine: on [attach] it sends `initialize`; on the
@@ -229,7 +241,7 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
             return listOf(AgentEvent.PluginsChanged(error = error?.str("message") ?: "plugin request failed"))
         }
         if (id != null && (mcpListIds.remove(id) || appListIds.remove(id) || mcpReloadIds.remove(id) || mcpLoginIds.remove(id))) {
-            return listOf(AgentEvent.IntegrationsChanged(error = error?.str("message") ?: "integration request failed"))
+            return listOf(AgentEvent.IntegrationsChanged(error = friendlyIntegrationError(error?.str("message"))))
         }
         log.warn("codex error: $error")
         return emptyList()
@@ -306,7 +318,11 @@ class CodexBackend(private val codexBin: String?) : AgentBackend {
             "thread/goal/updated" -> listOf(AgentEvent.GoalChanged(params.obj("goal")?.goal()))
             "thread/goal/cleared" -> listOf(AgentEvent.GoalChanged(null))
             "skills/changed" -> { listSkills(forceReload = true); emptyList() }
-            "mcpServer/startupStatus/updated", "app/list/updated" -> { listIntegrations(forceReload = false); emptyList() }
+            // These notifications are also emitted as a consequence of listing integrations on some
+            // app-server versions. Re-listing here creates a request → notification → request loop that
+            // makes the UI flash and can hammer the Apps endpoint into a 403. The sheet loads on entry and
+            // exposes an explicit refresh action, so notifications only mark external state as changed.
+            "mcpServer/startupStatus/updated", "app/list/updated" -> emptyList()
             "mcpServer/oauthLogin/completed" -> {
                 listIntegrations(forceReload = true)
                 val ok = (params["success"] as? JsonPrimitive)?.booleanOrNull == true

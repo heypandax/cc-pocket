@@ -401,4 +401,12 @@ class CodexBackendTest {
         assertTrue("+new line" in (cr.diff ?: ""), cr.diff ?: "<null>") // diff is a typed field, for the phone's diff view
         assertTrue("src/A.kt" in cr.input.toString(), cr.input.toString())
     }
+
+    @Test
+    fun integration_errors_do_not_expose_gateway_html() {
+        val html = "failed to list apps: Request failed with status 403 Forbidden: <html><body>blocked</body></html>"
+        val friendly = friendlyIntegrationError(html)
+        assertTrue("HTTP 403" in friendly, friendly)
+        assertFalse("<html" in friendly, friendly)
+    }
 }
