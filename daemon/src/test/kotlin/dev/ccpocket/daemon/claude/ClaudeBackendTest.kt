@@ -96,7 +96,7 @@ class ClaudeBackendTest {
 
     @Test
     fun rename_session_without_live_io_returns_false() = runBlocking {
-        val b = ClaudeBackend(claudeBin = "/nonexistent/claude") // never attached — no process
+        val b = ClaudeBackend(java.nio.file.Path.of("/nonexistent/claude")) // never attached — no process
         assertFalse(b.renameSession("x"))
     }
 
