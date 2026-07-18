@@ -1607,13 +1607,15 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                             it.categoryZh.contains(q, true) || it.id.contains(q, true)
                     }.take(50)
                 }
-                val composerDockShape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+                // The composer sits above iPhone's Home Indicator rather than truly touching the screen
+                // edge, so it reads as a floating panel: keep all four corners consistent.
+                val composerDockShape = RoundedCornerShape(20.dp)
                 // The dock and the system-bar inset are one continuous bottom surface. A regular glassPanel
                 // double-composited its translucent raised fill and drew a bottom border right above the
                 // Home Indicator, splitting the bottom into two visibly different strips in light mode.
                 val composerDockFill = Tok.raised.compositeOver(Tok.base)
                 Column(
-                    Modifier.fillMaxWidth()
+                    Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp)
                         .shadow(18.dp, composerDockShape, clip = false)
                         .clip(composerDockShape)
                         .background(composerDockFill),
