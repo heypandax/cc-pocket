@@ -1186,7 +1186,7 @@ class Conversation(
     }
 
     /** A live agent process is attached right now — its CLI holds (and appends) the transcript. */
-    fun hasLiveProcess(): Boolean = proc?.isAlive() == true
+    fun hasLiveProcess(): Boolean = proc != null
 
     /** Rename the session THROUGH the live agent (issue #158): the CLI appends its own `custom-title`
      *  record and acks, so the daemon never appends to a transcript its child is writing. False = not

@@ -370,17 +370,6 @@ class SessionRegistry(
     suspend fun cancelTurn(c: CancelTurn) = get(c.convoId)?.cancelTurn() ?: Unit
     suspend fun stopBackgroundJob(s: StopBackgroundJob) = get(s.convoId)?.stopBackgroundJob(s.jobId) ?: Unit
 
-    /** A workflow agent's detail sheet opened — the conversation reads the full prompt/return off disk (#106). */
-    suspend fun fetchWorkflowAgentDetail(f: GetWorkflowAgentDetail) =
-        get(f.convoId)?.fetchWorkflowAgentDetail(f.runId, f.agentIndex, f.agentId) ?: Unit
-
-    /** Older-history page (issue #147): a transcript parse answered to the REQUESTING sink only —
-     *  works for both live conversations and read-only observe views. */
-    suspend fun fetchHistoryPage(f: dev.ccpocket.protocol.FetchHistoryPage, sink: OutboundSink) {
-        get(f.convoId)?.let { it.fetchHistoryPage(f.beforeSeq, f.limit, sink); return }
-        mutex.withLock { observes[f.convoId] }?.fetchHistoryPage(f.beforeSeq, f.limit, sink)
-    }
-
     /**
      * Rename [sessionId]'s title (issue #158) by landing Claude's own `custom-title` transcript record,
      * picking the writer by who holds the file:

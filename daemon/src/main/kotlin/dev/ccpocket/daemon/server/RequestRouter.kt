@@ -43,6 +43,7 @@ import dev.ccpocket.protocol.CursorModels
 import dev.ccpocket.protocol.ListPathEntries
 import dev.ccpocket.protocol.ListSessionFiles
 import dev.ccpocket.protocol.ListSessions
+import dev.ccpocket.protocol.RenameSession
 import dev.ccpocket.protocol.PathEntries
 import dev.ccpocket.protocol.ReadFile
 import dev.ccpocket.protocol.ReadFileDiff
