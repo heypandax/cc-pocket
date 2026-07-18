@@ -43,13 +43,29 @@ fun PairedDaemon.displayName(): String =
 object Pairing {
     private val json = Json { ignoreUnknownKeys = true }
 
+    /** New production endpoint plus the former official endpoints. Custom/self-hosted relay URLs are
+     * deliberately left untouched. */
+    const val DEFAULT_RELAY = "wss://relay.txx.app"
+    private val LEGACY_RELAYS = setOf("ws://cc.dmitt.com:6002", "wss://pocket.ark-nexus.cc")
+
+    internal fun canonicalRelay(relay: String): String =
+        if (relay.trimEnd('/') in LEGACY_RELAYS) DEFAULT_RELAY else relay.trimEnd('/')
+
+    internal fun migrateLegacyRelays(bindings: List<PairedDaemon>): List<PairedDaemon> =
+        bindings.map { binding ->
+            val relay = canonicalRelay(binding.relay)
+            if (relay == binding.relay) binding else binding.copy(relay = relay)
+        }
+
     fun parse(url: String): PairingInfo? {
         if (!url.contains("?")) return null
         val m = url.substringAfter("?").split("&").mapNotNull {
             val i = it.indexOf('='); if (i < 0) null else it.substring(0, i) to it.substring(i + 1)
         }.toMap()
         val relay = m["relay"]; val acct = m["acct"]; val dpk = m["dpk"]; val ticket = m["ticket"]
-        return if (relay != null && acct != null && dpk != null && ticket != null) PairingInfo(relay, acct, dpk, ticket) else null
+        return if (relay != null && acct != null && dpk != null && ticket != null) {
+            PairingInfo(canonicalRelay(relay), acct, dpk, ticket)
+        } else null
     }
 
     /** This device's long-term P-256 keypair, generated once and persisted. */
@@ -65,17 +81,15 @@ object Pairing {
 
     /** Redeem a scanned ticket: register our pubkey, receive a credential, persist the paired record. */
     suspend fun redeem(info: PairingInfo, keys: E2ECrypto.KeyPair, client: HttpClient): PairedDaemon {
-        val httpBase = info.relay.replace("wss://", "https://").replace("ws://", "http://")
+        val relay = canonicalRelay(info.relay)
+        val httpBase = relay.replace("wss://", "https://").replace("ws://", "http://")
         val resp = client.post("$httpBase/v1/pair/redeem") {
             setBody("""{"ticket":"${info.ticket}","devicePubKey":"${B64Url.encode(keys.publicRaw)}"}""")
         }.bodyAsText()
         val cred = runCatching { json.decodeFromString<PairCredential>(resp) }.getOrElse { error("pairing failed: $resp") }
-        return PairedDaemon(info.relay, info.accountId, info.daemonPub, cred.deviceId, cred.credential)
+        return PairedDaemon(relay, info.accountId, info.daemonPub, cred.deviceId, cred.credential)
             .also { upsert(it); setActive(it.accountId) }
     }
-
-    /** The relay this app pairs against (the daemon dials the same one). Override in Advanced if self-hosting. */
-    const val DEFAULT_RELAY = "ws://cc.dmitt.com:6002"
 
     /** Resolve a 6-digit code typed by the user into the full pairing info (relay-assisted path). */
     suspend fun resolveCode(code: String, client: HttpClient): PairingInfo {
@@ -91,11 +105,15 @@ object Pairing {
     /** Every bound computer. Migrates the legacy single-record key into the list the first time it runs. */
     fun loadAll(): List<PairedDaemon> {
         SecureStore.getString(K_PAIRED_LIST)?.let {
-            return runCatching { json.decodeFromString<List<PairedDaemon>>(it) }.getOrDefault(emptyList())
+            val stored = runCatching { json.decodeFromString<List<PairedDaemon>>(it) }.getOrDefault(emptyList())
+            val migrated = migrateLegacyRelays(stored)
+            if (migrated != stored) saveAll(migrated)
+            return migrated
         }
         val legacy = SecureStore.getString(K_PAIRED)?.let { runCatching { json.decodeFromString<PairedDaemon>(it) }.getOrNull() }
         return if (legacy != null) {
-            saveAll(listOf(legacy)); setActive(legacy.accountId); SecureStore.remove(K_PAIRED); listOf(legacy)
+            val migrated = migrateLegacyRelays(listOf(legacy))
+            saveAll(migrated); setActive(legacy.accountId); SecureStore.remove(K_PAIRED); migrated
         } else emptyList()
     }
 
@@ -103,7 +121,7 @@ object Pairing {
 
     /** Add or replace by accountId — re-pairing the same computer refreshes its credential in place. */
     fun upsert(p: PairedDaemon): List<PairedDaemon> =
-        (loadAll().filterNot { it.accountId == p.accountId } + p).also(::saveAll)
+        (loadAll().filterNot { it.accountId == p.accountId } + p.copy(relay = canonicalRelay(p.relay))).also(::saveAll)
 
     /** Drop one binding; if it was the active one, hand "active" to whatever remains (or clear it). */
     fun remove(accountId: String): List<PairedDaemon> =

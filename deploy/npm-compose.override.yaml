@@ -1,0 +1,31 @@
+services:
+  relay:
+    image: eclipse-temurin:17-jre
+    container_name: cc-pocket-relay
+    restart: unless-stopped
+    working_dir: /opt/cc-pocket-relay
+    command:
+      - /opt/cc-pocket-relay/bin/cc-pocket-relay
+      - --host
+      - 0.0.0.0
+      - --port
+      - "9000"
+      - --db
+      - /var/lib/cc-pocket-relay/relay.db
+    expose:
+      - "9000"
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx256m
+    env_file:
+      - /etc/cc-pocket-relay/push.env
+    volumes:
+      - /opt/cc-pocket-relay:/opt/cc-pocket-relay:ro
+      - /var/lib/cc-pocket-relay:/var/lib/cc-pocket-relay
+      - /etc/cc-pocket-relay:/etc/cc-pocket-relay:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

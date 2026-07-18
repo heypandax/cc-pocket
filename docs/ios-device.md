@@ -56,7 +56,7 @@ cp iosApp/iosApp/GoogleService-Info.plist.template iosApp/iosApp/GoogleService-I
 1. **daemon 外拨连 relay**（首跑自生成身份并起本地配对回环）：
 
    ```bash
-   daemon/build/install/cc-pocket-daemon/bin/cc-pocket-daemon run --relay wss://pocket.ark-nexus.cc --claude-bin ~/.local/bin/claude
+   daemon/build/install/cc-pocket-daemon/bin/cc-pocket-daemon run --relay wss://relay.txx.app --claude-bin ~/.local/bin/claude
    ```
 
 2. **配对**：另开一个终端，让 daemon 出一张一次性配对链接：
@@ -68,7 +68,7 @@ cp iosApp/iosApp/GoogleService-Info.plist.template iosApp/iosApp/GoogleService-I
 
 3. **App 里配对**：用 App 内置相机扫终端里的二维码，或手输 6 位码，或把上面的 `ccpocket://pair?...` 链接粘进「Pair」框 → Pair。配对成功后设备记住该 daemon，以后开 App 直接「Connect」。
 
-> 票据 120s 单次有效；过期就再 `pair` 一次。自托管 relay：把 `wss://pocket.ark-nexus.cc` 换成你自己的域名（`deploy/` 有 systemd + Caddyfile）。
+> 票据 120s 单次有效；过期就再 `pair` 一次。自托管 relay：把 `wss://relay.txx.app` 换成你自己的域名（`deploy/` 有 systemd、Caddy 和 Nginx Proxy Manager 模板）。
 
 ### 进阶：同局域网直连（不经 relay）
 

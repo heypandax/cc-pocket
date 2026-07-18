@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# End-to-end smoke against the DEPLOYED relay (through Cloudflare + Caddy + wss).
+# End-to-end smoke against the DEPLOYED relay (through the TLS reverse proxy + wss).
 # Proves the full production path: local daemon + device, E2E encrypted, no local relay.
 #
 # Usage:  JAVA_HOME=/opt/homebrew/opt/openjdk@17 bash scripts/relay-smoke-prod.sh [wss://host]
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-RELAY="${1:-wss://pocket.ark-nexus.cc}"
+RELAY="${1:-wss://relay.txx.app}"
 D=daemon/build/install/cc-pocket-daemon/bin/cc-pocket-daemon
 [ -x "$D" ] || { echo "build first: ./gradlew :daemon:installDist"; exit 1; }
 
@@ -39,4 +39,4 @@ grep -q "E2E channel up" "$WORK/tc.log" || { echo "FAIL: E2E handshake"; cat "$W
 grep -q "\[dirs\]"      "$WORK/tc.log" || { echo "FAIL: no encrypted round trip"; cat "$WORK/tc.log"; exit 1; }
 echo "  E2E handshake ✓   encrypted round trip ✓"
 echo
-echo "PASS — full production path (daemon -> Cloudflare -> Caddy -> relay -> device) works, end-to-end encrypted."
+echo "PASS — full production path (daemon -> TLS proxy -> relay -> device) works, end-to-end encrypted."

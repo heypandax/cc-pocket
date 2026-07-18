@@ -6,7 +6,7 @@ on:
       version:
         description: Relay package version
         required: true
-        default: 1.3.24
+        default: 1.3.25
 
 permissions:
   contents: read
@@ -43,4 +43,3 @@ jobs:
             cc-pocket-relay-${{ inputs.version }}-linux-x86_64.tar.gz
             SHA256SUMS
           retention-days: 30
-

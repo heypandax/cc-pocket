@@ -13,7 +13,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17}"; export JAVA_HOME
-RELAY="${RELAY:-wss://pocket.ark-nexus.cc}"
+RELAY="${RELAY:-wss://relay.txx.app}"
 DEST="$HOME/Library/Application Support/cc-pocket/cc-pocket-daemon"
 DIST="daemon/build/install/cc-pocket-daemon"
 BIN="$DEST/bin/cc-pocket-daemon"
@@ -51,6 +51,6 @@ if [ "$COUNT" = "1" ] && [ "$SOCK" -ge 1 ]; then
   echo "✅ 完成：单实例已连上 relay，手机可用"
 else
   echo "⚠️  未达预期（进程数应=1、relay-socket≥1）。看日志：~/Library/Logs/cc-pocket/daemon.err.log"
-  echo "   常见：relay-socket=0 多半是 TUN 代理没放行——把 pocket.ark-nexus.cc 加进代理直连/规则再重跑。"
+  echo "   常见：relay-socket=0 多半是 TUN 代理没放行——把 relay.txx.app 加进代理直连/规则再重跑。"
   exit 1
 fi

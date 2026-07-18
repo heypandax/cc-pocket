@@ -130,8 +130,8 @@ class SeedDesktopModel : DesktopModel {
     override var showQuickActions by mutableStateOf(false)
     override var showChanges by mutableStateOf(false)
 
-    override val appVersion = "1.3.5"
-    override val relayUrl = "ws://cc.dmitt.com:6002"
+    override val appVersion = "1.3.7"
+    override val relayUrl = "wss://relay.txx.app"
     override var defaultAgent by mutableStateOf(AgentKind.CLAUDE)
     override var defaultMode by mutableStateOf(PermissionMode.DEFAULT)
     override var defaultModel: String? by mutableStateOf(null)

@@ -7,7 +7,7 @@
 	}
 }
 
-pocket.ark-nexus.cc {
+relay.txx.app {
 	# Caddy auto-provisions a Let's Encrypt cert (needs inbound 80/443 from the
 	# internet for the ACME challenge) and auto-handles the WebSocket upgrade,
 	# so the relay's /v1/daemon and /v1/device WS endpoints just work.

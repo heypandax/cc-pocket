@@ -1,5 +1,19 @@
 # 版本更新记录
 
+## 1.3.7 — 2026-07-18
+
+### 调整
+
+- 生产 Relay 迁移到 `wss://relay.txx.app`，统一通过 HTTPS/WSS 的 443 端口提供配对与 WebSocket 服务。
+- App 自动把原官方 Relay 地址迁移到新域名，同时保留设备凭据和配对关系；自托管地址不受影响。
+- daemon 自动改写旧 systemd/launchd 启动参数中的官方 Relay 地址，升级二进制后无需先重装服务。
+- 新增 Nginx Proxy Manager Docker 部署模板和 Relay GitHub Artifact 云端打包流程。
+
+### 版本
+
+- App：**1.3.7**。
+- daemon / Relay artifact：**1.3.25**。
+
 ## 1.3.6 — 2026-07-16
 
 ### 新增

@@ -29,4 +29,11 @@ class MainTest {
     fun distribution_updates_come_from_the_fork() {
         assertEquals("ac54u-mobile/cc-pocket", ReleaseClient.DEFAULT_REPO)
     }
+
+    @Test
+    fun legacy_official_relay_is_migrated_but_custom_relays_are_preserved() {
+        assertEquals(DEFAULT_RELAY, canonicalRelayUrl("ws://cc.dmitt.com:6002"))
+        assertEquals(DEFAULT_RELAY, canonicalRelayUrl("wss://pocket.ark-nexus.cc/"))
+        assertEquals("wss://self-hosted.example", canonicalRelayUrl("wss://self-hosted.example/"))
+    }
 }

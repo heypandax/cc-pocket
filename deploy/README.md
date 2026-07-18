@@ -1,8 +1,8 @@
 # CC Pocket relay 部署手册
 
-本文说明如何部署 **CC Pocket relay**（Kotlin/JVM Ktor 应用）。relay 只转发不透明的端到端加密二进制数据，只保存指纹、公钥和哈希，实现零知识中继。服务只监听环回地址，由前置 **Caddy** 终止 TLS。
+本文说明如何部署 **CC Pocket relay**（Kotlin/JVM Ktor 应用）。relay 只转发不透明的端到端加密二进制数据，只保存指纹、公钥和哈希，实现零知识中继。生产地址为 `wss://relay.txx.app`。新服务器使用 Docker 中的 **Nginx Proxy Manager**，操作见 [NPM.md](NPM.md)；下文保留 Caddy 作为非 Docker 部署的替代方案。
 
-> 状态：**已上线**。端到端加密层已通过完整生产链路（daemon → Cloudflare → Caddy → relay → 设备）验证，脚本见 `scripts/relay-smoke-prod.sh`。威胁模型见 `docs/SECURITY.md`。
+> 端到端加密层通过完整生产链路（daemon → TLS 反向代理 → relay → 设备）验证，脚本见 `scripts/relay-smoke-prod.sh`。威胁模型见 `docs/SECURITY.md`。
 
 ## 网络拓扑
 
@@ -16,7 +16,7 @@
         cc-pocket-relay 127.0.0.1:9000（SQLite 位于 /var/lib/cc-pocket-relay/relay.db）
 ```
 
-公开健康检查：`https://pocket.ark-nexus.cc/healthz` → `ok`。WebSocket 端点（自动代理）：`/v1/daemon`、`/v1/device`；REST 端点：`/v1/pair/redeem`、`/v1/pair/code`。
+公开健康检查：`https://relay.txx.app/healthz` → `ok`。WebSocket 端点（自动代理）：`/v1/daemon`、`/v1/device`；REST 端点：`/v1/pair/redeem`、`/v1/pair/code`。
 
 ## 服务器信息
 
@@ -39,7 +39,7 @@
 | `/var/lib/cc-pocket-relay/relay.db` | SQLite 数据库，属主 `ccpocket:ccpocket`，目录权限 `0750` |
 | `/etc/systemd/system/cc-pocket-relay.service` | relay unit，与 `deploy/cc-pocket-relay.service` 对应 |
 | `/etc/caddy/Caddyfile` | Caddy 配置，与 `deploy/Caddyfile` 对应；`.orig` 是默认备份 |
-| `/var/lib/caddy/.local/share/caddy/certificates/.../pocket.ark-nexus.cc/` | 自动管理的 LE 证书与私钥 |
+| `/var/lib/caddy/.local/share/caddy/certificates/.../relay.txx.app/` | Caddy 方案自动管理的 LE 证书与私钥 |
 
 ## 本目录文件
 
@@ -135,15 +135,15 @@ systemctl reload caddy        # zero-downtime config reload
 curl -s http://127.0.0.1:9000/healthz                     # -> ok
 
 # 经过 Cloudflare 的公开健康检查
-curl -sS https://pocket.ark-nexus.cc/healthz              # -> ok
+curl -sS https://relay.txx.app/healthz                    # -> ok
 
 # 绕过 Cloudflare 直连源站，验证 Caddy 的 LE 证书
-curl -sS --resolve pocket.ark-nexus.cc:443:$RELAY_HOST https://pocket.ark-nexus.cc/healthz
+curl -sS --resolve relay.txx.app:443:$RELAY_HOST https://relay.txx.app/healthz
 ```
 
 ## TLS 与网络说明
 
-- 域名 `pocket.ark-nexus.cc` 经过 Cloudflare 代理，DNS 指向 Cloudflare 而不是源站。证书分两层：客户端看到 Cloudflare 边缘证书，源站使用 Caddy 为该域名申请的 Let's Encrypt 证书。ACME `http-01` 挑战由 Cloudflare 转发到源站 80 端口。
+- 如果 `relay.txx.app` 使用 Cloudflare 橙云，SSL/TLS 模式必须是 Full (strict)，并开启 WebSocket。直连 DNS 时由 NPM/Caddy 直接申请和续期 Let's Encrypt 证书。
 - Caddy 自动续期，证书与私钥保存在 `/var/lib/caddy/.local/share/caddy/certificates/...`。
 - 当前 Let's Encrypt 证书可能出现 `no OCSP stapling ... no OCSP server specified` 日志，这是无害提示，可忽略。
 

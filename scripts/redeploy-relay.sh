@@ -47,5 +47,5 @@ echo "── 4/5 start relay + health + reload caddy (h3 off) ──"
 '
 
 echo "── 5/5 public health (through Cloudflare) ──"
-curl -fsS --max-time 15 https://pocket.ark-nexus.cc/healthz && echo " public OK"
+curl -fsS --max-time 15 https://relay.txx.app/healthz && echo " public OK"
 echo "✅ relay redeploy done"

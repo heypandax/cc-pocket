@@ -2,7 +2,7 @@
 
 > Linux 服务器的日常升级优先使用 GitHub Actions `daemon-artifact`，不要在生产服务器现场执行 Gradle。安装与回滚见 [DAEMON-DEPLOYMENT.md](./DAEMON-DEPLOYMENT.md)。本页其余内容主要面向正式多平台发行、签名和 App Store 流程。
 
-电脑端发布的**只有 daemon**（用户 Mac 上跑、连本地 `claude` CLI、外拨到你托管的 relay）。relay（`wss://pocket.ark-nexus.cc`）是你的服务，用户不部署。分发走 **Homebrew tap**，artifact **自带 JRE**（用户不用装 Java）并经 **Apple 公证**（双击零警告）。
+电脑端发布的**只有 daemon**（用户 Mac 上跑、连本地 `claude` CLI、外拨到你托管的 relay）。relay（`wss://relay.txx.app`）是你的服务，用户不部署。分发走 **Homebrew tap**，artifact **自带 JRE**（用户不用装 Java）并经 **Apple 公证**（双击零警告）。
 
 用户最终体验：
 

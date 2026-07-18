@@ -14,7 +14,7 @@ import javax.net.ssl.X509TrustManager
  *
  * DEFAULT BEHAVIOR IS UNCHANGED: with no extra sources configured this returns the JVM's own default
  * trust manager (the bundled JRE `cacerts`, which already carries the Let's Encrypt / ISRG roots), so
- * `pocket.ark-nexus.cc` validates out of the box exactly as before.
+ * `relay.txx.app` validates out of the box using the public Web PKI.
  *
  * This helper only ever ADDS trust anchors. It NEVER:
  *  - accepts arbitrary / self-signed certificates (no trust-all),

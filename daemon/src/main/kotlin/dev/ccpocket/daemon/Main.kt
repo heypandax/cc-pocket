@@ -36,7 +36,13 @@ import java.net.Inet4Address
 import java.net.NetworkInterface
 
 /** Production relay; users connect here by default so `run`/`service-install` need no URL. */
-const val DEFAULT_RELAY = "ws://cc.dmitt.com:6002"
+const val DEFAULT_RELAY = "wss://relay.txx.app"
+
+/** Old official endpoints are rewritten at runtime so already-installed systemd/launchd services whose
+ * command line still contains the former URL move to the new relay without being reinstalled first. */
+private val LEGACY_RELAYS = setOf("ws://cc.dmitt.com:6002", "wss://pocket.ark-nexus.cc")
+
+internal fun canonicalRelayUrl(url: String): String = if (url.trimEnd('/') in LEGACY_RELAYS) DEFAULT_RELAY else url.trimEnd('/')
 
 /** Pick the most likely LAN IPv4 address: a physical, non-virtual site-local (RFC1918) address. */
 fun lanIp(): String? {
@@ -115,6 +121,9 @@ private class RunCmd : CliktCommand(name = "run") {
     private val autoUpdate by option("--auto-update", help = "apply daemon updates automatically (installer-managed macOS/Linux installs; others get a notification)").flag()
 
     override fun run() {
+        // `this.relay` can come from an older installed service's explicit --relay argument. Shadow it
+        // with the canonical URL for the rest of this run so upgrading the binary also migrates the link.
+        val relay = canonicalRelayUrl(this.relay)
         // Every provider is optional. A Codex-only host must not need a fake Claude executable just to
         // start the relay and pairing services; selecting an unavailable backend is rejected later by
         // SessionRegistry with an agent_unavailable error.
