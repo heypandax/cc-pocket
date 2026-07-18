@@ -187,6 +187,7 @@ private class RunCmd : CliktCommand(name = "run") {
                     add("run"); add("--relay"); add(relay)
                     claudeBin?.let { add("--claude-bin"); add(it) }
                     codexBin?.let { add("--codex-bin"); add(it) }
+                    cursorBin?.let { add("--cursor-bin"); add(it) }
                 },
             )?.let { echo(it) }
             // A daemon is a singleton (owns the pair port + one relay identity). If another instance is
@@ -206,7 +207,12 @@ private class RunCmd : CliktCommand(name = "run") {
             // phone can only reach us once the user explicitly binds beyond loopback — show the
             // pairing URL/QR only then, never for a loopback bind the phone can't connect to.
             val lan = lanIp()
-            echo("cc-pocket daemon — claude=$exe — codex=${codexExe ?: "(not found)"}")
+            echo(
+                "cc-pocket daemon — " +
+                    "claude=${claudeExe ?: "(not found)"} — " +
+                    "codex=${codexExe ?: "(not found)"} — " +
+                    "cursor=${cursorExe ?: "(not found)"}",
+            )
             echo("")
             if (host == "127.0.0.1") {
                 echo("  Bound to 127.0.0.1 (loopback only) — not reachable from your phone.")

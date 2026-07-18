@@ -47,7 +47,10 @@ jobs:
           ./gradlew --no-daemon \
             :protocol:jvmTest \
             :relay:test \
+            :daemon:compileKotlin \
+            :daemon:compileTestKotlin \
             :mobile:composeApp:compileKotlinDesktop
+          # Keep compilation mandatory. Only the known flaky daemon test execution is advisory.
           ./gradlew --no-daemon :daemon:test || echo "::warning::daemon test had failures (flaky upstream test possible)"
 
       - name: Upload test reports on failure
