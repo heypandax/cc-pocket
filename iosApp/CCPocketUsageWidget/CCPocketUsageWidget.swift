@@ -52,10 +52,13 @@ struct UsageWidgetView: View {
     let entry: UsageEntry
 
     var body: some View {
-        content
-            .widgetBackground(canvas)
-            .privacySensitive(false)
-            .unredacted()
+        Group {
+            if #available(iOSApplicationExtension 17.0, *) {
+                content.containerBackground(canvas, for: .widget)
+            } else {
+                content.background(canvas)
+            }
+        }
     }
 
     private var content: some View {
@@ -84,11 +87,15 @@ struct UsageWidgetView: View {
                         Spacer()
                         Text("\(Int(remaining.rounded()))% left").font(.caption2.weight(.semibold)).foregroundColor(ink)
                     }
-                    ProgressView(value: max(0, min(remaining, 100)), total: 100)
-                        .tint(teal).frame(height: 5)
+                    GeometryReader { proxy in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.white.opacity(0.08))
+                            Capsule().fill(teal).frame(width: proxy.size.width * max(0, min(remaining / 100, 1)))
+                        }
+                    }.frame(height: 5)
                 }
             } else {
-                Text(entry.updatedAt == nil ? "Waiting for data — open CC Pocket" : "Limits unavailable")
+                Text("Open CC Pocket to refresh limits")
                     .font(.system(size: 9)).foregroundColor(muted).lineLimit(1)
             }
 
@@ -99,6 +106,9 @@ struct UsageWidgetView: View {
             }.font(.system(size: 9)).foregroundColor(muted)
         }
         .padding(14)
+        // The snapshot is aggregate usage, not private message content. Keep the placeholder readable
+        // while WidgetKit is refreshing instead of showing an unexplained blurred/black rectangle.
+        .unredacted()
     }
 
     private func shortTokens(_ value: Int64) -> String {
@@ -109,28 +119,13 @@ struct UsageWidgetView: View {
 
 }
 
-private extension View {
-    @ViewBuilder
-    func widgetBackground(_ color: Color) -> some View {
-        if #available(iOSApplicationExtension 17.0, *) {
-            containerBackground(for: .widget) { color }
-        } else {
-            background(color)
-        }
-    }
-}
-
 @main
 struct CCPocketUsageWidget: Widget {
-    // V2 intentionally changes the kind so WidgetKit cannot reuse the permanently black/redacted
-    // snapshot cache created by the first TrollStore builds.
-    let kind = "CCPocketUsageWidgetV2"
+    let kind = "CCPocketUsageWidget"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: UsageProvider()) { entry in
             UsageWidgetView(entry: entry)
-                .privacySensitive(false)
-                .unredacted()
         }
         .configurationDisplayName("Token Usage")
         .description("Today’s token usage and Codex weekly allowance.")

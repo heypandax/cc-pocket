@@ -27,7 +27,6 @@
 - 修复从主页面会话列表切换时，旧会话迟到的响应覆盖新选择、导致跳回之前对话的问题。
 - 升级 Codex 会话标题：对直接复制首条问题的标题自动去除口语前缀、长链接和冗余尾句，生成简短的会话摘要；手动改名仍保持最高优先级。
 - 修复 TrollStore Token Widget 打码占位或黑屏：主 App 与 Widget 扩展改用包含 XML/DER entitlement 和完整标识的 ad-hoc 签名，云端打包会同时校验 App Group 与嵌套扩展签名后才上传 IPA。
-- Token Widget 升级为 V2 timeline kind，避免 WidgetKit 复用旧 TrollStore 构建留下的黑屏快照缓存；视图明确禁用隐私打码，无数据时也会显示可诊断的等待提示。
 - 修复文件附件图标在 Kotlin/Native iosArm64 编译时的符号冲突。
 
 ### 兼容性
