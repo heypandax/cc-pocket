@@ -12,7 +12,9 @@ actual fun publishUsageWidgetSnapshot(usage: Usage) {
     val defaults = NSUserDefaults(suiteName = WIDGET_GROUP) ?: return
     defaults.setObject(usage.tokensToday.toString(), forKey = "tokensToday")
     defaults.setObject(usage.requestsToday.toString(), forKey = "requestsToday")
-    usage.codexLimits?.secondary?.let {
+    // Prefer the weekly window, but keep the existing progress UI useful when the account/API only
+    // reports the primary five-hour window. Previously that valid state fell into the no-limit message.
+    (usage.codexLimits?.secondary ?: usage.codexLimits?.primary)?.let {
         defaults.setDouble((100.0 - it.usedPercent).coerceIn(0.0, 100.0), forKey = "weeklyRemaining")
     } ?: defaults.removeObjectForKey("weeklyRemaining")
     defaults.setObject(usage.codexLimits?.planType ?: "", forKey = "planType")

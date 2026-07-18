@@ -83,7 +83,7 @@ struct UsageWidgetView: View {
             if let remaining = entry.weeklyRemaining {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack {
-                        Text("CODEX WEEKLY").font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundColor(muted)
+                        Text("CODEX LIMIT").font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundColor(muted)
                         Spacer()
                         Text("\(Int(remaining.rounded()))% left").font(.caption2.weight(.semibold)).foregroundColor(ink)
                     }
