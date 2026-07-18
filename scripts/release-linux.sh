@@ -30,6 +30,23 @@ echo "==> gradle build + jpackage (bundled JRE)"
 APP="$ROOT/daemon/build/jpackage/cc-pocket-daemon"
 [ -d "$APP" ] || { echo "ERROR: jpackage output not found at $APP"; exit 1; }
 
+# jpackage's native Linux launcher consumes root-level --version before the Kotlin main sees it
+# (1.3.29 therefore printed Java/usage output even though MainKt handled the flag). Keep the native
+# launcher beside a tiny stable wrapper: intercept exactly --version, forward every other invocation
+# byte-for-byte. The service/updater still anchors on bin/cc-pocket-daemon as before.
+NATIVE="$APP/bin/cc-pocket-daemon.bin"
+mv "$APP/bin/cc-pocket-daemon" "$NATIVE"
+printf '%s\n' \
+  '#!/bin/sh' \
+  'if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then' \
+  "  echo 'cc-pocket-daemon $VERSION'" \
+  '  exit 0' \
+  'fi' \
+  'DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)' \
+  'exec "$DIR/cc-pocket-daemon.bin" "$@"' \
+  > "$APP/bin/cc-pocket-daemon"
+chmod 0755 "$APP/bin/cc-pocket-daemon"
+
 echo "==> tarball + checksum"
 OUT="cc-pocket-daemon-${VERSION}-linux-${ARCH}.tar.gz"
 tar -C "$(dirname "$APP")" -czf "$OUT" "$(basename "$APP")"
