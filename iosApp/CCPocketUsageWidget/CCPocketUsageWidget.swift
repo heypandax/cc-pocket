@@ -8,7 +8,6 @@ struct UsageEntry: TimelineEntry {
     let tokens: Int64
     let requests: Int64
     let weeklyRemaining: Double?
-    let limitWindowMinutes: Int
     let plan: String
     let updatedAt: Date?
 
@@ -20,7 +19,6 @@ struct UsageEntry: TimelineEntry {
             requests: Int64(defaults?.string(forKey: "requestsToday") ?? "0") ?? 0,
             weeklyRemaining: defaults?.object(forKey: "weeklyRemaining") == nil
                 ? nil : defaults?.double(forKey: "weeklyRemaining"),
-            limitWindowMinutes: defaults?.integer(forKey: "limitWindowMinutes") ?? 0,
             plan: defaults?.string(forKey: "planType") ?? "",
             updatedAt: (defaults?.double(forKey: "updatedAt") ?? 0) > 0
                 ? Date(timeIntervalSince1970: defaults!.double(forKey: "updatedAt")) : nil
@@ -30,8 +28,7 @@ struct UsageEntry: TimelineEntry {
 
 struct UsageProvider: TimelineProvider {
     func placeholder(in context: Context) -> UsageEntry {
-        UsageEntry(date: Date(), tokens: 12_800_000, requests: 86, weeklyRemaining: 66,
-                   limitWindowMinutes: 10_080, plan: "plus", updatedAt: Date())
+        UsageEntry(date: Date(), tokens: 12_800_000, requests: 86, weeklyRemaining: 66, plan: "plus", updatedAt: Date())
     }
 
     func getSnapshot(in context: Context, completion: @escaping (UsageEntry) -> Void) {
@@ -65,89 +62,53 @@ struct UsageWidgetView: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: family == .systemSmall ? 7 : 10) {
+        VStack(alignment: .leading, spacing: family == .systemSmall ? 8 : 10) {
             HStack(spacing: 6) {
                 Circle().fill(accent).frame(width: 7, height: 7)
-                Text("CC Pocket")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(ink).lineLimit(1).minimumScaleFactor(0.85)
+                Text("CC Pocket").font(.caption.weight(.semibold)).foregroundColor(ink)
                 Spacer(minLength: 2)
-                if family == .systemMedium && !entry.plan.isEmpty {
+                if !entry.plan.isEmpty {
                     Text(entry.plan.uppercased()).font(.system(size: 8, weight: .bold, design: .rounded))
                         .foregroundColor(teal).padding(.horizontal, 5).padding(.vertical, 3)
                         .background(teal.opacity(0.13)).clipShape(Capsule())
                 }
             }
 
-            if family == .systemMedium {
-                HStack(alignment: .top, spacing: 28) {
-                    metric(title: text("今日 TOKEN", "TODAY TOKENS"), value: shortTokens(entry.tokens))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    metric(title: text("今日请求", "TODAY REQUESTS"), value: "\(entry.requests)")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            } else {
-                metric(title: text("今日 TOKEN", "TODAY TOKENS"), value: shortTokens(entry.tokens))
+            VStack(alignment: .leading, spacing: 1) {
+                Text("TODAY TOKENS").font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundColor(muted)
+                Text(shortTokens(entry.tokens)).font(.system(size: family == .systemSmall ? 27 : 31, weight: .bold, design: .rounded))
+                    .foregroundColor(ink).minimumScaleFactor(0.7).lineLimit(1)
             }
 
             if let remaining = entry.weeklyRemaining {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack {
-                        Text(limitTitle)
-                            .font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundColor(muted)
+                        Text("CODEX WEEKLY").font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundColor(muted)
                         Spacer()
-                        Text(text("已用 \(usedPercent(remaining))%", "\(usedPercent(remaining))% used"))
-                            .font(.caption2.weight(.semibold)).foregroundColor(ink)
+                        Text("\(Int(remaining.rounded()))% left").font(.caption2.weight(.semibold)).foregroundColor(ink)
                     }
                     GeometryReader { proxy in
                         ZStack(alignment: .leading) {
                             Capsule().fill(Color.white.opacity(0.08))
-                            Capsule().fill(teal).frame(
-                                width: proxy.size.width * max(0, min((100 - remaining) / 100, 1))
-                            )
+                            Capsule().fill(teal).frame(width: proxy.size.width * max(0, min(remaining / 100, 1)))
                         }
                     }.frame(height: 5)
                 }
             } else {
-                Text(text("打开 App 刷新周额度", "Open app to refresh weekly limit"))
-                    .font(.system(size: 9)).foregroundColor(muted).lineLimit(1).minimumScaleFactor(0.8)
+                Text("Open CC Pocket to refresh limits")
+                    .font(.system(size: 9)).foregroundColor(muted).lineLimit(1)
             }
 
             HStack {
-                if family == .systemSmall {
-                    Label(text("\(entry.requests) 次请求", "\(entry.requests) requests"), systemImage: "arrow.up.circle")
-                        .lineLimit(1).minimumScaleFactor(0.75)
-                }
+                Label("\(entry.requests) requests", systemImage: "arrow.up.circle")
                 Spacer()
-                Text(entry.updatedAt == nil ? text("暂无数据", "No data") : text("已更新", "Updated"))
+                Text(entry.updatedAt == nil ? "No data" : "Updated")
             }.font(.system(size: 9)).foregroundColor(muted)
         }
         .padding(14)
         // The snapshot is aggregate usage, not private message content. Keep the placeholder readable
         // while WidgetKit is refreshing instead of showing an unexplained blurred/black rectangle.
         .unredacted()
-    }
-
-    private func metric(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(title).font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundColor(muted)
-            Text(value).font(.system(size: family == .systemSmall ? 27 : 29, weight: .bold, design: .rounded))
-                .foregroundColor(ink).minimumScaleFactor(0.7).lineLimit(1)
-        }
-    }
-
-    private func text(_ zh: String, _ en: String) -> String {
-        Locale.preferredLanguages.first?.hasPrefix("zh") == true ? zh : en
-    }
-
-    private var limitTitle: String {
-        entry.limitWindowMinutes >= 7 * 24 * 60
-            ? text("CODEX 周用量", "CODEX WEEKLY")
-            : text("CODEX 5 小时用量", "CODEX 5-HOUR")
-    }
-
-    private func usedPercent(_ remaining: Double) -> Int {
-        Int(max(0, min(100 - remaining, 100)).rounded())
     }
 
     private func shortTokens(_ value: Int64) -> String {
