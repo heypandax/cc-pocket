@@ -237,6 +237,8 @@
     <string name="settings_title">Settings</string>
     <string name="about_section">ABOUT</string>
     <string name="about_version">Version</string>
+    <string name="about_daemon_version">Daemon version</string>
+    <string name="about_daemon_unknown">Unknown (reconnect to refresh)</string>
     <string name="about_license">License</string>
     <string name="about_connection">Connection</string>
     <string name="settings_open">Settings</string>

@@ -204,6 +204,8 @@ fun SettingsScreen(repo: PocketRepository, onBack: () -> Unit) {
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(12.dp))) {
                 AboutRow(stringResource(Res.string.about_version), APP_VERSION)
                 Box(Modifier.fillMaxWidth().height(1.dp).background(Tok.hair))
+                AboutRow(stringResource(Res.string.about_daemon_version), repo.daemonVersion.value ?: stringResource(Res.string.about_daemon_unknown))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Tok.hair))
                 AboutRow(stringResource(Res.string.about_license), "MIT")
                 Box(Modifier.fillMaxWidth().height(1.dp).background(Tok.hair))
                 AboutRow(

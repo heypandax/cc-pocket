@@ -146,7 +146,7 @@ class DeviceSessions(
         send(deviceId, Wire.payload(Wire.HANDSHAKE, responderEph))
         // teach the device where this daemon lives on the LAN so its next connect can skip the relay;
         // null actively clears a stale stored address (listener since disabled / no usable interface)
-        sealAndSend(deviceId, DaemonInfo(lanUrl(), hostname()))
+        sealAndSend(deviceId, DaemonInfo(lanUrl(), hostname(), dev.ccpocket.daemon.util.DaemonVersion.CURRENT))
     }
 
     private suspend fun transport(deviceId: String, body: ByteArray) {
@@ -173,7 +173,7 @@ class DeviceSessions(
             log.info("first-contact PSK abandoned for ${deviceId.take(8)}… — device handshook without its ticket")
             // The DaemonInfo sent immediately after the handshake used the ticket-bound session.
             // Re-send it under the now-proven twin so this connection learns the LAN endpoint.
-            sealAndSend(deviceId, DaemonInfo(lanUrl(), hostname()))
+            sealAndSend(deviceId, DaemonInfo(lanUrl(), hostname(), dev.ccpocket.daemon.util.DaemonVersion.CURRENT))
         }
         val env = runCatching { PocketJson.decodeFromString<Envelope>(plaintext.decodeToString()) }.getOrNull() ?: return
         log.info("← ${env.body::class.simpleName} from ${deviceId.take(8)}…")

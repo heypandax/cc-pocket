@@ -733,7 +733,11 @@ data class LanHello(val deviceId: String) : ToDaemon
  */
 @Serializable
 @SerialName("pocket/daemon.info")
-data class DaemonInfo(val lanUrl: String? = null, val hostname: String? = null) : ToPhone
+data class DaemonInfo(
+    val lanUrl: String? = null,
+    val hostname: String? = null,
+    val version: String? = null,
+) : ToPhone
 
 @Serializable
 enum class ChatRole {

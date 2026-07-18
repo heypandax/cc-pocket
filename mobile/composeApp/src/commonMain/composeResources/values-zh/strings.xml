@@ -237,6 +237,8 @@
     <string name="settings_title">设置</string>
     <string name="about_section">关于</string>
     <string name="about_version">版本</string>
+    <string name="about_daemon_version">Daemon 版本</string>
+    <string name="about_daemon_unknown">未知（重新连接后刷新）</string>
     <string name="about_license">许可证</string>
     <string name="about_connection">连接</string>
     <string name="settings_open">设置</string>

@@ -368,6 +368,8 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     private var pushRegistered: Pair<String, String>? = null // last (platform, token) sent; skip redundant re-sends
     /** Task-complete push toggle (persisted, default on); the single source of truth the Settings switch binds to. */
     val notificationsOn = mutableStateOf(SecureStore.getString(K_NOTIFY) != "0")
+    /** Release reported by the connected daemon after each E2E handshake. */
+    val daemonVersion = mutableStateOf<String?>(null)
 
     /** Persisted default execution mode (Settings binds to it; the new-session picker pre-selects it).
      *  Applies to new sessions AND resumes (issue #50) — a resumed session no longer revives its old mode. */
@@ -1266,6 +1268,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         onBeforeSwitch?.invoke(target.accountId)
         disconnect()
         paired.value = target
+        daemonVersion.value = null
         Pairing.setActive(target.accountId)
         firstTicket = null // an already-paired daemon authenticates by static key — the PSK is only for first pair
         startRelay()
@@ -1568,6 +1571,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
             // address that already answered with the WRONG daemon key stays blacklisted — the daemon
             // re-advertises the same value on every handshake, which must not resurrect a dead probe.
             is DaemonInfo -> paired.value?.let { p ->
+                daemonVersion.value = f.version
                 if (p.directUrl != f.lanUrl && (f.lanUrl == null || f.lanUrl != badDirectUrl[p.accountId])) {
                     rememberDirectUrl(p.accountId, f.lanUrl)
                 }

@@ -434,6 +434,16 @@ class SerializationRoundTripTest {
     }
 
     @Test
+    fun daemonInfo_version_is_optional_and_back_compatible() {
+        val current = Envelope(id = "dv1", ts = 0, body = DaemonInfo("ws://x/v1/ws", "host", "1.3.30"))
+        val json = PocketJson.encodeToString(current)
+        assertTrue("\"version\":\"1.3.30\"" in json, json)
+        assertEquals(current, PocketJson.decodeFromString<Envelope>(json))
+        val legacy = """{"id":"dv2","ts":0,"to":"PEER","body":{"t":"pocket/daemon.info","hostname":"host"}}"""
+        assertEquals(DaemonInfo(null, "host", null), PocketJson.decodeFromString<Envelope>(legacy).body)
+    }
+
+    @Test
     fun sessionSummary_omits_null_gitBranch() {
         val s = SessionSummary(
             sessionId = "s", title = "t", firstPrompt = "p",
