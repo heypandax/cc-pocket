@@ -138,9 +138,7 @@ object CodexTranscriptScanner {
             // Codex's own thread title (session_index.jsonl) beats the first-prompt fallback — the same
             // precedence Claude's custom-title/ai-title gets. Untitled/older sessions have no index entry,
             // so they land on the first line of the first prompt exactly as before (#64).
-            title = titles[sid]?.takeIf { it.isNotBlank() }
-                ?: fp.lineSequence().firstOrNull { it.isNotBlank() }?.trim()?.take(60)
-                ?: sid,
+            title = sessionDisplayTitle(fp, titles[sid]),
             firstPrompt = fp,
             messageCount = userCount,
             cwd = cwd ?: "",

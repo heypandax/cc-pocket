@@ -57,6 +57,26 @@ class CodexTranscriptTest {
     }
 
     @Test
+    fun summarize_compacts_thread_name_that_is_just_the_original_question() {
+        val prompt = "然后请帮我把项目克隆到当前目录 https://github.com/ac54u-mobile/cc-pocket.git，完成后告诉我"
+        val f = Files.createTempFile("rollout-title", ".jsonl").also {
+            it.writeText(
+                """{"timestamp":"t0","type":"session_meta","payload":{"id":"thr-title","cwd":"/repo"}}""" + "\n" +
+                    """{"timestamp":"t1","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"$prompt"}]}}""",
+            )
+        }
+        val summary = CodexTranscriptScanner.summarize(f, "/repo", mapOf("thr-title" to prompt))!!
+        assertEquals("把项目克隆到当前目录 cc-pocket", summary.title)
+        assertNotEquals(prompt, summary.title)
+    }
+
+    @Test
+    fun summarize_keeps_a_real_generated_or_manual_title() {
+        val summary = CodexTranscriptScanner.summarize(tempRollout(), "/repo", mapOf("thr-xyz" to "Widget build pipeline"))!!
+        assertEquals("Widget build pipeline", summary.title)
+    }
+
+    @Test
     fun summarize_skips_injected_agents_md_block() {
         // Codex auto-prepends the repo's AGENTS.md as a `user` turn (`# AGENTS.md instructions for <path>`);
         // it must not seed the title/preview the way `<environment_context>` already didn't (real bug: rows
