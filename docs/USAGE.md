@@ -210,6 +210,10 @@ cc-pocket-daemon config --isolated-claude-auth on
 | 语音转写报「未安装 whisper」 | 在 Mac 上 `brew install whisper-cpp` 后重试 |
 | 想看 daemon 日志 | 停掉服务后前台跑 `cc-pocket-daemon run`，日志直接打在终端 |
 | 配对码过期 | 重新跑 `cc-pocket-daemon pair`（每次生成限时一次性码） |
+| 刚生成的配对码仍提示 `invalid or expired code` | App 与 daemon 很可能连接了不同 Relay；先运行 `cc-pocket-daemon status`，统一 Relay 后重新生成 |
+| Linux 显示 `cc-pocket-daemon: command not found` | 先用绝对路径运行，再把 `$HOME/.local/bin` 加入 PATH；详见 [daemon 部署](./DAEMON-DEPLOYMENT.md) |
+
+跨服务器迁移时不要只搬二进制；完整清单见 [服务器迁移与无锁定切换](./SERVER-MIGRATION.md)。
 
 ## 六、卸载
 

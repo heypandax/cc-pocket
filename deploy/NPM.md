@@ -17,6 +17,8 @@
    - Cache Assets：关闭
 6. SSL 页面申请 Let's Encrypt 证书，开启 Force SSL 和 HTTP/2 Support。
 
+从旧服务器迁移时，不要直接复制处于 WAL 模式的 `relay.db`；一致性备份、切换顺序和回滚步骤见 [服务器迁移手册](../docs/SERVER-MIGRATION.md)。
+
 验证：
 
 ```bash
@@ -24,3 +26,10 @@ curl -fsS https://relay.txx.app/healthz
 ```
 
 应输出 `ok`。不要给 Relay Compose 服务添加 `ports: 9000:9000`，避免绕过 NPM 将内部接口暴露到公网。
+
+若容器反复重启并出现 `failed to map segment` 或 `No native library found`，检查 Compose 的 `/tmp` tmpfs 是否包含 `exec`。sqlite-jdbc 会把本地库提取到该目录；仓库模板已使用：
+
+```yaml
+tmpfs:
+  - /tmp:rw,exec,nosuid,nodev,size=64m,mode=1777
+```
