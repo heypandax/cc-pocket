@@ -343,10 +343,11 @@ private fun <T> SegmentedRow(options: List<T>, selected: T, label: (T) -> String
     ) {
         options.forEach { opt ->
             val sel = selected == opt
+            val pickWithHaptic = rememberHapticClick { if (!sel) onPick(opt) }
             Box(
                 Modifier.weight(1f).clip(RoundedCornerShape(7.dp))
                     .then(if (sel) Modifier.background(Tok.accent) else Modifier)
-                    .clickable { onPick(opt) }.padding(vertical = 9.dp),
+                    .clickable(enabled = !sel, onClick = pickWithHaptic).padding(vertical = 9.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -363,6 +364,7 @@ private fun <T> SegmentedRow(options: List<T>, selected: T, label: (T) -> String
 /** A settings row with a title + subtitle on the left and a Switch on the right. */
 @Composable
 private fun ToggleRow(label: String, sub: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    val toggleWithHaptic = rememberHapticClick { onChange(!checked) }
     Row(
         Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -371,7 +373,7 @@ private fun ToggleRow(label: String, sub: String, checked: Boolean, onChange: (B
             Text(label, color = Tok.tx, fontSize = 14.sp)
             Text(sub, color = Tok.muted, fontSize = 11.5.sp)
         }
-        Switch(checked = checked, onCheckedChange = onChange)
+        Switch(checked = checked, onCheckedChange = { toggleWithHaptic() })
     }
 }
 

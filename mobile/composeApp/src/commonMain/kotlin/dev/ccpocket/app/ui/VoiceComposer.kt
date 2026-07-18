@@ -165,11 +165,12 @@ fun rememberImeSafeMirror(value: String, onValueChange: (String) -> Unit): ImeSa
 /** 44dp round action button: filled terracotta (send/done) or hairline outline (mic). */
 @Composable
 fun RoundActionButton(onClick: () -> Unit, filled: Boolean, enabled: Boolean = true, contentDescription: String?, content: @Composable () -> Unit) {
+    val tactileClick = rememberHapticClick(onClick)
     Box(
         Modifier.size(44.dp).clip(CircleShape)
             .background(if (filled) Tok.accent else Tok.base)
             .let { if (filled) it else it.border(1.dp, Tok.hair, CircleShape) }
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(enabled = enabled, onClick = tactileClick)
             .graphicsLayer { alpha = if (enabled) 1f else 0.5f },
         contentAlignment = Alignment.Center,
     ) { content() }

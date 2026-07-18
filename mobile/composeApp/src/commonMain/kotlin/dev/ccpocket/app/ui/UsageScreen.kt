@@ -192,9 +192,10 @@ fun UsageScreen(repo: PocketRepository, onBack: () -> Unit) {
                 Row(Modifier.clip(RoundedCornerShape(999.dp)).background(Tok.surface).border(1.dp, Tok.hair, RoundedCornerShape(999.dp)).padding(2.dp)) {
                     for ((label, d) in listOf("Today" to 1, "7d" to 7, "30d" to 30)) {
                         val on = d == days
+                        val selectRange = rememberHapticClick { if (!on) days = d }
                         Box(
                             Modifier.clip(RoundedCornerShape(999.dp)).then(if (on) Modifier.background(Tok.accent) else Modifier)
-                                .clickable { days = d }.padding(horizontal = 10.dp, vertical = 4.dp),
+                                .clickable(enabled = !on, onClick = selectRange).padding(horizontal = 10.dp, vertical = 4.dp),
                         ) { Text(label, color = if (on) Tok.base else Tok.tx2, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold) }
                     }
                 }
