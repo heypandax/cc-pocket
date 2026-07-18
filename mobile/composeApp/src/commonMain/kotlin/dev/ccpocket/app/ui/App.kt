@@ -203,7 +203,15 @@ fun App(scope: CoroutineScope) {
     PocketTheme(mode = ThemeMode.SYSTEM, fontScale = repo.fontScale.value) {
         Box(Modifier.fillMaxSize()) {
           GlassBackdrop(Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars).imePadding()) {
+            // Paint the mobile page canvas before consuming system-bar insets. Otherwise the inset-only
+            // status/home-indicator bands expose GlassBackdrop's warm/cool corner glows and read as two
+            // unrelated solid strips in both themes. Content still stays inside the safe area.
+            Column(
+                Modifier.fillMaxSize()
+                    .background(Tok.raised)
+                    .windowInsetsPadding(WindowInsets.systemBars)
+                    .imePadding(),
+            ) {
                 // pushes content down instead of overlaying the header; steady while retrying (no flicker)
                 // preview/recording mode hides the demo banner for a clean marketing capture
                 if (repo.demoMode.value && !dev.ccpocket.app.isPreviewMode()) StatusBanner(Tok.accent, stringResource(Res.string.demo_banner))
