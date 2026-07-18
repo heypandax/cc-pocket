@@ -31,7 +31,7 @@ jobs:
           # GitHub's macOS image may carry an unrelated untrusted aws/tap. It is not
           # needed here; remove it instead of weakening Homebrew's tap trust checks.
           brew untap aws/tap 2>/dev/null || true
-          brew install xcodegen
+          brew install xcodegen ldid
 
       - name: Unpin dev-box JDK from gradle.properties
         run: sed -i '' '/^org\.gradle\.java\.home=/d' gradle.properties
@@ -114,6 +114,27 @@ jobs:
           # Strip any leftover code signatures so TrollStore can inject its own.
           find "$APP" -type d -name "_CodeSignature" -exec rm -rf {} + 2>/dev/null || true
           rm -f "$APP/embedded.mobileprovision" 2>/dev/null || true
+
+          # An unsigned Xcode archive does not embed the targets' entitlements. TrollStore can sign an
+          # unsigned top-level executable on-device, but it cannot reconstruct the App Group capability
+          # that WidgetKit needs. The extension then appears in the gallery but never returns a timeline:
+          # medium stays redacted and small renders as a black tile. Fake-sign nested code first, then the
+          # containing app, preserving each target's declared entitlements for TrollStore to retain.
+          WIDGET="$APP/PlugIns/CCPocketUsageWidget.appex"
+          if [ ! -x "$WIDGET/CCPocketUsageWidget" ]; then
+            echo "::error::Widget extension executable missing at $WIDGET"
+            find "$APP" -maxdepth 4 -print
+            exit 1
+          fi
+          ldid -S"$GITHUB_WORKSPACE/iosApp/CCPocketUsageWidget/CCPocketUsageWidget.entitlements" \
+            "$WIDGET/CCPocketUsageWidget"
+          ldid -S"$GITHUB_WORKSPACE/iosApp/iosApp/iosApp.entitlements" "$APP/cc-pocket"
+
+          # Fail the build instead of publishing another visually present but unusable widget.
+          ldid -e "$WIDGET/CCPocketUsageWidget" > "$RUNNER_TEMP/widget-entitlements.plist"
+          ldid -e "$APP/cc-pocket" > "$RUNNER_TEMP/app-entitlements.plist"
+          grep -q "group.com.panda.ccpocket" "$RUNNER_TEMP/widget-entitlements.plist"
+          grep -q "group.com.panda.ccpocket" "$RUNNER_TEMP/app-entitlements.plist"
 
           # Classic unsigned IPA: Payload/<AppName>.app + zip
           IPA_OUT="cc-pocket-${VERSION}-build${BUILD}-trollstore.ipa"

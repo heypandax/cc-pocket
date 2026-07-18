@@ -106,6 +106,9 @@ struct UsageWidgetView: View {
             }.font(.system(size: 9)).foregroundColor(muted)
         }
         .padding(14)
+        // The snapshot is aggregate usage, not private message content. Keep the placeholder readable
+        // while WidgetKit is refreshing instead of showing an unexplained blurred/black rectangle.
+        .unredacted()
     }
 
     private func shortTokens(_ value: Int64) -> String {
