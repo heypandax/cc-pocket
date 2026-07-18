@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -56,9 +55,6 @@ import dev.ccpocket.protocol.AgentKind
 import dev.ccpocket.protocol.AgentModel
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 
@@ -128,18 +124,6 @@ fun modelAlias(model: String?): String {
     val m = model?.trim().orEmpty()
     if (m.isEmpty()) return ""
     return m.removePrefix("claude-").takeWhile { it != '-' && it != '[' && it != '_' }.ifBlank { m }
-}
-
-internal fun midTruncateModel(id: String, head: Int = 8, tail: Int = 4): String =
-    if (id.length <= head + tail + 1) id else id.take(head) + "…" + id.takeLast(tail)
-
-/** Keep Claude's familiar alias, but preserve real gateway/Codex/Cursor ids in the composer chip. */
-internal fun modelChipLabel(model: String?): String {
-    val value = model?.trim().orEmpty()
-    if (value.isEmpty()) return ""
-    val claudeFamily = value.startsWith("claude-", ignoreCase = true) ||
-        CLAUDE_MODEL_OPTIONS.any { (_, alias) -> alias.equals(value, ignoreCase = true) }
-    return if (claudeFamily) modelAlias(value) else midTruncateModel(value)
 }
 
 /** Compact human token count: 45200 -> "45k", 1000000 -> "1.0M" (one decimal, truncated). */
@@ -216,31 +200,6 @@ private fun ContextBar(used: Long?, total: Long?) {
 
 @Composable
 private fun Hairline() = Box(Modifier.fillMaxWidth().height(1.dp).background(Tok.hair))
-
-@Composable
-internal fun ModelChip(label: String, open: Boolean, enabled: Boolean, contentDescription: String, onClick: () -> Unit) {
-    Row(
-        Modifier.height(30.dp).clip(RoundedCornerShape(999.dp)).background(Tok.raised)
-            .border(1.dp, if (open) Tok.accent else Tok.hair, RoundedCornerShape(999.dp))
-            .clickable(enabled = enabled, onClick = onClick).alpha(if (enabled) 1f else 0.42f)
-            .padding(start = 10.dp, end = 8.dp).semantics { this.contentDescription = contentDescription },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, color = Tok.tx2, fontFamily = FontFamily.Monospace, fontSize = 11.sp,
-            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 82.dp))
-        Spacer(Modifier.width(5.dp))
-        Text(if (open) "⌄" else "⌃", color = Tok.muted, fontSize = 11.sp)
-    }
-}
-
-@Composable
-fun ModelSheet(repo: PocketRepository, onDismiss: () -> Unit) {
-    PocketSheet(onDismiss) {
-        Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 14.dp, top = 4.dp)) {
-            ModelPicker(repo, onBack = null, onDone = onDismiss)
-        }
-    }
-}
 
 // ════════════════════════════════════════════════════════════════════
 //  Quick actions: switch model / effort, compact, clear, simplify
@@ -673,7 +632,7 @@ private fun CtxPill(ctx: String, big: Boolean) {
  * aliases; Codex sessions list Codex model ids.
  */
 @Composable
-private fun ModelPicker(repo: PocketRepository, onBack: (() -> Unit)?, onDone: () -> Unit) {
+private fun ModelPicker(repo: PocketRepository, onBack: () -> Unit, onDone: () -> Unit) {
     val agent = repo.sessionAgent.value ?: AgentKind.CLAUDE
     LaunchedEffect(agent) {
         if (agent == AgentKind.CURSOR) repo.refreshCursorModels()
@@ -731,7 +690,7 @@ private fun ModelPicker(repo: PocketRepository, onBack: (() -> Unit)?, onDone: (
     LaunchedEffect(switchingTo) { if (switchingTo != null) { delay(4000); onDone() } }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
-        onBack?.let { back -> Text("‹ ", color = Tok.tx2, fontSize = 18.sp, modifier = Modifier.clickable(enabled = switchingTo == null, onClick = back).padding(end = 4.dp)) }
+        Text("‹ ", color = Tok.tx2, fontSize = 18.sp, modifier = Modifier.clickable(enabled = switchingTo == null, onClick = onBack).padding(end = 4.dp))
         Text(stringResource(Res.string.qa_model), color = Tok.tx, fontSize = 20.sp, fontWeight = FontWeight.Bold)
     }
     Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

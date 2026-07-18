@@ -1255,7 +1255,6 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
     var showModeSheet by remember { mutableStateOf(false) }
     var showSessionInfo by remember { mutableStateOf(false) }
     var showQuickActions by remember { mutableStateOf(false) }
-    var showModelSheet by remember { mutableStateOf(false) }
     var quickActionSection by remember { mutableStateOf(QuickActionSection.MAIN) }
     var showBgJobs by remember { mutableStateOf(false) }
     var showTerminal by remember { mutableStateOf(false) }
@@ -1643,15 +1642,6 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                                 onFocused = ::revealLatest,
                             )
                             Spacer(Modifier.width(8.dp))
-                            Box(Modifier.height(44.dp), contentAlignment = Alignment.Center) {
-                                ModelChip(
-                                    label = modelChipLabel(repo.model.value).ifBlank { stringResource(Res.string.value_model_default) },
-                                    open = showModelSheet,
-                                    enabled = !repo.streaming.value,
-                                    contentDescription = stringResource(Res.string.qa_model),
-                                ) { showModelSheet = true }
-                            }
-                            Spacer(Modifier.width(8.dp))
                             // while a turn runs the ■ stays put; typed text adds Send NEXT TO it instead of
                             // replacing it — mirrors Claude Code, where interrupt (Esc) and queue-a-message
                             // (Enter) coexist. Claude's stream-json input queues a mid-turn user message and
@@ -1717,12 +1707,11 @@ private fun ChatScreen(repo: PocketRepository, onOpenFleet: () -> Unit = {}, onO
                 initialSection = quickActionSection,
             ) { showQuickActions = false }
         }
-        if (showModelSheet) ModelSheet(repo) { showModelSheet = false }
         if (showChangedFiles) ChangedFilesSheet(repo, onOpen = { repo.openChangedFile(it) }) { showChangedFiles = false }
         if (showBgJobs) BackgroundJobsSheet(repo.backgroundJobs, onStop = { repo.stopBackgroundJob(it.id) }) { showBgJobs = false }
         if (showSwitcher) dev.ccpocket.app.ui.fleet.MachineSwitcherSheet(repo, onDismiss = { showSwitcher = false }, onManage = onOpenFleet)
         if (viewer == null && !repo.micPermissionSheet.value && !showModeSheet && !showSessionInfo &&
-            !showQuickActions && !showModelSheet && !showChangedFiles && !showBgJobs && !showSwitcher
+            !showQuickActions && !showChangedFiles && !showBgJobs && !showSwitcher
         ) {
             EdgeSwipeBack {
                 repo.saveDraft(draftKey, input)
