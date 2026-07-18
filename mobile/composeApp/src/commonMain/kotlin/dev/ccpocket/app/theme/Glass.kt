@@ -29,8 +29,10 @@ import kotlin.math.max
 @Composable
 fun GlassBackdrop(
     modifier: Modifier = Modifier,
+    ambientGlows: Boolean = true,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    val base = Tok.base
     val top = Tok.canvasTop
     val bottom = Tok.canvasBottom
     val warm = Tok.glowWarm
@@ -55,6 +57,12 @@ fun GlassBackdrop(
                 radius = radius * 0.9f,
             )
             onDrawBehind {
+                if (!ambientGlows) {
+                    // Small OLED phone panels make broad low-contrast radial gradients visibly quantize
+                    // into concentric rings. Mobile uses a solid canvas and keeps depth in its glass cards.
+                    drawRect(color = base)
+                    return@onDrawBehind
+                }
                 drawRect(brush = canvas)
                 // Broad, deliberately quiet glows: enough variation for the glass to read, never enough
                 // to compete with code, permissions, or status colors layered above it.

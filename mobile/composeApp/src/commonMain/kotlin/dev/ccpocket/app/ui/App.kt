@@ -202,7 +202,7 @@ fun App(scope: CoroutineScope) {
     // Mobile always follows the phone's current light/dark appearance. Desktop keeps its own override.
     PocketTheme(mode = ThemeMode.SYSTEM, fontScale = repo.fontScale.value) {
         Box(Modifier.fillMaxSize()) {
-          GlassBackdrop(Modifier.fillMaxSize()) {
+          GlassBackdrop(Modifier.fillMaxSize(), ambientGlows = false) {
             // Paint the mobile page canvas before consuming system-bar insets. Otherwise the inset-only
             // status/home-indicator bands expose GlassBackdrop's warm/cool corner glows and read as two
             // unrelated solid strips in both themes. Content still stays inside the safe area.
