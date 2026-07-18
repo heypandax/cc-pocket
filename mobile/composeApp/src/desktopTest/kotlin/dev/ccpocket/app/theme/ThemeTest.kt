@@ -32,6 +32,13 @@ class ThemeTest {
     }
 
     @Test
+    fun light_glass_surfaces_leave_the_ambient_canvas_visible() {
+        assertTrue(LightPalette.surface.alpha < 0.75f, "cards must not become an opaque white mask")
+        assertTrue(LightPalette.raised.alpha < 0.90f, "raised panels still need visible canvas depth")
+        assertTrue(LightPalette.surface != Color.White)
+    }
+
+    @Test
     fun resolvesToDark_maps_mode_and_os_to_effective_dark() {
         // this polarity feeds the system-bar icon color (issue #117): dark -> light icons, light -> dark icons
         assertFalse(ThemeMode.LIGHT.resolvesToDark(systemDark = true), "LIGHT forces light regardless of OS")

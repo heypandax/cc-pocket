@@ -76,14 +76,17 @@ val DarkPalette = Palette(
 /** Light variant (issue #63): warm off-white surfaces with the same terracotta identity, each hue
  *  darkened enough to stay legible on light backgrounds (accents double as text/borders in places). */
 val LightPalette = Palette(
-    base = Color(0xFFFAF9F7),
-    canvasTop = Color(0xFFFFF8F3),
-    canvasBottom = Color(0xFFEAF2F3),
-    surface = Color(0xC9FFFFFF),
-    raised = Color(0xEDFFFFFF),
+    base = Color(0xFFF4F1EC),
+    canvasTop = Color(0xFFF9EDE4),
+    canvasBottom = Color(0xFFDDEBEC),
+    // Warm translucent material instead of near-opaque white. Most screens are composed from surface
+    // cards; an almost-white token turned the light theme into one continuous white mask and hid the
+    // ambient canvas that is meant to give the glass hierarchy depth.
+    surface = Color(0xA8F5EDE5),
+    raised = Color(0xD9FAF4EE),
     hair = Color(0x40717B8A),
     glassBorder = Color(0x526A7482),
-    glassHighlight = Color(0xD9FFFFFF),
+    glassHighlight = Color(0x8FFFFFFF),
     glassShadow = Color(0x290E1828),
     glowWarm = Color(0xFFC15F3C),
     glowCool = Color(0xFF1C8B82),
