@@ -16,18 +16,37 @@ CC Pocket 让手机成为电脑或服务器上 Claude Code、OpenAI Codex 与 Cu
 
 ## 一、安装电脑端（daemon）
 
+Linux：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ac54u-mobile/cc-pocket/main/scripts/install.sh | bash
+```
+
+Windows PowerShell：
+
+```powershell
+irm https://raw.githubusercontent.com/ac54u-mobile/cc-pocket/main/scripts/install.ps1 | iex
+```
+
+macOS Homebrew：
+
 ```bash
 brew install --cask ac54u-mobile/tap/cc-pocket
 cc-pocket-daemon service-install --apply   # 注册为登录自启服务，断线自动重连
-cc-pocket-daemon pair                      # 打出二维码 + 6 位配对码
 ```
 
-- 升级：`brew upgrade --cask ac54u-mobile/tap/cc-pocket`（**必须用全名**——Homebrew 官方仓有个不相关的同名 `cc-pocket` cask，裸名会操作到那个包）；
+- Linux/Windows 安装器会自动选择最新 Release、校验 Release 随附的 `SHA256SUMS`、安装内置 JRE 的 daemon，并注册后台服务；重复运行安装命令即可升级；
+- macOS 升级：`brew upgrade --cask ac54u-mobile/tap/cc-pocket`（**必须用全名**——Homebrew 官方仓有个不相关的同名 `cc-pocket` cask，裸名会操作到那个包）；
+- daemon 启动时会分别探测 Claude、Codex 和 Cursor；三者均为可选，只需安装并登录你实际使用的后端；
 - 可选（语音输入给 Android／桌面客户端用，iPhone 不需要）：`brew install whisper-cpp`。
 
 ## 二、配对手机
 
-手机打开 CC Pocket：**扫描**终端里的二维码，或**手输** 6 位配对码。第 6 位输入完成后数字键盘会自动收起并开始连接，无需再点一次按钮。配对一次永久有效，之后手机在任何网络（蜂窝、异地 Wi-Fi）都能连上，无需与电脑同一局域网。
+1. 未配对时打开 CC Pocket，App 会先显示与电脑系统对应的安装步骤；安装完成后点「去配对」。
+2. 在要连接的电脑终端运行 `cc-pocket-daemon pair`。这是一条**电脑端命令**，不要输入到 App 的六位配对码框。
+3. App **扫描**终端里的二维码，或**手输**终端显示的 6 位配对码。第 6 位输入完成后数字键盘会自动收起并开始连接，无需再点一次按钮。
+
+配对一次永久有效，之后手机在任何网络（蜂窝、异地 Wi-Fi）都能通过默认生产 Relay `wss://relay.txx.app` 连接，无需与电脑位于同一局域网。
 
 配对无需注册账号——身份就是设备密钥本身。多台手机可分别配对同一台电脑。
 

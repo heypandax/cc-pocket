@@ -67,7 +67,10 @@ import qrscanner.QrScanner
 /** "Connect your computer" — pair by 6-digit code (or scan/paste a link). Matches the design mock. */
 @Composable
 fun PairingScreen(repo: PocketRepository) {
-    var showOnboarding by remember { mutableStateOf(false) }
+    // A first-time user needs the computer-side install step before a pairing-code field makes
+    // sense.  "Add computer" is different: an existing user already has the daemon setup context,
+    // so keep taking that flow straight to the scanner/code screen.
+    var showOnboarding by remember { mutableStateOf(!repo.addingDevice.value) }
     if (showOnboarding) { OnboardingScreen(onBack = { showOnboarding = false }, onPairNow = { showOnboarding = false }); return }
     var code by remember { mutableStateOf("") }
     var showPaste by remember { mutableStateOf(false) }

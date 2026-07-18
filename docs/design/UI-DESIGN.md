@@ -90,7 +90,8 @@
 
 ```mermaid
 flowchart TD
-    S[启动 / 连接态] -->|未配对| P[配对 Pairing]
+    S[启动 / 连接态] -->|未配对| O[安装引导 Onboarding]
+    O -->|电脑端已安装| P[配对 Pairing]
     S -->|已配对在线| D
     P --> D[选择电脑 DaemonPicker]
     D --> DIR[选择工作目录 DirectoryPicker]
@@ -104,7 +105,7 @@ flowchart TD
     C --> SET[设置 / 设备管理 Settings]
 ```
 
-- **配对**是一次性 onboarding，完成后默认直达「会话列表」（记住上次的电脑+目录）。
+- **安装引导 → 配对**是一次性 onboarding：先指导用户在电脑端安装并运行 daemon，再扫码或输入六位码；完成后默认直达「会话列表」（记住上次的电脑+目录）。
 - **主轴**是会话栈：列表 → 对话；对话内可下钻切目录、上浮权限 sheet。
 - **三种连接状态**贯穿全局，由顶部连接条表达：`未配对` / `已配对·daemon 离线` / `在线`。
 

@@ -2,6 +2,14 @@
 
 本文用于把 GitHub Actions 构建好的 daemon 安装到 Linux 服务器。生产服务器不需要 Gradle、Android SDK 或源码构建环境，低内存服务器也不应现场执行 `./gradlew :daemon:installDist`。
 
+一般安装或升级直接运行官方安装器即可；它会解析最新 GitHub Release、根据 CPU 架构下载 daemon、使用同一 Release 的 `SHA256SUMS` 校验，并注册／重启 systemd user 服务：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ac54u-mobile/cc-pocket/main/scripts/install.sh | bash
+```
+
+安装后运行 `cc-pocket-daemon pair`，再在 App 中扫描二维码或输入终端显示的六位配对码。`cc-pocket-daemon pair` 必须在服务器终端执行，不能填进 App 的配对码输入框。
+
 跨服务器迁移、Relay 数据库复制和 App 协调切换见 [SERVER-MIGRATION.md](./SERVER-MIGRATION.md)。
 
 ## 1. 生成 artifact
@@ -10,7 +18,7 @@
 2. 选择 **Run workflow**，填写要发布的 daemon 版本。
 3. 等工作流成功后，在该次运行的 **Artifacts** 下载 daemon 压缩包。产物名为
    `cc-pocket-daemon-<version>-linux-x86_64.tar.gz`，内置 JRE，生产服务器不需要安装 Java。
-4. 校验下载来源和文件完整性后再传到服务器。
+4. 下载同一 Release 的 `SHA256SUMS`，校验来源和文件完整性后再传到服务器。
 
 App 与 daemon 使用独立版本号。是否兼容应以协议和功能要求为准，不要因为 App 版本较小就把较新的 daemon 降级。
 

@@ -15,6 +15,7 @@ CC Pocket 是一个可自托管的远程智能编程客户端：在 iPhone、And
 - 权限卡片显示风险等级和影响范围，活动时间线保留允许、拒绝、工具执行与任务完成记录。
 - 会话跨设备接力与阅读位置恢复；重新打开聊天回到上次位置或最新消息。
 - 6 位配对码自动连接，长回复渲染更顺滑，键盘不再遮挡底部消息。
+- 未配对用户首次打开 App 时先看到电脑端安装步骤，再进入扫码／六位码页面，避免把终端命令误填成配对码。
 - Codex 官方用量与重置能力、目标、原生代码审查、会话分支/归档、Skills、Plugins、MCP 与 Apps。
 - OpenAI 官方 Blossom 图标、Cursor 官方图标与 iOS 原生图片附件图标。
 
@@ -109,7 +110,7 @@ daemon/build/install/cc-pocket-daemon/bin/cc-pocket-daemon pair
 ./gradlew :mobile:composeApp:run
 ```
 
-正式使用时请按照 [daemon 运维文档](docs/RUN.md)和 [relay 部署文档](deploy/README.md)配置常驻服务，并填写你自己的 relay 地址。本仓库不承诺提供公共托管 relay。
+正式使用请从 [完整使用与安装指南](docs/USAGE.md)开始。当前生产 Relay 为 `wss://relay.txx.app`；自托管部署见 [relay 部署文档](deploy/README.md)。
 
 生产服务器建议直接安装 GitHub Actions 生成的 daemon artifact，不要在低内存服务器上执行 Gradle 构建。见 [daemon artifact 部署指南](docs/DAEMON-DEPLOYMENT.md)。
 

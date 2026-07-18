@@ -36,7 +36,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontFamily
@@ -97,7 +96,7 @@ fun OnboardingScreen(onBack: () -> Unit, onPairNow: () -> Unit) {
         )
     }
 
-    Column(Modifier.fillMaxSize().background(Tok.raised)) {
+    Column(Modifier.fillMaxSize().background(Tok.base)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton({ onBack() }) { Text("←", color = Tok.tx2, fontSize = 18.sp) }
         }
@@ -141,7 +140,7 @@ fun OnboardingScreen(onBack: () -> Unit, onPairNow: () -> Unit) {
         }
 
         // footer
-        Column(Modifier.fillMaxWidth().background(Tok.base)) {
+        Column(Modifier.fillMaxWidth().background(Tok.raised)) {
             Box(Modifier.fillMaxWidth().height(1.dp).background(Tok.hair))
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 24.dp)) {
                 Button(
@@ -150,7 +149,7 @@ fun OnboardingScreen(onBack: () -> Unit, onPairNow: () -> Unit) {
                     shape = RoundedCornerShape(13.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Tok.accent, contentColor = Tok.base),
                 ) { Text(stringResource(Res.string.ob_pair_now), fontSize = 16.sp, fontWeight = FontWeight.Bold) }
-                TextButton({ uri.openUri("https://ac54u-mobile.github.io/cc-pocket/") }, Modifier.fillMaxWidth()) {
+                TextButton({ uri.openUri("https://github.com/ac54u-mobile/cc-pocket/blob/main/docs/USAGE.md") }, Modifier.fillMaxWidth()) {
                     Text(stringResource(Res.string.ob_guide), color = Tok.tx2, fontSize = 13.5.sp)
                 }
             }
@@ -163,7 +162,7 @@ private fun StepRow(s: OStep) {
     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
-                Modifier.size(27.dp).clip(CircleShape).background(Tok.base).border(1.dp, Tok.accent, CircleShape),
+                Modifier.size(27.dp).clip(CircleShape).background(Tok.raised).border(1.dp, Tok.accent, CircleShape),
                 contentAlignment = Alignment.Center,
             ) { Text(s.n.toString(), color = Tok.accent, fontFamily = FontFamily.Monospace, fontSize = 13.sp) }
             if (!s.last) Box(Modifier.width(1.dp).weight(1f).background(Tok.hair))
@@ -184,7 +183,7 @@ private fun StepRow(s: OStep) {
 private fun CmdCard(lines: List<String>) {
     Spacer(Modifier.height(9.dp))
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0xFF0B0C0D))
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Tok.raised)
             .border(1.dp, Tok.hair, RoundedCornerShape(10.dp))
             .padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 8.dp),
         verticalAlignment = Alignment.Top,
