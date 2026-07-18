@@ -50,8 +50,12 @@ jobs:
             :daemon:compileKotlin \
             :daemon:compileTestKotlin \
             :mobile:composeApp:compileKotlinDesktop
-          # Keep compilation mandatory. Only the known flaky daemon test execution is advisory.
-          ./gradlew --no-daemon :daemon:test || echo "::warning::daemon test had failures (flaky upstream test possible)"
+          # A small number of coroutine timing tests are occasionally flaky on shared runners.
+          # Retry the complete daemon suite once, but never hide a repeatable regression.
+          if ! ./gradlew --no-daemon :daemon:test; then
+            echo "::warning::daemon tests failed once; retrying the complete suite"
+            ./gradlew --no-daemon :daemon:test --rerun-tasks
+          fi
 
       - name: Upload test reports on failure
         if: failure()
