@@ -7,6 +7,7 @@ import dev.ccpocket.daemon.agent.AgentIo
 import dev.ccpocket.daemon.agent.AgentSpec
 import dev.ccpocket.daemon.claude.AuthService
 import dev.ccpocket.daemon.disk.DirectoryService
+import dev.ccpocket.daemon.disk.FileInboxService
 import dev.ccpocket.daemon.disk.LiveProcesses
 import dev.ccpocket.daemon.disk.ProjectPaths
 import dev.ccpocket.daemon.disk.TranscriptScanner
@@ -78,6 +79,7 @@ class RequestRouterRenameSessionTest {
             registry = registry,
             dirs = DirectoryService(),
             transcribe = TranscribeService(scope) { null },
+            inbox = FileInboxService { null },
             shell = ShellService(scope),
             scope = scope,
             auth = AuthService(scope, { emptyList() }, { 0 }),
