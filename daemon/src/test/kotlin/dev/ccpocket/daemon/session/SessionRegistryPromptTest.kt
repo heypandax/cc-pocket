@@ -60,6 +60,35 @@ class SessionRegistryDeleteTest {
         assertEquals("agent_unavailable", registry.deleteSession(dev.ccpocket.protocol.AgentKind.CURSOR, "/w/api", "sid-1"))
     }
 
+    /** A kind missing at startup is re-probed on use: before "install" the reprobe misses and the agent
+     *  stays unavailable; after it, the first use registers the backend and later uses hit the cache
+     *  (no daemon restart needed — the bug where a CLI installed after startup stayed invisible). */
+    @Test
+    fun late_installed_cli_registers_via_reprobe_without_restart() = runBlocking {
+        var installed = false
+        var probes = 0
+        val registry = SessionRegistry(
+            CoroutineScope(Dispatchers.Default),
+            backends = emptyMap(),
+            reprobe = { kind ->
+                probes++
+                if (installed && kind == dev.ccpocket.protocol.AgentKind.CLAUDE) {
+                    dev.ccpocket.daemon.agent.AgentBackendFactory {
+                        object : dev.ccpocket.daemon.agent.AgentBackend by FakeBackend() {
+                            override fun deleteSession(workdir: String, sessionId: String) = true
+                        }
+                    }
+                } else null
+            },
+        )
+        assertEquals("agent_unavailable", registry.deleteSession(dev.ccpocket.protocol.AgentKind.CLAUDE, "/w/api", "sid-1"))
+        installed = true // the user installs the CLI while the daemon keeps running
+        assertEquals(null, registry.deleteSession(dev.ccpocket.protocol.AgentKind.CLAUDE, "/w/api", "sid-1"))
+        val probesAfterHit = probes
+        assertEquals(null, registry.deleteSession(dev.ccpocket.protocol.AgentKind.CLAUDE, "/w/api", "sid-1"))
+        assertEquals(probesAfterHit, probes, "a resolved backend must be cached, not re-probed on every use")
+    }
+
     /** Minimal inert backend: only the members delete-path tests touch are real. */
     private open class FakeBackend : dev.ccpocket.daemon.agent.AgentBackend {
         override val kind = dev.ccpocket.protocol.AgentKind.CLAUDE

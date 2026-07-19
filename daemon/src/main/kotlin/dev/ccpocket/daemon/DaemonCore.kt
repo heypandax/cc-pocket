@@ -23,9 +23,11 @@ class DaemonCore(
     backends: Map<AgentKind, AgentBackendFactory>,
     val prefs: DaemonPrefs = DaemonPrefs.load(),
     claudeConfigDir: java.nio.file.Path? = null,
+    // late CLI resolver for kinds missing from [backends] — see SessionRegistry.reprobe
+    reprobe: (AgentKind) -> AgentBackendFactory? = { null },
 ) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val registry = SessionRegistry(scope, backends)
+    val registry = SessionRegistry(scope, backends, reprobe = reprobe)
 
     init {
         // unhide transcripts a crashed previous instance stranded hidden (issue #70) — off the

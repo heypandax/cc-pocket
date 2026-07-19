@@ -52,8 +52,23 @@ class SessionRegistry(
     // a temp dir instead of the user's real ~/.claude/projects (every other path resolves via the
     // backends / ProjectPaths directly, same default)
     private val projectsRoot: Path = ProjectPaths.projectsRoot(),
+    // Re-resolve a kind ABSENT from [backends] (its CLI wasn't installed when the daemon started) — a
+    // hit is cached in [lateBackends], so installing a CLI works without a daemon restart. Default
+    // null-resolver keeps the old fixed-map behavior (tests).
+    private val reprobe: (AgentKind) -> AgentBackendFactory? = { null },
 ) {
-    fun cursorModels(): List<AgentModel> = backends[AgentKind.CURSOR]?.create()?.availableModels().orEmpty()
+    // kinds whose CLI appeared after startup, resolved on first use via [reprobe]
+    private val lateBackends = java.util.concurrent.ConcurrentHashMap<AgentKind, AgentBackendFactory>()
+
+    private fun backendFor(kind: AgentKind): AgentBackendFactory? =
+        backends[kind] ?: lateBackends[kind] ?: reprobe(kind)?.also {
+            lateBackends[kind] = it
+            log.info("late-registered $kind backend (CLI installed after daemon startup)")
+        }
+
+    private fun allBackends(): List<AgentBackendFactory> = AgentKind.entries.mapNotNull { backendFor(it) }
+
+    fun cursorModels(): List<AgentModel> = backendFor(AgentKind.CURSOR)?.create()?.availableModels().orEmpty()
     private val mutex = Mutex()
     private val log = dev.ccpocket.daemon.util.logger("SessionRegistry")
     private val convos = mutableMapOf<String, Conversation>()
@@ -167,7 +182,7 @@ class SessionRegistry(
             }
         }
         // resume + control: an idle session, or an explicit "Continue here" take-over
-        val factory = backends[open.agent]
+        val factory = backendFor(open.agent)
         if (factory == null) {
             sink.emit(PocketError("agent_unavailable", "no backend registered for ${open.agent}"))
             return ""
@@ -207,7 +222,7 @@ class SessionRegistry(
 
     /** Resumable sessions for [workdir] across every agent backend (each tags its summaries with its kind), newest-first. */
     fun listSessions(workdir: String): List<SessionSummary> =
-        backends.values.flatMap { runCatching { it.create().listSessions(workdir) }.getOrDefault(emptyList()) }
+        allBackends().flatMap { runCatching { it.create().listSessions(workdir) }.getOrDefault(emptyList()) }
             .sortedByDescending { it.lastModified }
 
     /** Archived threads are an official Codex concept; other backends are intentionally excluded. */
@@ -239,7 +254,7 @@ class SessionRegistry(
                 observes.values.any { it.isFor(sessionId) }
         }
         if (live) return "session_live"
-        val backend = backends[agent] ?: return "agent_unavailable"
+        val backend = backendFor(agent) ?: return "agent_unavailable"
         val deleted = runCatching { backend.create().deleteSession(workdir, sessionId) }.getOrDefault(false)
         return if (deleted) null else "not_found"
     }

@@ -103,6 +103,25 @@ internal fun backendFactories(
     }
 }
 
+/** Re-resolve ONE kind's CLI on demand (SessionRegistry's reprobe hook): a CLI installed after the daemon
+ *  started becomes usable without a restart — the startup probe in RunCmd only registers what existed then.
+ *  Only ever called for kinds absent at startup, so claude resolved here runs WITHOUT credential isolation
+ *  (ClaudeHome/AuthService are wired at startup, when claude wasn't there to isolate); a restart picks
+ *  isolation up as usual. */
+internal fun lateBackendFactory(
+    kind: AgentKind,
+    claudeBin: String?,
+    codexBin: String?,
+    cursorBin: String?,
+): AgentBackendFactory? = when (kind) {
+    AgentKind.CLAUDE -> runCatching { ClaudeLauncher.resolveExecutable(claudeBin) }.getOrNull()
+        ?.let { exe -> AgentBackendFactory { ClaudeBackend(exe, null) } }
+    AgentKind.CODEX -> runCatching { CodexLauncher.resolveExecutable(codexBin) }.getOrNull()
+        ?.let { exe -> AgentBackendFactory { CodexBackend(exe.toString()) } }
+    AgentKind.CURSOR -> runCatching { CursorLauncher.resolveExecutable(cursorBin) }.getOrNull()
+        ?.let { exe -> AgentBackendFactory { CursorBackend(exe.toString()) } }
+}
+
 private class RunCmd : CliktCommand(name = "run") {
     private val host by option().default("127.0.0.1")
     private val port by option().int().default(8765)
@@ -146,6 +165,7 @@ private class RunCmd : CliktCommand(name = "run") {
             backendFactories(claudeExe, claudeHome, codexExe, cursorExe),
             prefs = prefs,
             claudeConfigDir = claudeHome,
+            reprobe = { kind -> lateBackendFactory(kind, claudeBin, codexBin, cursorBin) },
         )
         if (claudeHome != null) {
             echo("claude credential isolation: ON — daemon login store: $claudeHome")
