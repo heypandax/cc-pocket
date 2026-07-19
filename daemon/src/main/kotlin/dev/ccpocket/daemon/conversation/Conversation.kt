@@ -599,8 +599,23 @@ class Conversation(
                         val firstTime = sessionId == null
                         ev.sessionId?.let { sessionId = it }
                         ev.model?.let { reported ->
-                            backend.sanitizeModel(reported)?.let { model = it; backfilledModel = null }
-                        } // accept the agent's resolved model only when it is still a launchable id
+                            // Accept the agent's resolved model only when it is still a launchable id.
+                            // Cursor is special: its init often echoes display names (spaced → dropped by
+                            // sanitizeModel) OR the bare token "Auto". Trusting that Auto echo used to
+                            // permanently overwrite an explicit pick (e.g. Grok) after the first send —
+                            // the phone chip snapped back to Auto and every later turn relaunched with
+                            // --model auto. Keep the user's non-auto selection when init only reports Auto.
+                            backend.sanitizeModel(reported)?.let { resolved ->
+                                val keepExplicitCursorPick = backend.kind == AgentKind.CURSOR &&
+                                    resolved.equals("auto", ignoreCase = true) &&
+                                    !model.isNullOrBlank() &&
+                                    !model.equals("auto", ignoreCase = true)
+                                if (!keepExplicitCursorPick) {
+                                    model = resolved
+                                    backfilledModel = null
+                                }
+                            }
+                        }
                         if (firstTime && sessionId != null) {
                             reemitLive = false // this announce already carries the fresh sessionId + mode
                             log.info("$convoId session live: $sessionId")
