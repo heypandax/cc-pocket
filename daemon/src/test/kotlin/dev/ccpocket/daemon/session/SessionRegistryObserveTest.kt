@@ -44,9 +44,14 @@ class SessionRegistryObserveReapTest {
     @Test
     fun reopen_same_client_reaps_the_stale_observer_but_not_other_clients() = runBlocking {
         val registry = SessionRegistry(scope, backends = emptyMap(), processProbe = { _, _ -> LiveProcesses.ExternalClaude.PRESENT })
-        // a fresh transcript written AFTER the registry booted → externallyActive gate passes (probe stubbed PRESENT)
+        // a fresh transcript written AFTER the registry booted → externallyActive gate passes (probe stubbed PRESENT).
+        // The mtime is pinned 1s ahead: the kernel's coarse file-time clock can lag currentTimeMillis by a
+        // tick, and a write landing "before" the registry's startedAt trips the restart-amnesia guard →
+        // no observe view → flaky failure on busy CI runners.
         Files.createDirectories(projectDir)
-        Files.writeString(projectDir.resolve("$sid.jsonl"), "{}")
+        val transcript = projectDir.resolve("$sid.jsonl")
+        Files.writeString(transcript, "{}")
+        Files.setLastModifiedTime(transcript, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() + 1_000))
         val open = OpenSession(workdir, resumeId = sid)
 
         val phoneA1 = registry.open(open, sink("dev:phone"))
