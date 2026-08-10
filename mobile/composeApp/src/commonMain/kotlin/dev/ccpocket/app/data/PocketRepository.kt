@@ -1775,7 +1775,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         pendingOpen = null
         if (convoId.value != null && currentSessionId == t.sessionId) return // already in this session — don't churn it
         sessionsDir.value = null // drop any half-open session list so the chat is what shows
-        openSession(t.workdir, t.sessionId, title = t.title, agent = t.agent ?: sessionDefaultAgent)
+        openSession(t.workdir, t.sessionId, title = t.title, agent = t.agent)
     }
 
     /** Relay control-plane events (not E2E daemon traffic) drive the honest connection phase. */
@@ -3072,6 +3072,10 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 migrateDraft(f.sessionId) // before re-keying: composerKey() still reads the old chain
                 convoId.value = f.convoId; workdir.value = f.workdir; observing.value = f.observing; currentSessionId = f.sessionId
                 f.sessionId?.let { sessionKey.value = it }
+                // The opener's title is only an optimistic seed: push/deep-link routes know no title at
+                // all, and a project row can be stale while Codex renames its thread. A new daemon sends
+                // transcript/index truth here; null from an older daemon deliberately keeps the seed.
+                f.title?.takeIf { it.isNotBlank() }?.let { chatTitle.value = it }
                 f.mode?.let { mode.value = it } // daemon is the source of truth — corrects the optimistic badge
                 permissionMode.value = f.permissionMode // unconditional: a normal mode clears a prior `auto`
                 effort.value = f.effort // unconditional: `/effort default` must clear an optimistic explicit level
@@ -5127,7 +5131,9 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         resumeId: String? = null,
         startMode: PermissionMode = defaultMode.value,
         title: String? = null,
-        agent: AgentKind = sessionDefaultAgent,
+        // null means the caller has no backend provenance (old deep link / old daemon). An explicit
+        // list-row agent must outrank a stale SessionParams value persisted by a previous App version.
+        agent: AgentKind? = null,
         startPermissionMode: String? = defaultPermissionMode.value,
         // issue #199: a model picked in the new-session step, for THIS session only. Null = the usual
         // ladder (an existing session's remembered nullable value; a NEW session's per-agent Settings
@@ -5138,9 +5144,9 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         // A resumed session keeps its recorded backend, so gate that effective agent rather than only the
         // caller's seed. This is synchronous like the idempotence refusals below: unsupported ZCode never
         // clears the current chat, flips opening state or reaches the wire.
-        val targetAgent = resumeId?.let { sessionParams[it]?.agent } ?: agent
+        val targetAgent = agent ?: resumeId?.let { sessionParams[it]?.agent } ?: sessionDefaultAgent
         if (!supportsAgent(targetAgent)) return false
-        val attempt = OpenAttempt(wd, resumeId, startMode, title, agent, startPermissionMode, startModel)
+        val attempt = OpenAttempt(wd, resumeId, startMode, title, targetAgent, startPermissionMode, startModel)
         // #235: the two refusals, both decided SYNCHRONOUSLY — the defect they fix is two clicks landing in
         // the same frame, so any check that only ran inside the coroutine below was already too late.
         //  (a) the same target is in flight: a second OpenSession restarts the very session the first is
@@ -5209,7 +5215,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         // (default = the persisted Settings mode), so "continue here" honors what Settings says instead of
         // silently reviving a stale per-session mode (issue #50). Model/effort/agent still restore per-session.
         val openMode = startMode
-        val openAgent = saved?.agent ?: agent // resumed sessions keep their backend; new ones use the picked default
+        val openAgent = agent
         val openPermissionMode =
             startPermissionMode?.takeIf { openAgent == AgentKind.CLAUDE && it == CLAUDE_PERMISSION_MODE_AUTO }
         // Each backend seeds from its own persisted default. The compatibility guard is the final defence against
@@ -6487,7 +6493,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         // the authoritative id right after (a fork or lock-heal can hand back a different one), so a
         // wrong guess self-corrects instead of sticking in the MRU.
         rememberOpenedSession(item.dirKey, item.sessionId, item.title, item.agent, markSeen = false)
-        openSession(item.dirKey, item.sessionId, title = item.title, agent = item.agent ?: sessionDefaultAgent)
+        openSession(item.dirKey, item.sessionId, title = item.title, agent = item.agent)
     }
 
     /** Leaving the chat or losing the connection invalidates any in-flight capture. */
@@ -6537,8 +6543,8 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                     // default. Other backends keep their established fallback to the Settings effort.
                     effort = takeoverEffort,
                     takeOver = true,
-                    lastEventSeq = lastEventSeqFor(sid),
                     agent = agent,
+                    lastEventSeq = lastEventSeqFor(sid),
                     permissionMode = permissionMode.value,
                     serviceTier = serviceTier.value,
                 ),

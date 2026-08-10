@@ -55,7 +55,7 @@ import dev.ccpocket.app.resources.ap_legacy_note
 import dev.ccpocket.app.resources.ap_project
 import dev.ccpocket.app.resources.ap_queue
 import dev.ccpocket.app.resources.ap_recorded_title
-import dev.ccpocket.app.resources.ap_required
+import dev.ccpocket.app.resources.agent_needs_permission
 import dev.ccpocket.app.resources.ap_waiting_sub
 import dev.ccpocket.app.resources.ap_waiting_title
 import dev.ccpocket.app.resources.diff_more_lines
@@ -65,6 +65,7 @@ import dev.ccpocket.app.theme.Tok
 import dev.ccpocket.app.theme.TypeRole
 import dev.ccpocket.app.ui.MarkdownText
 import dev.ccpocket.app.ui.RiskBadge
+import dev.ccpocket.app.ui.agentName
 import dev.ccpocket.app.ui.relativeTime
 import dev.ccpocket.app.ui.tilde
 import kotlinx.coroutines.delay
@@ -195,7 +196,7 @@ private fun ApprovalHeader(ui: ApprovalUi, seconds: Int, terminal: Boolean) {
             // a diamond for warning, a square for danger: the states differ by SHAPE, not only by hue
             Box(Modifier.size(8.dp).rotate(if (ui.ask.danger) 0f else 45f).background(accent))
             Text(
-                stringResource(Res.string.ap_required), color = accent,
+                stringResource(Res.string.agent_needs_permission, agentName(ui.agent)), color = accent,
                 style = TypeRole.action, modifier = Modifier.weight(1f),
             )
             // never a fabricated "1 of 1": the counter exists only while a burst really is queued

@@ -27,7 +27,7 @@ import dev.ccpocket.app.resources.ap_fail_closed
 import dev.ccpocket.app.resources.ap_authority_wait_title
 import dev.ccpocket.app.resources.ap_legacy_note
 import dev.ccpocket.app.resources.ap_more_options
-import dev.ccpocket.app.resources.ap_required
+import dev.ccpocket.app.resources.agent_needs_permission
 import dev.ccpocket.app.resources.ap_waiting_title
 import dev.ccpocket.app.resources.auto_denied_title
 import dev.ccpocket.app.resources.deny
@@ -98,7 +98,7 @@ class SecureApprovalSheetUiTest {
         onRoot().performTouchInput { click(Offset(4f, 4f)) }
         assertEquals(0, decisions, "a scrim tap must never answer for the user")
         assertEquals(0, dismissed, "…and must not close the sheet either")
-        assertPresent(str(Res.string.ap_required), substring = true)
+        assertPresent(str(Res.string.agent_needs_permission, "Claude"), substring = true)
 
         // positive control: the same harness DOES deliver a tap to a real decision, so the assertion
         // above is about the scrim swallowing it — not about clicks being inert in this test
@@ -119,7 +119,7 @@ class SecureApprovalSheetUiTest {
             }
         }
         // pinned header and pinned decisions both stay on screen; only the body scrolled
-        onAllNodes(hasText(str(Res.string.ap_required))).onFirst().assertIsDisplayed()
+        onAllNodes(hasText(str(Res.string.agent_needs_permission, "Claude"))).onFirst().assertIsDisplayed()
         onAllNodes(hasText(str(Res.string.deny))).onFirst().assertIsDisplayed()
         onAllNodes(hasText(str(Res.string.allow_once))).onFirst().assertIsDisplayed()
         onAllNodes(hasText(str(Res.string.allow_for_task))).onFirst().assertIsDisplayed()

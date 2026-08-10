@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -52,9 +54,12 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -82,6 +87,8 @@ data class ModeInfo(
 
 // same hue as the semantic info token — a getter so it tracks the light/dark palette (#63)
 private val Indigo get() = Tok.info
+
+internal const val POCKET_SHEET_DRAG_HANDLE_TAG = "pocket-sheet-drag-handle"
 
 /** Trims a single line's leading and centers the glyph in it — fixes text riding high when vertically centered. */
 internal val TightCenter = TextStyle(
@@ -115,12 +122,15 @@ fun PocketSheet(onDismiss: () -> Unit, dropKeyboard: Boolean = true, content: @C
     // opens focused on purpose, and a blanket clearFocus here would race its own focus request. That sheet
     // owns the keyboard from the first frame, so the inset fight above never starts.
     val focus = LocalFocusManager.current
+    val dismissThresholdPx = with(LocalDensity.current) { 64.dp.toPx() }
+    var dragY by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(dropKeyboard) { if (dropKeyboard) focus.clearFocus() }
     dev.ccpocket.app.SystemBackHandler(enabled = true) { onDismiss() } // Android back = scrim tap
     Box(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().background(Color(0x94000000)).pointerInput(Unit) { detectTapGestures { onDismiss() } })
         Column(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                .graphicsLayer { translationY = dragY }
                 .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                 .background(Tok.raised)
                 .pointerInput(Unit) { detectTapGestures { } } // swallow taps so they don't dismiss via the scrim
@@ -128,7 +138,26 @@ fun PocketSheet(onDismiss: () -> Unit, dropKeyboard: Boolean = true, content: @C
                 .imePadding() // sheets render outside the app's ime-padded Box — never hide behind the keyboard
                 .padding(bottom = 10.dp),
         ) {
-            Box(Modifier.align(Alignment.CenterHorizontally).padding(vertical = 8.dp).size(width = 38.dp, height = 5.dp).clip(CircleShape).background(Tok.hair))
+            // The visible handle owns a full-width gesture target, so even a sheet that reaches nearly to
+            // the status bar can always be dismissed without competing with its scrollable content.
+            Box(
+                Modifier.fillMaxWidth().height(36.dp)
+                    .testTag(POCKET_SHEET_DRAG_HANDLE_TAG)
+                    .pointerInput(onDismiss, dismissThresholdPx) {
+                        detectVerticalDragGestures(
+                            onVerticalDrag = { _, delta -> dragY = (dragY + delta).coerceAtLeast(0f) },
+                            onDragEnd = {
+                                val dismiss = dragY >= dismissThresholdPx
+                                dragY = 0f
+                                if (dismiss) onDismiss()
+                            },
+                            onDragCancel = { dragY = 0f },
+                        )
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(Modifier.size(width = 38.dp, height = 5.dp).clip(CircleShape).background(Tok.hair))
+            }
             content()
         }
     }
@@ -165,14 +194,28 @@ fun ModeSheet(
                         Text(stringResource(Res.string.mode_switching), color = Tok.tx2, fontSize = 12.5.sp)
                     }
                 }
-                Column(
-                    Modifier.padding(top = 8.dp).alpha(if (switching) 0.55f else 1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    (MODES + if (agent == AgentKind.CLAUDE && autoAvailable) listOf(AUTO_MODE) else emptyList()).forEach { m ->
-                        ModeRow(m, selected = current == m.key && nativeMode == m.nativeMode, enabled = !switching) {
-                            if (m.key == PermissionMode.BYPASS_PERMISSIONS && current != PermissionMode.BYPASS_PERMISSIONS) confirmBypass = true
-                            else onSelect(m.key, m.nativeMode)
+                if (agent == AgentKind.CODEX) {
+                    Column(
+                        Modifier.padding(top = 8.dp).alpha(if (switching) 0.55f else 1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        CODEX_PRESETS.forEach { p ->
+                            PresetRow(p, selected = current == p.mode) {
+                                if (p.danger && current != PermissionMode.BYPASS_PERMISSIONS) confirmBypass = true
+                                else onSelect(p.mode, null)
+                            }
+                        }
+                    }
+                } else {
+                    Column(
+                        Modifier.padding(top = 8.dp).alpha(if (switching) 0.55f else 1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        (MODES + if (agent == AgentKind.CLAUDE && autoAvailable) listOf(AUTO_MODE) else emptyList()).forEach { m ->
+                            ModeRow(m, selected = current == m.key && nativeMode == m.nativeMode, enabled = !switching) {
+                                if (m.key == PermissionMode.BYPASS_PERMISSIONS && current != PermissionMode.BYPASS_PERMISSIONS) confirmBypass = true
+                                else onSelect(m.key, m.nativeMode)
+                            }
                         }
                     }
                 }
@@ -334,6 +377,39 @@ fun MonoChip(text: String, c: Color = Tok.tx2) {
         modifier = Modifier.background(Tok.surface, RoundedCornerShape(6.dp))
             .border(1.dp, Tok.hair, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
     )
+}
+
+/** One Codex preset row: a named approval/sandbox combination instead of Claude's mode vocabulary. */
+@Composable
+private fun PresetRow(p: CodexPreset, selected: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(12.dp)
+    val outline = if (p.danger) Tok.danger else if (selected) Tok.codex else Tok.hair
+    val fill = when {
+        !selected -> Tok.surface
+        p.danger -> Tok.danger.copy(alpha = 0.07f)
+        else -> Tok.codex.copy(alpha = 0.12f)
+    }
+    Column(
+        Modifier.fillMaxWidth().clip(shape).background(fill).border(1.5.dp, outline, shape)
+            .clickable(onClick = onClick).padding(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(p.name), color = if (p.danger) Tok.danger else Tok.tx, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            if (p.danger) Icon(Icons.Rounded.WarningAmber, null, tint = Tok.danger, modifier = Modifier.size(14.dp))
+            if (p.recommended) Text(
+                stringResource(Res.string.recommended_badge), color = Tok.codex, fontSize = 9.5.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.border(1.dp, Tok.codex.copy(alpha = 0.42f), RoundedCornerShape(999.dp)).padding(horizontal = 7.dp, vertical = 1.dp),
+            )
+            Spacer(Modifier.weight(1f))
+            if (selected) Icon(Icons.Rounded.Check, null, tint = if (p.danger) Tok.danger else Tok.codex, modifier = Modifier.size(15.dp))
+        }
+        Text(stringResource(p.desc), color = Tok.tx2, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp, bottom = 8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val chipColor = if (p.danger) Tok.danger else Tok.tx2
+            MonoChip(stringResource(p.askChip), chipColor)
+            MonoChip(stringResource(p.fsChip), chipColor)
+        }
+    }
 }
 
 @Composable

@@ -1,5 +1,6 @@
 package dev.ccpocket.app.ui.approval
 
+import dev.ccpocket.protocol.AgentKind
 import dev.ccpocket.app.ui.isShellTool
 import dev.ccpocket.protocol.PermissionAsk
 import dev.ccpocket.protocol.PermissionRiskUpdated
@@ -86,6 +87,8 @@ data class ApprovalUi(
     val timer: ApprovalTimer,
     /** The daemon's authoritative `AskWithdrawn(TIMED_OUT)`. The only remote path into the terminal state. */
     val timedOutSignal: Boolean,
+    /** Backend that produced this ask; used only for honest provider attribution in the header. */
+    val agent: AgentKind = AgentKind.CLAUDE,
 ) {
     /**
      * Whether the sheet shows its read-only terminal state.
@@ -113,6 +116,7 @@ fun approvalUi(
     queueProgress: Pair<Int, Int>? = null,
     handoffReview: Boolean = false,
     timedOutSignal: Boolean = false,
+    agent: AgentKind = AgentKind.CLAUDE,
 ): ApprovalUi {
     require(!ask.isQuestion) { "AskUserQuestion belongs in the conversation card, not Secure Approval" }
     val recordedShell = handoffReview && isShellTool(ask.tool)
@@ -159,5 +163,6 @@ fun approvalUi(
             ApprovalTimer.Countdown((ask.timeoutSec ?: LEGACY_TIMEOUT_SEC).coerceAtLeast(0))
         },
         timedOutSignal = timedOutSignal,
+        agent = agent,
     )
 }
