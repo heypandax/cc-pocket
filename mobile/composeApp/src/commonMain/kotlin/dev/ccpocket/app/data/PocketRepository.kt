@@ -116,6 +116,16 @@ import dev.ccpocket.protocol.HandoffListing
 import dev.ccpocket.protocol.HandoffResult
 import dev.ccpocket.protocol.HandoffStatus
 import dev.ccpocket.protocol.HandoffUpdated
+import dev.ccpocket.protocol.AgentGroupDelivery
+import dev.ccpocket.protocol.AgentGroupHandoffBrief
+import dev.ccpocket.protocol.AgentGroupLaunchProfile
+import dev.ccpocket.protocol.AgentGroupMember
+import dev.ccpocket.protocol.ConfigureAgentGroup
+import dev.ccpocket.protocol.ConfigureAgentGroupMember
+import dev.ccpocket.protocol.HandoffAgentGroup
+import dev.ccpocket.protocol.RemoveAgentGroupMember
+import dev.ccpocket.protocol.RouteAgentGroup
+import dev.ccpocket.protocol.SESSION_GROUP_COLLABORATION
 import dev.ccpocket.protocol.ListHandoffs
 import dev.ccpocket.protocol.RecallHandoff
 import dev.ccpocket.protocol.ReturnHandoff
@@ -459,6 +469,13 @@ data class SentFile(
  *  normal failure so the backoff reconnect kicks in — NOT a CancellationException (which would read as
  *  an intentional teardown and skip the retry). */
 class ConnectWedgedException : Exception("connect wedged: no attach within timeout")
+
+/** One advertised capability object for every owner connection; kept as a testable wire contract. */
+internal fun pocketClientCaps() = ClientCaps(
+    supportsAgents = listOf(AGENT_WIRE_OPENCODE, AGENT_WIRE_KIMI),
+    supportsApprovalV2 = true,
+    supportsAgentGroups = true,
+)
 
 /**
  * State hub: consumes inbound [Frame]s into observable Compose state, exposes user actions.
@@ -868,6 +885,53 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
      *  empty — a group-aware daemon with zero groups yet (show "+ New group" so the FIRST one is creatable)
      *  vs an older daemon / a guest connection that omits groups entirely (hide the affordance). */
     val groupsSupported = mutableStateOf(false)
+    /** #232 capability ECHO from Sessions. Separate from #119 grouping support: an old daemon can
+     * understand groups while ignoring collaboration purpose and must not receive agent-group actions. */
+    val agentGroupsSupported = mutableStateOf(false)
+    /** Last collaboration dispatch refusal. Success clears it; the source composer stays intact on failure. */
+    val agentGroupDeliveryError = mutableStateOf<String?>(null)
+    /** Success receipt consumed by phone/desktop composers: clear only the exact text the daemon accepted. */
+    val agentGroupAcceptedGen = mutableStateOf(0)
+    val agentGroupAcceptedText = mutableStateOf<String?>(null)
+    val agentGroupAcceptedSourceDraftKey = mutableStateOf<String?>(null)
+    /** Route/handoff is an indivisible navigation transaction until PromptAck or an explicit failure. */
+    val agentGroupDeliveryPending = mutableStateOf(false)
+    /** Who the in-flight dispatch is for — the locked composer names its destination instead of leaving the
+     *  user to infer it from a view that has already switched. */
+    val agentGroupDeliveryTarget = mutableStateOf<String?>(null)
+    /** Roster edits answer with the re-pushed Sessions frame or a PocketError. Both were invisible to the
+     *  form that caused them (the error landed as a chat system message in whatever chat happened to be
+     *  open), so a refused rename/add silently looked like a no-op. */
+    val agentGroupRosterBusy = mutableStateOf(false)
+    val agentGroupRosterError = mutableStateOf<String?>(null)
+    /** Bumped when a roster mutation settles successfully, so an open form can close itself. */
+    val agentGroupRosterGen = mutableStateOf(0)
+    fun clearAgentGroupRosterError() { agentGroupRosterError.value = null }
+    fun clearAgentGroupDeliveryError() { agentGroupDeliveryError.value = null }
+    private var agentGroupDeliveryWatchdog: Job? = null
+    private data class PendingAgentGroupDelivery(
+        val frame: Frame,
+        val requestId: String,
+        val kind: String,
+        val sourceConvoId: String,
+        val groupId: String,
+        val targetMemberId: String,
+        val text: String?,
+        var promptId: String?,
+        val sourceDraftKey: String?,
+        val imageIds: Set<Long> = emptySet(),
+        val fileIds: Set<Long> = emptySet(),
+        var committed: Boolean = false,
+        var targetSessionId: String? = null,
+        var targetConvoId: String? = null,
+    )
+    private var pendingAgentGroupDelivery: PendingAgentGroupDelivery? = null
+    /** The one dispatch we stopped waiting for. Kept ONLY so a receipt that arrives after we gave up is
+     *  still honoured: the daemon accepted it, so the prompt may be running in the target right now. */
+    private var timedOutAgentGroupDelivery: PendingAgentGroupDelivery? = null
+    /** Delivery arms this before the target SessionLive; it fences late source frames during handoff. */
+    private var expectedAgentGroupSessionId: String? = null
+    private var expectedAgentGroupConvoId: String? = null
     /** True when THIS connection may rename sessions (issue #158): the daemon stamped
      *  [Sessions.renameSupported] (owner on a rename-aware daemon). False — an older daemon or a guest —
      *  hides the rename entry instead of sending a frame the daemon would silently drop. */
@@ -1860,7 +1924,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 // offers addressed to THIS device. Sending the ordinary volley here would be three refusals.
                 send(ListHandoffs())
             } else {
-                send(ClientCaps(supportsAgents = listOf(AGENT_WIRE_OPENCODE, AGENT_WIRE_KIMI), supportsApprovalV2 = true))
+                send(pocketClientCaps())
                 send(ListDirectories())
                 send(ListPendingApprovals)
             }
@@ -1976,6 +2040,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         // reconnect — the inbox re-pulls its whole list rather than trusting whatever it held locally.
         if (isCollaboratorInbox) send(ListHandoffs())
         when {
+            pendingAgentGroupDelivery?.committed == true -> {} // uncertain switch recovery below opens the known target, never the source
             // daemon finds the still-live conversation by sessionId → reattach + history replay, which the
             // ConvoHistory MERGE turns into a backfill of whatever streamed while the link was down (#107)
             convo != null && sid != null && wd != null -> {
@@ -1989,6 +2054,50 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
             }
             dir != null -> send(ListSessions(dir))
             else -> {} // directory list already refreshed by launchTransport
+        }
+        // Collaboration delivery is ledger-backed by requestId. Keep and replay the exact frame until
+        // PromptAck proves the payload landed. A live daemon returns its cached receipt without running
+        // the prompt twice; a restarted daemon rejects a stale-source replay, which moves the already-
+        // committed case into the explicit ambiguity flow in handleAgentGroupDelivery().
+        pendingAgentGroupDelivery?.let { pending ->
+            send(pending.frame)
+            armAgentGroupDeliveryWatchdog() // the request starts over on this link — so does its bound
+        }
+    }
+
+    internal suspend fun restoreAfterReconnectForTest() = restoreAfterReconnect()
+
+    private fun clearAgentGroupDeliveryState() {
+        agentGroupDeliveryWatchdog?.cancel(); agentGroupDeliveryWatchdog = null
+        pendingAgentGroupDelivery = null
+        timedOutAgentGroupDelivery = null // a new machine can never answer the old one's request
+        agentGroupDeliveryPending.value = false
+        agentGroupDeliveryTarget.value = null
+        expectedAgentGroupSessionId = null
+        expectedAgentGroupConvoId = null
+        agentGroupDeliveryError.value = null
+    }
+
+    /** (Re)start the bound on the current dispatch. Re-armed on every reconnect replay: the frame goes out
+     *  again there, so the daemon gets a fresh window rather than inheriting the drained one. */
+    private fun armAgentGroupDeliveryWatchdog() {
+        agentGroupDeliveryWatchdog?.cancel()
+        agentGroupDeliveryWatchdog = scope.launch {
+            delay(AGENT_GROUP_DELIVERY_TIMEOUT_MS)
+            val pending = pendingAgentGroupDelivery ?: return@launch
+            if (pending.committed) {
+                // The daemon accepted and we already switched views, but nothing ever proved the agent took
+                // the prompt: exactly the lost-ledger ambiguity. Never auto-resend — open the target to look.
+                recoverAmbiguousAgentGroupDelivery(pending, "delivery_state_lost", null)
+            } else {
+                // Nothing was ever accepted, so nothing can have run. Release the lock and keep the payload.
+                agentGroupDeliveryWatchdog = null
+                pendingAgentGroupDelivery = null
+                timedOutAgentGroupDelivery = pending
+                agentGroupDeliveryPending.value = false
+                agentGroupDeliveryTarget.value = null
+                agentGroupDeliveryError.value = "delivery_timeout"
+            }
         }
     }
 
@@ -2006,6 +2115,9 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         connected.value = false
         phase.value = ConnPhase.Connecting
         pendingOpen = null // a queued push-tap target is moot once the user drops the connection
+        // A request may be retried only on the SAME machine's reconnect. An explicit disconnect/fleet
+        // switch is an authority boundary: never replay its route on the next daemon, and drop its fence.
+        clearAgentGroupDeliveryState()
         // #235: so is the open claim — carrying it across a reconnect would make the same row's next click
         // a permanent no-op, and its retry target names a machine we may never come back to
         openInFlight = null; lastOpenAttempt = null
@@ -2024,6 +2136,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         // (it silently drops FetchPresets), breaking "never fire a plaintext token at a peer that can't
         // store it". authState clears for the same reason — the next daemon's account is a fresh fetch.
         authState.value = null
+        agentGroupsSupported.value = false
         presetsState.value = null; presetsStateRev.value = 0
         gatewayBaseUrl.value = null // per-daemon truth (issue #139): the next machine re-announces via DaemonInfo
         bridgeControl.value = null  // per-daemon truth too — the next daemon re-advertises via DaemonInfo (issue #91)
@@ -2157,6 +2270,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     internal fun demoteToSatellite() {
         convoId.value?.let { c -> if (observing.value || !streaming.value) scope.launch { send(CloseSession(c)) } }
         pendingOpen = null
+        clearAgentGroupDeliveryState()
         promptWatchdog?.cancel(); promptWatchdog = null; sendStalled.value = false
         promptRetry = null; promptPending = false; promptResendArmed = false
         convoId.value = null; currentSessionId = null; sessionKey.value = null
@@ -2408,6 +2522,14 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
      *    (cold-start seams and a background announce while browsing both land here harmlessly).
      */
     private fun acceptsSessionLive(f: SessionLive): Boolean {
+        expectedAgentGroupSessionId?.let { expectedSession ->
+            // The exact staged convo is routing authority once Delivery arms it. Its first prompt may
+            // heal/fork the persisted transcript after the preview SessionLive, replacing sessionId while
+            // stable memberId stays the same. Accept that same-convo correction; never accept a different
+            // conversation merely because it announces the expected session id.
+            expectedAgentGroupConvoId?.let { return f.convoId == it && f.sessionId != null }
+            return f.sessionId == expectedSession
+        }
         // #226: BACK is an authoritative navigation decision. The daemon may already have queued a
         // SessionLive for the chat we just left (turn-state reannounce, close race, reconnect replay).
         // sessionKey still names that chat for draft durability, so reject before consulting identity.
@@ -2428,11 +2550,15 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 sameDirPath(f.workdir, target.wd)
             }
         }
-        return f.convoId == convoId.value ||
+        return acceptsConvoFrame(f.convoId) ||
             (f.sessionId != null && f.sessionId == sessionKey.value) ||
             (pendingNewOpenWd != null && f.workdir == pendingNewOpenWd) ||
             (!opening.value && convoId.value == null && sessionKey.value == null)
     }
+
+    /** While an accepted group route is switching views, only the target conversation may mutate UI state. */
+    private fun acceptsConvoFrame(id: String): Boolean =
+        expectedAgentGroupConvoId?.let { id == it } ?: (id == convoId.value)
 
     // control-plane counterpart: Attached/PeerPresence/AuthError flow through handleControl, not handle.
     // Lets a test drive a (re)attach edge without a live transport — e.g. that Attached bumps connGen so
@@ -2467,6 +2593,14 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 sessionsDir.value = f.workdir; replace(sessions, f.items)
                 replace(sessionGroups, f.groups ?: emptyList()) // #119: null (older daemon) → no groups, flat list
                 groupsSupported.value = f.groups != null // groups=[] (owner, none yet) still enables management
+                agentGroupsSupported.value = f.agentGroupsSupported
+                // #232: every roster mutation answers with this re-pushed list. Still busy here means no
+                // refusal overtook it (a PocketError clears the flag first), so the edit landed.
+                if (agentGroupRosterBusy.value) {
+                    agentGroupRosterBusy.value = false
+                    agentGroupRosterError.value = null
+                    agentGroupRosterGen.value++
+                }
                 renameSupported.value = f.renameSupported // #158: false from an older daemon / a guest
                 archiveSupported.value = f.archiveSupported // #202: same contract as renameSupported
                 sessionsRefreshing.value = false
@@ -2592,6 +2726,37 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
             // conversation's AssistantChunk/ToolEvent frames then passed the guards and spliced another
             // session's live turn into the open transcript. Not our view's session → no state touched.
             is SessionLive -> if (acceptsSessionLive(f)) {
+                val previousConvo = convoId.value
+                val previousSession = sessionKey.value
+                val liveSessionId = f.sessionId
+                // A heal/fork can keep the conversation while replacing its persisted session id. The
+                // daemon has already rebound the roster; patch only the member identity we can prove:
+                // either the held view's same-convo member, or the explicitly accepted route target.
+                val reboundMemberId = when {
+                    expectedAgentGroupConvoId == f.convoId -> pendingAgentGroupDelivery?.targetMemberId
+                    previousConvo == f.convoId && previousSession != null && previousSession != liveSessionId ->
+                        sessionGroups.asSequence().filter { it.purpose == SESSION_GROUP_COLLABORATION }
+                            .flatMap { it.members.asSequence() }.firstOrNull { it.sessionId == previousSession }?.id
+                    else -> null
+                }
+                if (liveSessionId != null && reboundMemberId != null) {
+                    pendingAgentGroupDelivery
+                        ?.takeIf { it.targetMemberId == reboundMemberId }
+                        ?.targetSessionId = liveSessionId
+                    for (i in sessionGroups.indices) {
+                        val g = sessionGroups[i]
+                        if (g.purpose != SESSION_GROUP_COLLABORATION || g.members.none { it.id == reboundMemberId }) continue
+                        sessionGroups[i] = g.copy(members = g.members.map { member ->
+                            if (member.id == reboundMemberId) member.copy(sessionId = liveSessionId) else member
+                        })
+                    }
+                }
+                if (expectedAgentGroupConvoId == f.convoId ||
+                    (expectedAgentGroupConvoId == null && expectedAgentGroupSessionId == liveSessionId)
+                ) {
+                    expectedAgentGroupSessionId = null
+                    expectedAgentGroupConvoId = null
+                }
                 pendingNewOpenWd = null // the in-flight open (if any) is answered by this announce
                 openInFlight = null // …and so is its #235 claim — the next click on this row is a real request again
                 migrateDraft(f.sessionId) // before re-keying: composerKey() still reads the old chain
@@ -2665,17 +2830,20 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
             }
             // delivery receipt (issue #66): the daemon handed the turn to the agent — flip the bubble's
             // marker. Also first evidence: the retry copy is obsolete (the prompt cannot be lost anymore).
-            is PromptAck -> if (f.convoId == convoId.value) {
-                promptDelivered() // delivered ≠ turn started (issue #104): hand off to the turn-start watchdog
-                val i = messages.indexOfLast { it is ChatItem.User && it.promptId == f.promptId }
-                (messages.getOrNull(i) as? ChatItem.User)?.let { messages[i] = it.copy(pending = false, delivered = true) }
+            is PromptAck -> if (acceptsConvoFrame(f.convoId)) {
+                if (!finishAgentGroupPromptAck(f)) {
+                    promptDelivered() // delivered ≠ turn started (issue #104): hand off to the turn-start watchdog
+                    val i = messages.indexOfLast { it is ChatItem.User && it.promptId == f.promptId }
+                    (messages.getOrNull(i) as? ChatItem.User)?.let { messages[i] = it.copy(pending = false, delivered = true) }
+                }
             }
+            is AgentGroupDelivery -> handleAgentGroupDelivery(f)
             // Stream/turn frames carry their source convoId; this single-active-view model has one `messages`
             // list, so a frame from a just-left conversation (its tail still in flight when we switched) must
             // be dropped — else it renders into whatever convo is now open. Reopening the source replays its
             // full transcript via ConvoHistory, so nothing is actually lost. (Matches the BackgroundJobs guard.)
-            is AssistantChunk -> if (f.convoId == convoId.value) { promptEvidence(); appendChunk(f) }
-            is ToolEvent -> if (f.convoId == convoId.value) { promptEvidence(); finishThinking(); onToolEvent(f) }
+            is AssistantChunk -> if (acceptsConvoFrame(f.convoId)) { promptEvidence(); appendChunk(f) }
+            is ToolEvent -> if (acceptsConvoFrame(f.convoId)) { promptEvidence(); finishThinking(); onToolEvent(f) }
             is PendingApprovals -> {
                 pendingApprovals.clear()
                 f.items.filterNot { it.ask.isQuestion }.forEach { pendingApprovals[ApprovalKey(it.ask.convoId, it.ask.askId)] = it }
@@ -2690,7 +2858,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                         expiresAt = f.timeoutSec?.let { epochMillis() + it * 1000L },
                     )
                 }
-                if (f.convoId == convoId.value) {
+                if (acceptsConvoFrame(f.convoId)) {
                     // a card sitting in its terminal timed-out display (issue #100) must not dam the queue:
                     // a NEW live ask retires it (the old single-value model overwrote it here too)
                     if (pendingAsk.value?.let { ApprovalKey(it.convoId, it.askId) } == timedOutAskId.value && pendingAsk.value != null) advanceAsk()
@@ -2716,14 +2884,14 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
             }
             // approval design M2 §9.6: an action auto-ran under a grant — drop the audit chip into the
             // stream. Idempotent by eventId (reminder re-emits / reattach replays must not duplicate).
-            is AuthorizedActionRecorded -> if (f.convoId == convoId.value) {
+            is AuthorizedActionRecorded -> if (acceptsConvoFrame(f.convoId)) {
                 if (messages.none { it is ChatItem.AutoRun && it.eventId == f.eventId }) {
                     messages.add(ChatItem.AutoRun(f.eventId, f.actionSummary, f.basis, f.tool, f.matchedGrantId, f.decidedAt))
                 }
             }
             // M3 advisory risk: update a STILL-PENDING card's badge in place — never reset the daemon
             // deadline, and drop updates for asks already terminal (SMART-APPROVAL §八)
-            is PermissionRiskUpdated -> if (f.convoId == convoId.value) {
+            is PermissionRiskUpdated -> if (acceptsConvoFrame(f.convoId)) {
                 if (pendingAsk.value?.askId == f.askId || askQueue.any { it.askId == f.askId }) {
                     askRisk[ApprovalKey(f.convoId, f.askId)] = f
                 }
@@ -2745,7 +2913,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
             // claude withdrew the ask (interrupt / moved on) — drop the card; a question card leaves a muted notice
             is AskWithdrawn -> {
                 pendingApprovals.remove(ApprovalKey(f.convoId, f.askId))
-                if (f.convoId == convoId.value && pendingAsk.value?.askId == f.askId) {
+                if (acceptsConvoFrame(f.convoId) && pendingAsk.value?.askId == f.askId) {
                     val ask = pendingAsk.value
                     if (f.reason == AskWithdrawnReason.TIMED_OUT && ask?.questions == null) {
                         // issue #100: keep the permission card up but flip it to its terminal "timed out" state,
@@ -2758,7 +2926,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                         if (ask?.questions != null) messages.add(ChatItem.QuestionsWithdrawn)
                         advanceAsk()
                     }
-                } else if (f.convoId == convoId.value) {
+                } else if (acceptsConvoFrame(f.convoId)) {
                     // a QUEUED card the user never saw was retired (agent cancel / timeout) — drop it silently
                     // and shrink the burst so "n / m" stays honest
                     if (askQueue.removeAll { it.askId == f.askId }) {
@@ -2767,7 +2935,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                     }
                 }
             }
-            is TurnDone -> if (f.convoId == convoId.value) {
+            is TurnDone -> if (acceptsConvoFrame(f.convoId)) {
                 promptEvidence()
                 replayEcho = false // turn boundary — the next block belongs to a new turn, never a replay echo
                 val turnWasLive = streaming.value // gate the marker/notify on a turn we actually watched run
@@ -2806,17 +2974,17 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 f.usage?.takeIf { it.contextTokens > 0 }?.let { contextUsed.value = it.contextTokens }
                 upgradeWindowIfProven()
             }
-            is BackgroundJobs -> if (f.convoId == convoId.value) replace(backgroundJobs, f.jobs)
+            is BackgroundJobs -> if (acceptsConvoFrame(f.convoId)) replace(backgroundJobs, f.jobs)
             // Workflow orchestration (issue #106): whole-run snapshots keyed by runId; a re-push of the
             // same run reconciles in place. finalResult arrives only on the explicit terminal patch —
             // never let a later plain snapshot blank an already-received final return.
-            is WorkflowUpdate -> if (f.convoId == convoId.value) {
+            is WorkflowUpdate -> if (acceptsConvoFrame(f.convoId)) {
                 val prev = workflowRuns[f.run.runId]
                 workflowRuns[f.run.runId] = if (f.run.finalResult == null && prev?.finalResult != null) {
                     f.run.copy(finalResult = prev.finalResult)
                 } else f.run
             }
-            is WorkflowAgentDetail -> if (f.convoId == convoId.value) {
+            is WorkflowAgentDetail -> if (acceptsConvoFrame(f.convoId)) {
                 workflowAgentDetails["${f.runId}#${f.agentIndex}"] = f
             }
             // §6: the daemon accepts exactly REVIEW + REVIEW_READ_ONLY in v1 and refuses every other known
@@ -2832,6 +3000,13 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 // asked) — the common case (renaming a terminal-held session) has no chat open, and an
                 // open chat is an UNRELATED session whose transcript must not absorb the error line.
                 renameError.value = renameTarget?.let { RenameRefusal(it, f.message) }
+            } else if (agentGroupRosterBusy.value && f.code in ROSTER_REFUSAL_CODES) {
+                // #232, same reasoning as the rename refusal above: the roster form that asked is the only
+                // surface that can act on "that name is taken" / "the group is full". Landing it as a chat
+                // system message put the answer in an unrelated transcript — or nowhere, when the edit came
+                // from the sidebar with no chat open.
+                agentGroupRosterBusy.value = false
+                agentGroupRosterError.value = f.code
             } else {
                 // …and a failed switch must release the router, or the chat would hold an empty screen
                 opening.value = false; switchingSession.value = false // a failed open re-enables the one-tap entries right away
@@ -2839,7 +3014,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 openInFlight = null // #235: release the claim on the same edge — a refused open must stay retryable
                 messages.add(ChatItem.Sys(f.message)) // UI prepends the localized "error:" prefix
                 // a dead claude process never sends TurnDone — clear the streaming state here
-                if (f.code == "process_exited" && (f.convoId == null || f.convoId == convoId.value)) {
+                if (f.code == "process_exited" && (f.convoId?.let(::acceptsConvoFrame) != false)) {
                     promptEvidence()
                     finishThinking(); streaming.value = false
                 }
@@ -2847,7 +3022,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
             // The daemon no longer holds this conversation (idle-reaped during a link drop / daemon restart).
             // Recover instead of spinning: re-open (resume) the same session, and the SessionLive handler
             // resends the pending prompt exactly once. No session to resume → surface it honestly.
-            is SessionGone -> if (f.convoId == convoId.value) {
+            is SessionGone -> if (acceptsConvoFrame(f.convoId)) {
                 if (observing.value) {
                     // an observe view can't run turns — a stray send must not leave the caret spinning
                     // forever (the old blanket ignore did exactly that, issue #45 ②)
@@ -2871,7 +3046,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
             // the link was down, but the app may hold rows the transcript doesn't (pending bubbles, dividers,
             // scrollback past the replay window, a bubble ahead of a lagging disk read) — TranscriptMerge
             // reconciles without flashing, duplicating, or reordering.
-            is ConvoHistory -> if (f.convoId == convoId.value) {
+            is ConvoHistory -> if (acceptsConvoFrame(f.convoId)) {
                 if (f.delta) {
                     // incremental reattach (issue #147): only the rows past the cursor we sent — merged at
                     // the tail (or into the live-received overlap), NEVER a wipe/replace. An empty delta
@@ -2911,7 +3086,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
             // link deadline collapsed the spinner is still a valid reply and must be accepted (the fixed
             // bug). Clearing the anchor here dedupes a duplicate late fan-out; a page for a client that
             // never asked (anchor null) is dropped.
-            is ConvoHistoryPage -> if (f.convoId == convoId.value && historyPageAnchor != null) {
+            is ConvoHistoryPage -> if (acceptsConvoFrame(f.convoId) && historyPageAnchor != null) {
                 historyPageAnchor = null
                 historyPageDeadline?.cancel(); historyPageDeadline = null
                 historyLoadingOlder.value = false
@@ -2924,11 +3099,11 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
                 historyFirstSeq = f.firstSeq ?: historyFirstSeq
                 historyHasMore.value = f.hasMore && f.firstSeq != null
             }
-            is CommandList -> if (f.convoId == convoId.value) replace(slashCommands, f.commands)
+            is CommandList -> if (acceptsConvoFrame(f.convoId)) replace(slashCommands, f.commands)
             is Transcript -> onTranscript(f)
             // file upload receipt (issue #90) — matched on captureId inside; convo guard like CommandList
-            is FileUploaded -> if (f.convoId == convoId.value) onFileUploaded(f)
-            is ShellResult -> if (f.convoId == convoId.value) {
+            is FileUploaded -> if (acceptsConvoFrame(f.convoId)) onFileUploaded(f)
+            is ShellResult -> if (acceptsConvoFrame(f.convoId)) {
                 terminalBusy.value = false
                 val i = terminalEntries.indexOfLast { it.result == null } // fill the in-flight command's slot
                 if (i >= 0) terminalEntries[i] = terminalEntries[i].copy(result = f)
@@ -4269,6 +4444,71 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         if (name.isBlank()) return
         scope.launch { send(GroupCreate(dir, name.trim())) }
     }
+    fun createCollaborationGroup(name: String, wd: String? = null) {
+        if (!agentGroupsSupported.value) return
+        val dir = wd ?: sessionsDir.value ?: return
+        if (name.isBlank()) return
+        scope.launch { send(GroupCreate(dir, name.trim(), purpose = SESSION_GROUP_COLLABORATION)) }
+    }
+    fun configureAgentGroup(groupId: String, collaboration: Boolean, wd: String? = null) {
+        if (!agentGroupsSupported.value) return
+        val dir = wd ?: sessionsDir.value ?: return
+        scope.launch {
+            send(ConfigureAgentGroup(dir, groupId, if (collaboration) SESSION_GROUP_COLLABORATION else dev.ccpocket.protocol.SESSION_GROUP_ORGANIZATION))
+        }
+    }
+    fun configureAgentGroupMember(
+        groupId: String,
+        sessionId: String,
+        name: String,
+        role: String?,
+        memberId: String? = null,
+        defaultMember: Boolean = false,
+        wd: String? = null,
+    ) {
+        if (!agentGroupsSupported.value) return
+        val dir = wd ?: sessionsDir.value ?: return
+        if (name.isBlank()) return
+        // Editing identity metadata must not silently mutate how this member launches. A profile is
+        // inferred once, on first membership; later profile changes need their own explicit control.
+        val launch = memberId?.let { id ->
+            sessionGroups.firstOrNull { it.id == groupId }?.members?.firstOrNull { it.id == id }?.launchProfile
+        } ?: run {
+            val summary = sessions.firstOrNull { it.sessionId == sessionId }
+            val saved = sessionParams[sessionId]
+            AgentGroupLaunchProfile(
+                agent = summary?.agent ?: AgentKind.CLAUDE,
+                model = summary?.model,
+                mode = saved?.mode ?: PermissionMode.DEFAULT,
+                permissionMode = saved?.permissionMode,
+                effort = saved?.effort,
+                serviceTier = saved?.serviceTier,
+            )
+        }
+        agentGroupRosterBusy.value = true
+        agentGroupRosterError.value = null
+        scope.launch {
+            send(
+                ConfigureAgentGroupMember(
+                    workdir = dir,
+                    groupId = groupId,
+                    sessionId = sessionId,
+                    name = name.trim(),
+                    role = role?.trim()?.takeIf { it.isNotEmpty() },
+                    launchProfile = launch,
+                    memberId = memberId,
+                    defaultMember = defaultMember,
+                ),
+            )
+        }
+    }
+    fun removeAgentGroupMember(groupId: String, memberId: String, wd: String? = null) {
+        if (!agentGroupsSupported.value) return
+        val dir = wd ?: sessionsDir.value ?: return
+        agentGroupRosterBusy.value = true
+        agentGroupRosterError.value = null
+        scope.launch { send(RemoveAgentGroupMember(dir, groupId, memberId)) }
+    }
     fun renameGroup(groupId: String, name: String, wd: String? = null) {
         val dir = wd ?: sessionsDir.value ?: return
         if (name.isBlank()) return
@@ -4282,6 +4522,218 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     fun assignGroup(sessionId: String, groupId: String?, wd: String? = null) {
         val dir = wd ?: sessionsDir.value ?: return
         scope.launch { send(GroupAssign(dir, sessionId, groupId)) }
+    }
+
+    /** Collaboration group containing the open member; ordinary organization groups never enter this path. */
+    fun currentAgentGroup() = sessionGroups.firstOrNull { g ->
+        agentGroupsSupported.value && g.purpose == SESSION_GROUP_COLLABORATION &&
+            g.members.any { it.sessionId == sessionKey.value || it.id == sessions.firstOrNull { s -> s.sessionId == sessionKey.value }?.memberId }
+    }
+
+    /** Sessions in this project that a collaboration group may still adopt — a session belongs to at most
+     *  one roster, so anything already claimed (by this group or another) is not offered again. */
+    fun collaborationCandidates(): List<SessionSummary> {
+        val claimed = sessionGroups.filter { it.purpose == SESSION_GROUP_COLLABORATION }
+            .flatMap { it.members }.mapTo(HashSet()) { it.sessionId }
+        return sessions.filter { it.sessionId !in claimed }
+    }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    fun routeAgentGroup(groupId: String, targetMemberId: String, text: String): Boolean {
+        if (!agentGroupsSupported.value || uploadsBusy()) return false
+        val c = convoId.value ?: return false
+        val dir = workdir.value ?: return false
+        val group = sessionGroups.firstOrNull { it.id == groupId && it.purpose == SESSION_GROUP_COLLABORATION } ?: return false
+        val targetMember = group.members.firstOrNull { it.id == targetMemberId } ?: return false
+        // The normal composer owns self-send (including attachments and degraded-session gating).
+        if (targetMember.sessionId == sessionKey.value) return false
+        if (pendingAgentGroupDelivery != null) return false
+        val readyImages = pendingImages.filter { it.state == ImgState.Ready }
+        val landedFiles = pendingFiles.filter { it.state == FileUpState.Landed && it.path != null }
+        if (text.isBlank() && readyImages.isEmpty() && landedFiles.isEmpty()) return false
+        val refs = landedFiles.joinToString("\n") { "@${it.path}" }
+        val outText = when {
+            landedFiles.isEmpty() -> text
+            text.isBlank() -> refs
+            else -> text + "\n\n" + refs
+        }
+        val images = readyImages.map { ImageData("image/jpeg", Base64.Default.encode(it.bytes)) }
+        val requestId = "ag-${newPromptId()}"
+        val promptId = newPromptId()
+        val sourceDraftKey = composerKey()
+        saveDraft(sourceDraftKey, text) // close the debounce window before a receipt can switch epochs
+        val frame = RouteAgentGroup(requestId, dir, groupId, c, targetMemberId, outText, images, promptId = promptId)
+        pendingAgentGroupDelivery = PendingAgentGroupDelivery(
+            frame, requestId, dev.ccpocket.protocol.AGENT_GROUP_DELIVERY_ROUTE, c, groupId, targetMemberId, text, promptId,
+            sourceDraftKey = sourceDraftKey,
+            imageIds = readyImages.mapTo(HashSet()) { it.id }, fileIds = landedFiles.mapTo(HashSet()) { it.id },
+        )
+        agentGroupDeliveryPending.value = true
+        agentGroupDeliveryTarget.value = targetMember.name
+        agentGroupDeliveryError.value = null
+        armAgentGroupDeliveryWatchdog()
+        scope.launch { send(frame) }
+        return true
+    }
+
+    fun handoffAgentGroup(groupId: String, fromMemberId: String, targetMemberId: String, brief: AgentGroupHandoffBrief): Boolean {
+        if (!agentGroupsSupported.value) return false
+        val c = convoId.value ?: return false
+        val dir = workdir.value ?: return false
+        val group = sessionGroups.firstOrNull { it.id == groupId && it.purpose == SESSION_GROUP_COLLABORATION } ?: return false
+        if (fromMemberId == targetMemberId || group.members.none { it.id == fromMemberId } || group.members.none { it.id == targetMemberId } || pendingAgentGroupDelivery != null) return false
+        if (brief.objective.isBlank() || brief.conclusions.none { it.isNotBlank() } ||
+            brief.constraints.none { it.isNotBlank() } || brief.doneWhen.none { it.isNotBlank() }
+        ) return false
+        val requestId = "ag-${newPromptId()}"
+        val frame = HandoffAgentGroup(requestId, dir, groupId, c, fromMemberId, targetMemberId, brief)
+        pendingAgentGroupDelivery = PendingAgentGroupDelivery(
+            frame, requestId, dev.ccpocket.protocol.AGENT_GROUP_DELIVERY_HANDOFF, c, groupId, targetMemberId,
+            text = null, promptId = null, sourceDraftKey = null,
+        )
+        agentGroupDeliveryPending.value = true
+        agentGroupDeliveryTarget.value = group.members.firstOrNull { it.id == targetMemberId }?.name
+        agentGroupDeliveryError.value = null
+        armAgentGroupDeliveryWatchdog()
+        scope.launch { send(frame) }
+        return true
+    }
+
+    /**
+     * The uncertain outcome: the switch was committed, then the daemon could no longer prove the agent took
+     * the prompt (its ledger died with a restart, or it went silent past [AGENT_GROUP_DELIVERY_TIMEOUT_MS]).
+     * Never auto-resend and never destroy the source recovery copy — release the fence and open the known
+     * target so the user can look. A later resend stays a conscious decision.
+     */
+    private fun recoverAmbiguousAgentGroupDelivery(
+        pending: PendingAgentGroupDelivery,
+        code: String,
+        frameTargetSessionId: String?,
+    ) {
+        val targetSessionId = pending.targetSessionId ?: expectedAgentGroupSessionId ?: frameTargetSessionId
+        agentGroupDeliveryWatchdog?.cancel(); agentGroupDeliveryWatchdog = null
+        pendingAgentGroupDelivery = null
+        agentGroupDeliveryPending.value = false
+        agentGroupDeliveryTarget.value = null
+        expectedAgentGroupSessionId = null
+        expectedAgentGroupConvoId = null
+        switchingSession.value = false
+        agentGroupDeliveryError.value = code
+        val dir = workdir.value
+        val summary = sessions.firstOrNull { it.sessionId == targetSessionId }
+        val launch = sessionGroups.firstOrNull { it.id == pending.groupId }?.members
+            ?.firstOrNull { it.id == pending.targetMemberId }?.launchProfile
+        convoId.value = null
+        if (targetSessionId != null && dir != null) {
+            openSession(
+                dir, targetSessionId,
+                startMode = launch?.mode ?: PermissionMode.DEFAULT,
+                title = summary?.title,
+                agent = launch?.agent ?: summary?.agent ?: AgentKind.CLAUDE,
+                startPermissionMode = launch?.permissionMode,
+                startModel = launch?.model,
+            )
+        }
+    }
+
+    private fun handleAgentGroupDelivery(frame: AgentGroupDelivery) {
+        val pending = pendingAgentGroupDelivery?.takeIf { it.requestId == frame.requestId } ?: run {
+            // A success receipt for the request we stopped waiting for. Dropping it would be the worst
+            // outcome available: the daemon staged the target and dispatched the prompt, and the user —
+            // told nothing was sent — would send it a second time. Route it into the verify recovery.
+            val late = timedOutAgentGroupDelivery?.takeIf { it.requestId == frame.requestId && frame.ok } ?: return
+            timedOutAgentGroupDelivery = null
+            late.targetSessionId = frame.targetSessionId ?: late.targetSessionId
+            recoverAmbiguousAgentGroupDelivery(late, "delivery_state_lost", frame.targetSessionId)
+            return
+        }
+        timedOutAgentGroupDelivery = null
+        if (!frame.ok || frame.targetSessionId == null || frame.targetConvoId == null) {
+            // A post-receipt failure is ambiguous across a daemon restart: the agent may or may not have
+            // consumed the prompt.
+            if (pending.committed) {
+                recoverAmbiguousAgentGroupDelivery(
+                    pending,
+                    if (frame.errorCode == "delivery_failed") "delivery_failed" else "delivery_state_lost",
+                    frame.targetSessionId,
+                )
+                return
+            }
+            agentGroupDeliveryWatchdog?.cancel(); agentGroupDeliveryWatchdog = null
+            pendingAgentGroupDelivery = null
+            agentGroupDeliveryPending.value = false
+            agentGroupDeliveryTarget.value = null
+            agentGroupDeliveryError.value = frame.errorCode ?: "delivery_failed"
+            return
+        }
+        agentGroupDeliveryError.value = null
+        val targetSessionId = frame.targetSessionId
+        val switchesView = frame.targetConvoId != frame.fromConvoId
+        if (switchesView) {
+            expectedAgentGroupSessionId = targetSessionId
+            expectedAgentGroupConvoId = frame.targetConvoId
+            switchingSession.value = true
+        }
+        // A same-request reconnect may rebuild a reaped target under a fresh convoId. Every successful
+        // receipt supersedes the pending target snapshot so its following Live/Ack can settle this exact
+        // transaction; only the destructive view reset below remains first-receipt-only.
+        pending.targetSessionId = targetSessionId
+        pending.targetConvoId = frame.targetConvoId
+        pending.promptId = frame.promptId ?: pending.promptId
+        // Delivery commits the view switch, but the source payload remains held until matching PromptAck.
+        // No optimistic user row is inserted into the source transcript.
+        if (!pending.committed) {
+            pending.committed = true
+            if (switchesView) {
+                targetSessionId?.let(::beginAgentGroupSwitch)
+                clearAskQueue() // source per-view card goes away; account-wide pendingApprovals remains intact
+            }
+        }
+    }
+
+    /** PromptAck, not Delivery, is the destructive source-payload commit. */
+    private fun finishAgentGroupPromptAck(frame: PromptAck): Boolean {
+        val pending = pendingAgentGroupDelivery?.takeIf {
+            it.committed && it.promptId == frame.promptId && (it.targetConvoId == null || it.targetConvoId == frame.convoId)
+        } ?: return false
+        pendingImages.removeAll { it.id in pending.imageIds }
+        pendingFiles.removeAll { it.id in pending.fileIds }
+        pending.text?.let { accepted ->
+            clearDraft(pending.sourceDraftKey)
+            agentGroupAcceptedText.value = accepted
+            agentGroupAcceptedSourceDraftKey.value = pending.sourceDraftKey
+            agentGroupAcceptedGen.value++
+        }
+        agentGroupDeliveryWatchdog?.cancel(); agentGroupDeliveryWatchdog = null
+        pendingAgentGroupDelivery = null
+        agentGroupDeliveryPending.value = false
+        agentGroupDeliveryTarget.value = null
+        agentGroupDeliveryError.value = null
+        return true
+    }
+
+    /** Delivery is the commit point for a view switch. Reset every source-transcript surface before the
+     * target history can arrive; otherwise TranscriptMerge would combine two independent contexts. */
+    private fun beginAgentGroupSwitch(targetSessionId: String) {
+        promptPending = false
+        promptWatchdog?.cancel(); promptWatchdog = null; sendStalled.value = false
+        turnWatchdog?.cancel(); turnWatchdog = null; awaitingTurn = false; turnStalled.value = false; turnQueued.value = false
+        messages.clear(); replayEcho = false
+        resetHistoryPaging()
+        sessionKey.value = targetSessionId
+        composerEpoch.value++
+        terminalEntries.clear(); terminalBusy.value = false
+        changedFiles.clear(); changedFilesLoading.value = false; closeFileViewer()
+        clearBackgroundJobs()
+        streaming.value = false; turnStartMark = null
+        sessionDegraded.value = false; degradedSendArmed = false
+        contextUsed.value = null; contextWindow.value = null
+        limitOffer.value = null; limitConfirmed.value = null
+        val target = sessions.firstOrNull { it.sessionId == targetSessionId }
+        chatTitle.value = target?.title
+        model.value = target?.model
+        sessionAgent.value = target?.agent ?: sessionAgent.value
+        observing.value = false
     }
 
     /** Rename session [sessionId]'s title (issue #158) — the daemon lands claude's own `custom-title`
@@ -4329,6 +4781,9 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
         // persisted anywhere: the pick is part of creating one session, not a new default.
         startModel: String? = null,
     ): Boolean {
+        // There is no cancellation frame for an agent-group dispatch. Navigating while it is unresolved
+        // would either lose the same-request replay or let its late receipt hijack an unrelated view.
+        if (agentGroupDeliveryPending.value) return false
         val attempt = OpenAttempt(wd, resumeId, startMode, title, agent, startPermissionMode, startModel)
         // #235: the two refusals, both decided SYNCHRONOUSLY — the defect they fix is two clicks landing in
         // the same frame, so any check that only ran inside the coroutine below was already too late.
@@ -4473,6 +4928,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     }
 
     fun removePendingImage(id: Long) {
+        if (agentGroupDeliveryPending.value) return
         pendingImages.removeAll { it.id == id }
         revalidatePending() // freeing budget may let a previously-rejected photo back in
     }
@@ -4504,6 +4960,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     }
 
     fun removePendingFile(id: Long) {
+        if (agentGroupDeliveryPending.value) return
         val i = pendingFiles.indexOfFirst { it.id == id }
         if (i < 0) return
         val p = pendingFiles[i]
@@ -4635,6 +5092,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
      *  sending again goes through. Callers keep the composer text on false. */
     @OptIn(ExperimentalEncodingApi::class)
     fun sendPrompt(text: String): Boolean {
+        if (agentGroupDeliveryPending.value) return false
         val c = convoId.value ?: return false
         if (uploadsBusy()) return false // send waits for uploads to settle (the button shows the spinner)
         val ready = pendingImages.filter { it.state == ImgState.Ready }.map { it.bytes }
@@ -5346,6 +5804,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
 
     /** Clear the conversation — the daemon starts a fresh session (keeps model/effort/mode) and wipes history. */
     fun clearConversation() {
+        if (agentGroupDeliveryPending.value) return
         val c = convoId.value ?: return
         messages.clear(); chatTitle.value = null; contextUsed.value = null
         resetHistoryPaging() // #147: the wiped transcript's cursor dies with it
@@ -5391,7 +5850,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     }
 
     fun backToBrowse() {
-        fenceSessionNavigation()
+        if (!fenceSessionNavigation()) return
         val c = convoId.value
         val dir = sessionsDir.value // non-null = we land on the session list: re-pull it so the rows reflect this session's run
         // observing or idle -> reclaim; still executing -> leave it running in the background.
@@ -5423,6 +5882,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
      * The caller saves the outgoing draft first — it owns the composer text, same as the back button.
      */
     fun switchToSession(item: SessionSwitcherItem) {
+        if (agentGroupDeliveryPending.value) return
         if (item.current) return // the row is on screen already; a tap that reopens it would just flash
         // hold the chat on screen across the round trip — see [switchingSession]. Only when we're actually
         // IN a chat: switching from the project list should keep showing the list, as it always has.
@@ -5478,7 +5938,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
 
     /** Explicitly end the session now (force-reclaim the claude process), even if it is still running. */
     fun stopSession() {
-        fenceSessionNavigation()
+        if (!fenceSessionNavigation()) return
         convoId.value?.let { c -> scope.launch { send(CloseSession(c)) } }
         streaming.value = false
         convoId.value = null
@@ -5492,13 +5952,14 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
     }
 
     fun backToDirectories() {
-        fenceSessionNavigation()
+        if (!fenceSessionNavigation()) return
         sessionsDir.value = null
         sessions.clear()
     }
 
-    /** Raise the #226 browse fence and abandon an open transition the user explicitly backed out of. */
-    private fun fenceSessionNavigation() {
+    /** Raise the #226 browse fence and abandon an ordinary open transition the user backed out of. */
+    private fun fenceSessionNavigation(): Boolean {
+        if (agentGroupDeliveryPending.value) return false
         sessionNavigationFenced = true
         if (openInFlight != null || opening.value || switchingSession.value) {
             openGen++ // invalidates the abandoned request's 8s safety-net coroutine
@@ -5509,6 +5970,7 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
             switchingSession.value = false
             openTimedOut.value = false
         }
+        return true
     }
 
     internal companion object {
@@ -5525,6 +5987,17 @@ class PocketRepository(private val scope: CoroutineScope, private val pinnedTo: 
          *  repair it. */
         fun foldBrowseReply(held: PathEntries?, reply: PathEntries, lastSub: String?): PathEntries? =
             if (reply.subPath == lastSub) reply else held
+        /** #232: a dispatch locks send/back/stop/switch/draft until the daemon answers. The daemon's own
+         *  budget is a 5s target-ready timeout plus one prompt write, so silence past this is a wedged or
+         *  crashed request — not slowness. Without a bound the whole chat surface stays dead with no way
+         *  out but dropping the connection. */
+        const val AGENT_GROUP_DELIVERY_TIMEOUT_MS = 45_000L
+
+        /** #232 roster refusals the member form asked for and can explain in place. Anything else keeps the
+         *  ordinary error path — a code we don't recognise must not be swallowed into a silent form. */
+        val ROSTER_REFUSAL_CODES = setOf(
+            "duplicate_name", "invalid_name", "invalid_role", "group_full", "not_member", "invalid_group",
+        )
         const val FIRST_GRACE_MS = 2_000L     // first connect: show the skeleton this long before "can't reach server"
         const val RECONNECT_GRACE_MS = 6_000L // a reconnect already keeps the old list under a banner
         const val RECONNECT_BANNER_GRACE_MS = 2_500L // hold the Ready look this long on a blip before the Reconnecting banner (#28)

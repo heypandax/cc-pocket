@@ -20,6 +20,8 @@ import dev.ccpocket.app.resources.update_reach_failed
 import dev.ccpocket.app.secure.SecureStore
 import dev.ccpocket.app.theme.ThemeMode
 import dev.ccpocket.app.ui.ComposerState
+import dev.ccpocket.app.ui.collaborationMembersUi
+import dev.ccpocket.app.ui.CollaborationMemberUi
 import dev.ccpocket.app.ui.fleet.MachineOs
 import dev.ccpocket.app.ui.fleet.osFromName
 import dev.ccpocket.app.ui.folderName
@@ -161,6 +163,7 @@ class RepoDesktopModel(
     private var composerDraftKey: String? = composerKey()
     // the open-generation [composer] belongs to — tells a REAL switch from an in-place identity flip
     private var composerEpochSeen = repo.composerEpoch.value
+    private var collaborationAcceptedGenSeen = repo.agentGroupAcceptedGen.value
 
     init {
         // save-old + restore-new as ONE invariant of the key transition (not a flush contract every open
@@ -174,14 +177,25 @@ class RepoDesktopModel(
         // write [ComposerState.setText] would faithfully land at composition end (#118/#108), so the
         // epoch gate keeps it from being ISSUED at all; identity flips only re-home the live text.
         scope.launch {
-            snapshotFlow { composerKey() to repo.composerEpoch.value }.collect { (key, epoch) ->
+            snapshotFlow {
+                Triple(composerKey(), repo.composerEpoch.value, repo.agentGroupAcceptedGen.value)
+            }.collect { (key, epoch, acceptedGen) ->
                 val switched = epoch != composerEpochSeen
                 composerEpochSeen = epoch
                 if (key != composerDraftKey) {
+                    // Delivery switches the view before PromptAck. Always preserve the exact outgoing
+                    // text here; the repository clears that source draft only when matching Ack arrives.
                     repo.saveDraft(composerDraftKey, composer)
                     composerDraftKey = key
                     if (switched) composer = repo.draftFor(key) // adopt the target session's draft (#88/#29)
                     else repo.saveDraft(key, composer) // identity flip mid-typing: the live text wins — re-home it
+                }
+                if (acceptedGen != collaborationAcceptedGenSeen) {
+                    collaborationAcceptedGenSeen = acceptedGen
+                    // The source key, not a coincidentally equal string, identifies the draft Ack committed.
+                    // If the view switch saved its in-memory source text just before Ack, clear that one
+                    // durable copy again without ever touching the target's possibly-identical draft.
+                    repo.agentGroupAcceptedSourceDraftKey.value?.let(repo::clearDraft)
                 }
             }
         }
@@ -668,7 +682,12 @@ class RepoDesktopModel(
     // upstream — so an empty list is the flat-render signal). Every mutation targets the current dir; the
     // daemon answers by re-pushing Sessions, so no optimistic local edit is needed here.
     override val customGroups: List<DkGroup>
-        get() = repo.sessionGroups.map { DkGroup(it.id, it.name, it.order) }.sortedBy { it.order }
+        get() = repo.sessionGroups.map {
+            DkGroup(
+                it.id, it.name, it.order,
+                if (repo.agentGroupsSupported.value) it.purpose else dev.ccpocket.protocol.SESSION_GROUP_ORGANIZATION,
+            )
+        }.sortedBy { it.order }
 
     // owner-only AND group-aware daemon: groupsSupported is true only when the daemon sent a groups array
     // (owner on a group-aware daemon) — so this shows "+ New group" even at zero groups (first one creatable)
@@ -680,8 +699,28 @@ class RepoDesktopModel(
             val dir = repo.sessionsDir.value ?: return false
             return repo.directories.none { sameDir(it.path, dir) && it.sharedBy != null }
         }
+    override val canEditCollaborationGroups: Boolean
+        get() = canEditGroups && repo.agentGroupsSupported.value
 
     override fun createGroup(name: String) { repo.createGroup(name) }
+    override fun createCollaborationGroup(name: String) { repo.createCollaborationGroup(name) }
+    override fun collaborationGroup(groupId: String): dev.ccpocket.protocol.SessionGroup? =
+        repo.sessionGroups.firstOrNull { it.id == groupId && it.purpose == dev.ccpocket.protocol.SESSION_GROUP_COLLABORATION }
+    override fun configureCollaborationMember(
+        groupId: String,
+        sessionId: String,
+        name: String,
+        role: String?,
+        memberId: String?,
+    ) { repo.configureAgentGroupMember(groupId, sessionId, name, role, memberId) }
+    override fun removeCollaborationMember(groupId: String, memberId: String) {
+        repo.removeAgentGroupMember(groupId, memberId)
+    }
+    override fun collaborationCandidates() = repo.collaborationCandidates()
+    override val collaborationRosterBusy: Boolean get() = repo.agentGroupRosterBusy.value
+    override val collaborationRosterError: String? get() = repo.agentGroupRosterError.value
+    override val collaborationRosterGen: Int get() = repo.agentGroupRosterGen.value
+    override fun clearCollaborationRosterError() = repo.clearAgentGroupRosterError()
     override fun renameGroup(groupId: String, name: String) { repo.renameGroup(groupId, name) }
     override fun deleteGroup(groupId: String) { repo.deleteGroup(groupId) }
     override fun assignGroup(sessionId: String, groupId: String?) { repo.assignGroup(sessionId, groupId) }
@@ -717,6 +756,7 @@ class RepoDesktopModel(
     }
 
     override fun selectSession(s: DkSession) {
+        if (repo.agentGroupDeliveryPending.value) return
         navGen++ // user navigation — stop an in-flight RECENT refill from repointing the list (#102)
         focusDir(s.cwd) // clicking a session focuses its project too, so a following ⌘N lands there
         optimisticSelectedId = s.sessionId // light the clicked row NOW, don't wait out the open (#82)
@@ -869,6 +909,43 @@ class RepoDesktopModel(
     override val chatWorkdir: String get() = repo.workdir.value?.let { tilde(it) } ?: ""
     override val chatBranch: String? get() = openSummary()?.gitBranch
     override val chatModel: String get() = modelLabelForAgent(repo.sessionAgent.value, repo.model.value)
+    override val collaborationGroup get() = repo.currentAgentGroup()
+    override val collaborationMembers: List<CollaborationMemberUi>
+        get() = collaborationGroup?.let {
+            collaborationMembersUi(
+                it, repo.sessions, repo.sessionKey.value,
+                currentNeedsInput = repo.pendingAsk.value != null,
+                online = repo.phase.value == ConnPhase.Ready,
+                needsInputSessionIds = repo.pendingApprovals.values.mapNotNullTo(HashSet()) { it.sessionId },
+            )
+        }.orEmpty()
+    override val currentCollaborationMemberId: String?
+        get() = collaborationMembers.firstOrNull { it.sessionId == repo.sessionKey.value }?.memberId
+    override var collaborationTargetMemberId by mutableStateOf<String?>(null)
+    override var showCollaborationDelegate by mutableStateOf(false)
+    override var showCollaborationTargetPicker by mutableStateOf(false)
+    override fun openCollaborationMember(member: CollaborationMemberUi) {
+        if (member.sessionId == repo.sessionKey.value) return
+        repo.saveDraft(composerKey(), composer)
+        val row = sessions.firstOrNull { it.sessionId == member.sessionId } ?: return
+        selectSession(row)
+    }
+    override fun routeCollaboration(targetMemberId: String, text: String): Boolean =
+        collaborationGroup?.let { repo.routeAgentGroup(it.id, targetMemberId, text) } == true
+    override fun delegateCollaboration(
+        fromMemberId: String,
+        targetMemberId: String,
+        brief: dev.ccpocket.protocol.AgentGroupHandoffBrief,
+    ): Boolean {
+        repo.saveDraft(composerKey(), composer)
+        return collaborationGroup?.let { repo.handoffAgentGroup(it.id, fromMemberId, targetMemberId, brief) } == true
+    }
+    override val collaborationDeliveryPending: Boolean get() = repo.agentGroupDeliveryPending.value
+    override val collaborationDeliveryError: String? get() = repo.agentGroupDeliveryError.value
+    override val collaborationDeliveryTarget: String? get() = repo.agentGroupDeliveryTarget.value
+    override fun clearCollaborationDeliveryError() = repo.clearAgentGroupDeliveryError()
+    override val collaborationAcceptedGen: Int get() = repo.agentGroupAcceptedGen.value
+    override val collaborationAcceptedText: String? get() = repo.agentGroupAcceptedText.value
     override val chatModelId: String get() = repo.model.value ?: ""
     override val chatMode: PermissionMode get() = repo.mode.value
     override val chatPermissionMode: String? get() = repo.permissionMode.value

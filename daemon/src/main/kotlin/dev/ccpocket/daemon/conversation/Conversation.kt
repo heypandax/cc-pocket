@@ -54,6 +54,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import java.nio.file.Path
+import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -75,6 +76,9 @@ class Conversation(
     initialSink: OutboundSink,
     parentScope: CoroutineScope,
     private val backend: AgentBackend,
+    /** One daemon-wide group/roster store. Injectable through SessionRegistry so fork rebinding and router
+     * mutations can never drift onto different files. */
+    private val groupStore: File = SessionGroups.defaultFile(),
     // read dynamically: the relay client installs the hook after this conversation may already exist
     private val pushHookProvider: () -> PushHook? = { null },
     // how long [isBusy] holds the conversation after a "continuation expected" trigger (see
@@ -1217,7 +1221,7 @@ class Conversation(
                             // point for every fork path, so we don't sprinkle inherit() across the callers.
                             val parentSid = prevSid ?: openedResumeId
                             if (parentSid != null && parentSid != newSid) {
-                                runCatching { SessionGroups.inherit(workdir.toString(), parentSid, newSid) }
+                                runCatching { SessionGroups.inherit(workdir.toString(), parentSid, newSid, groupStore) }
                             }
                             sessionId = newSid
                         }

@@ -130,6 +130,7 @@ import dev.ccpocket.app.resources.chat_open_failed_named
 import dev.ccpocket.app.resources.chat_opening
 import dev.ccpocket.app.resources.chat_opening_named
 import dev.ccpocket.app.resources.chat_you
+import dev.ccpocket.app.ui.agentGroupDeliveryErrorText
 import dev.ccpocket.app.resources.cmd_source_builtin
 import dev.ccpocket.app.resources.cmd_source_project
 import dev.ccpocket.app.resources.cmd_source_skill
@@ -189,6 +190,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import dev.ccpocket.app.ui.AgentBadge
 import dev.ccpocket.app.ui.AgentTag
+import dev.ccpocket.app.ui.CollaborationBriefDraft
+import dev.ccpocket.app.ui.CollaborationDelegateSheet
+import dev.ccpocket.app.ui.CollaborationDeliveryNotice
+import dev.ccpocket.app.ui.CollaborationDispatchBar
+import dev.ccpocket.app.ui.CollaborationLockBanner
+import dev.ccpocket.app.ui.CollaborationMemberStrip
+import dev.ccpocket.app.ui.CollaborationTarget
+import dev.ccpocket.app.ui.CollaborationTargetPickerSheet
 import dev.ccpocket.app.ui.agentName
 import dev.ccpocket.app.ui.AttachImageIcon
 import dev.ccpocket.app.ui.EarlierMessagesSeam
@@ -286,6 +295,8 @@ fun ChatPane(model: DesktopModel, modifier: Modifier = Modifier, focused: Boolea
     var termMenuFrom by remember { mutableStateOf<TermMenuAnchor?>(null) }
     // the recipient's "Finish & return" dialog (design Frame 12) — pane-scoped scrim + centered card
     var showHandoffReturn by remember { mutableStateOf(false) }
+    val collaborationMembers = model.collaborationMembers
+    val currentCollaborationMember = collaborationMembers.firstOrNull { it.memberId == model.currentCollaborationMemberId }
     @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
     Box(
         modifier.fillMaxSize().dragAndDropTarget(
@@ -303,6 +314,22 @@ fun ChatPane(model: DesktopModel, modifier: Modifier = Modifier, focused: Boolea
         // Reset per question so a fresh ask doesn't inherit the last card's ownership.
         var questionOwnsInput by remember(model.ask?.askId) { mutableStateOf(false) }
         ChatSubHeader(model, onTerminalMenu = { termMenuFrom = TermMenuAnchor.HEADER })
+        if (model.collaborationGroup != null) {
+            // a target that vanished (removed member, group switch) or that IS the open member disarms:
+            // there is no resting "@me", so an unarmed composer is an ordinary composer
+            LaunchedEffect(model.collaborationGroup?.id, collaborationMembers, currentCollaborationMember?.memberId) {
+                val held = model.collaborationTargetMemberId
+                if (held != null && (collaborationMembers.none { it.memberId == held } || held == currentCollaborationMember?.memberId)) {
+                    model.collaborationTargetMemberId = null
+                }
+            }
+            CollaborationMemberStrip(
+                collaborationMembers,
+                currentMemberId = currentCollaborationMember?.memberId,
+                targetMemberId = model.collaborationTargetMemberId,
+                onOpenMember = model::openCollaborationMember,
+            )
+        }
         HandoffPaneRibbon(model, onFinishReturn = { showHandoffReturn = true })
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             // the QuestionCard docks inside the LazyColumn's unbounded tail item — hand it a bound from the
@@ -491,6 +518,35 @@ fun ChatPane(model: DesktopModel, modifier: Modifier = Modifier, focused: Boolea
             Box(Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}) {
                 HandoffReturnModal(model) { showHandoffReturn = false }
             }
+        }
+    }
+    if (model.showCollaborationTargetPicker && model.collaborationGroup != null) {
+        CollaborationTargetPickerSheet(
+            members = collaborationMembers,
+            currentMemberId = currentCollaborationMember?.memberId,
+            selectedMemberId = model.collaborationTargetMemberId,
+            onPick = { model.collaborationTargetMemberId = it.memberId },
+            onDismiss = { model.showCollaborationTargetPicker = false },
+        )
+    }
+    if (model.showCollaborationDelegate && currentCollaborationMember != null) {
+        val target = collaborationMembers.firstOrNull { it.memberId == model.collaborationTargetMemberId }
+        if (target != null && target.memberId != currentCollaborationMember.memberId) {
+            CollaborationDelegateSheet(
+                currentCollaborationMember,
+                target,
+                sending = model.collaborationDeliveryPending,
+                error = agentGroupDeliveryErrorText(model.collaborationDeliveryError),
+                onSubmit = { brief: CollaborationBriefDraft ->
+                    if (model.delegateCollaboration(
+                            currentCollaborationMember.memberId,
+                            target.memberId,
+                            brief.toBrief(),
+                        )
+                    ) model.showCollaborationDelegate = false
+                },
+                onDismiss = { model.showCollaborationDelegate = false },
+            )
         }
     }
     }
@@ -1033,9 +1089,14 @@ private fun Composer(model: DesktopModel, suppressAutoFocus: Boolean = false) {
             Column(Modifier.widthIn(max = Dk.maxStreamWidth).fillMaxWidth()) {
                 val scope = rememberCoroutineScope()
                 val uploadsBusy = model.uploadsBusy()
+                val collaborationTarget = model.collaborationMembers.firstOrNull { it.memberId == model.collaborationTargetMemberId }
                 val submit = {
                     if (!model.uploadsBusy() && (model.composer.isNotBlank() || model.hasReadyImages() || model.hasLandedFiles())) {
-                        model.send(model.composer)
+                        if (collaborationTarget != null && collaborationTarget.memberId != model.currentCollaborationMemberId) {
+                            model.routeCollaboration(collaborationTarget.memberId, model.composer)
+                        } else {
+                            model.send(model.composer)
+                        }
                     }
                 }
                 val composerFocus = remember { FocusRequester() }
@@ -1110,6 +1171,33 @@ private fun Composer(model: DesktopModel, suppressAutoFocus: Boolean = false) {
                 }
                 if (model.pendingFiles.isNotEmpty()) PendingFilesRow(model)
                 if (model.pendingImages.isNotEmpty()) PendingImagesRow(model)
+                if (model.collaborationGroup != null && model.collaborationMembers.size > 1) {
+                    Column(Modifier.fillMaxWidth().padding(bottom = 7.dp)) {
+                        if (model.collaborationDeliveryPending) {
+                            CollaborationLockBanner(
+                                model.collaborationDeliveryTarget ?: collaborationTarget?.label.orEmpty(),
+                            )
+                        } else {
+                            CollaborationDispatchBar(
+                                target = collaborationTarget?.let {
+                                    CollaborationTarget(model.collaborationGroup!!.id, it.memberId, it.sessionId, it.label)
+                                },
+                                onPickTarget = {
+                                    model.clearCollaborationDeliveryError()
+                                    model.showCollaborationTargetPicker = true
+                                },
+                                onClearTarget = {
+                                    model.clearCollaborationDeliveryError()
+                                    model.collaborationTargetMemberId = null
+                                },
+                                onDelegate = { model.showCollaborationDelegate = true },
+                            )
+                        }
+                        model.collaborationDeliveryError?.let { code ->
+                            CollaborationDeliveryNotice(code, Modifier.padding(top = 7.dp))
+                        }
+                    }
+                }
                 if (slashOpen) SlashMenu(slashCmds, slashSel, onPick = completeSlash)
                 if (atOpen) FileMenu(atEntries, atSel, atDir, sep, atListing?.truncated == true, onPick = applyEntry)
                 Row(

@@ -108,6 +108,10 @@ import dev.ccpocket.app.resources.group_move_out
 import dev.ccpocket.app.resources.group_move_to
 import dev.ccpocket.app.resources.group_name_hint
 import dev.ccpocket.app.resources.group_new
+import dev.ccpocket.app.resources.ag_new_group
+import dev.ccpocket.app.resources.ag_group_badge
+import dev.ccpocket.app.resources.ag_add_member
+import dev.ccpocket.app.resources.ag_edit_member
 import dev.ccpocket.app.resources.group_rename
 import dev.ccpocket.app.resources.group_ungrouped
 import dev.ccpocket.app.resources.new_session_title
@@ -133,6 +137,13 @@ import dev.ccpocket.app.resources.unpin_project
 import dev.ccpocket.app.theme.Tok
 import dev.ccpocket.app.ui.AgentBadge
 import dev.ccpocket.app.ui.AgentTag
+import dev.ccpocket.app.ui.AddCollaborationMemberSheet
+import dev.ccpocket.app.ui.CollaborationEmptyRosterRow
+import dev.ccpocket.app.ui.CollaborationMemberStatus
+import dev.ccpocket.app.ui.CollaborationMemberUi
+import dev.ccpocket.app.ui.ConfigureCollaborationMemberSheet
+import dev.ccpocket.app.ui.agentGroupRosterErrorText
+import dev.ccpocket.app.ui.suggestedCollaborationMemberName
 import dev.ccpocket.app.ui.fleet.AttentionBadge
 import dev.ccpocket.app.ui.modelAlias
 import dev.ccpocket.app.ui.tilde
@@ -140,6 +151,9 @@ import dev.ccpocket.app.ui.share.SharedPill
 import dev.ccpocket.app.ui.share.expiryLeft
 import dev.ccpocket.app.ui.share.expiryLeftText
 import dev.ccpocket.protocol.AgentKind
+import dev.ccpocket.protocol.SessionSummary
+import dev.ccpocket.protocol.SESSION_GROUP_COLLABORATION
+import dev.ccpocket.protocol.SESSION_GROUP_ORGANIZATION
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -575,7 +589,10 @@ private fun RecentZone(model: DesktopModel, modifier: Modifier = Modifier) {
                     // entry forces scrolling past a long session list to create a group. Current + group-aware
                     // + owner only (canEditGroups folds in groupsSupported), so it also creates the FIRST group
                     // from a still-flat list; an older daemon / guest / RECENT snapshot shows nothing.
-                    if (g.current && model.canEditGroups) item(key = "ng:${g.path}") { NewGroupRow(model) }
+                    if (g.current && model.canEditGroups) {
+                        item(key = "ng:${g.path}") { NewGroupRow(model) }
+                        if (model.canEditCollaborationGroups) item(key = "nag:${g.path}") { NewCollaborationGroupRow(model) }
+                    }
                     if (custom.isEmpty()) {
                         if (g.sessions.isEmpty()) {
                             item(key = "e:${g.path}") {
@@ -593,6 +610,14 @@ private fun RecentZone(model: DesktopModel, modifier: Modifier = Modifier) {
                         sessionSections(g.sessions, custom).forEach { sec ->
                             item(key = "gh:${g.path}:${sec.id}") { CustomGroupHeader(model, g.path, sec) }
                             if (!model.groupCollapsed(g.path, sec.id)) {
+                                // #232: a collaboration group starts empty and its members are added by
+                                // identity, not by filing — say so where the empty group is, not only in a
+                                // right-click menu the user has no reason to open here
+                                if (sec.purpose == SESSION_GROUP_COLLABORATION &&
+                                    model.collaborationGroup(sec.id)?.members.isNullOrEmpty()
+                                ) {
+                                    item(key = "ge:${g.path}:${sec.id}") { EmptyRosterRow(model, sec.id) }
+                                }
                                 items(sec.sessions, key = { "s:${g.path}:${it.sessionId}" }) { s ->
                                     SessionRow(model, s, selected = s.sessionId == selectedId, indented = true, menuGroups = menuGroups, renameable = renameable, canArchive = canArchive) { model.selectSession(s) }
                                 }
@@ -726,12 +751,18 @@ private const val UNGROUPED_SECTION = "__ungrouped__"
 /** A rendered slice of the current project's session list: a named custom group, or the Ungrouped
  *  fallback ([name] null / [editable] false). Named groups always show — even empty, they're move targets;
  *  Ungrouped shows only when it actually holds rows. */
-private data class SessionSection(val id: String, val name: String?, val editable: Boolean, val sessions: List<DkSession>)
+private data class SessionSection(
+    val id: String,
+    val name: String?,
+    val editable: Boolean,
+    val sessions: List<DkSession>,
+    val purpose: String = SESSION_GROUP_ORGANIZATION,
+)
 
 private fun sessionSections(sessions: List<DkSession>, custom: List<DkGroup>): List<SessionSection> {
     val ids = custom.mapTo(HashSet()) { it.id }
     val named = custom.sortedBy { it.order }.map { grp ->
-        SessionSection(grp.id, grp.name, editable = true, sessions = sessions.filter { it.group == grp.id })
+        SessionSection(grp.id, grp.name, editable = true, sessions = sessions.filter { it.group == grp.id }, purpose = grp.purpose)
     }
     // a session whose group id no longer exists (just-deleted group, cross-version) also falls to Ungrouped
     val ungrouped = sessions.filter { it.group == null || it.group !in ids }
@@ -773,6 +804,14 @@ private fun CustomGroupHeader(model: DesktopModel, projectPath: String, sec: Ses
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
         )
         Text("${sec.sessions.size}", color = Tok.muted, fontFamily = Dk.mono, fontSize = 10.sp)
+        if (sec.purpose == SESSION_GROUP_COLLABORATION) {
+            Text(
+                stringResource(Res.string.ag_group_badge), color = Tok.accent, fontFamily = Dk.ui,
+                fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Tok.accent.copy(alpha = 0.12f))
+                    .padding(horizontal = 4.dp, vertical = 1.dp),
+            )
+        }
         Spacer(Modifier.weight(1f))
         if (canEdit && hovered) {
             Text(
@@ -824,6 +863,93 @@ private fun NewGroupRow(model: DesktopModel) {
         Icon(Icons.Rounded.Add, null, tint = Tok.tx2, modifier = Modifier.size(12.dp))
         Text(stringResource(Res.string.group_new), color = Tok.tx2, fontFamily = Dk.ui, fontSize = 11.sp, fontWeight = FontWeight.Medium)
     }
+}
+
+/** Desktop's explicit issue #232 entry; ordinary groups remain ordinary unless this row is used. */
+@Composable
+private fun NewCollaborationGroupRow(model: DesktopModel) {
+    var adding by remember { mutableStateOf(false) }
+    if (adding) {
+        GroupNameInput(
+            initial = "", hint = stringResource(Res.string.group_name_hint),
+            onCommit = { model.createCollaborationGroup(it); adding = false }, onCancel = { adding = false },
+        )
+        return
+    }
+    Row(
+        Modifier.fillMaxWidth().height(28.dp).hoverFill().clickable { adding = true }.padding(start = 14.dp, end = 12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text("@", color = Tok.accent, fontFamily = Dk.mono, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text(stringResource(Res.string.ag_new_group), color = Tok.tx2, fontFamily = Dk.ui, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+/** The zero-member state of a collaboration group: says what the group is missing AND hands over the one
+ *  action that fixes it, instead of leaving the roster reachable only from a session row's context menu. */
+@Composable
+private fun EmptyRosterRow(model: DesktopModel, groupId: String) {
+    var adding by remember(groupId) { mutableStateOf(false) }
+    var configuring by remember(groupId) { mutableStateOf<SessionSummary?>(null) }
+    CollaborationEmptyRosterRow(
+        onAdd = if (model.canEditCollaborationGroups) ({ adding = true }) else null,
+        modifier = Modifier.padding(start = 22.dp, end = 12.dp),
+    )
+    if (adding) {
+        AddCollaborationMemberSheet(
+            candidates = model.collaborationCandidates(),
+            onPick = { configuring = it },
+            onDismiss = { adding = false },
+        )
+    }
+    configuring?.let { session ->
+        CollaborationMemberForm(model, groupId, session.sessionId, session.agent ?: AgentKind.CLAUDE, session.model) {
+            configuring = null
+        }
+    }
+}
+
+/**
+ * The daemon owns the roster, so this form is not done when the user presses Save: it stays up, in its
+ * saving state, until the re-pushed session list settles it or a refusal names the field that failed.
+ */
+@Composable
+private fun CollaborationMemberForm(
+    model: DesktopModel,
+    groupId: String,
+    sessionId: String,
+    agent: AgentKind,
+    modelId: String?,
+    onClose: () -> Unit,
+) {
+    val group = model.collaborationGroup(groupId)
+    if (group == null) { onClose(); return }
+    val existing = group.members.firstOrNull { it.sessionId == sessionId }
+    val member = CollaborationMemberUi(
+        memberId = existing?.id ?: "new:$sessionId",
+        sessionId = sessionId,
+        label = existing?.name.orEmpty(),
+        role = existing?.role,
+        agent = existing?.launchProfile?.agent ?: agent,
+        model = existing?.launchProfile?.model ?: modelId,
+        status = CollaborationMemberStatus.IDLE,
+    )
+    val settledGen = remember(groupId, sessionId) { model.collaborationRosterGen }
+    LaunchedEffect(model.collaborationRosterGen) {
+        if (model.collaborationRosterGen != settledGen) onClose()
+    }
+    ConfigureCollaborationMemberSheet(
+        member = member,
+        suggestedName = suggestedCollaborationMemberName(member.agent, member.model, group.members.map { it.name }),
+        saving = model.collaborationRosterBusy,
+        error = agentGroupRosterErrorText(model.collaborationRosterError),
+        usedNames = group.members.filter { it.id != existing?.id }.map { it.name },
+        memberCount = group.members.size,
+        editingExisting = existing != null,
+        onSave = { name, role -> model.configureCollaborationMember(groupId, sessionId, name, role, existing?.id) },
+        onRemove = existing?.let { saved -> { model.removeCollaborationMember(groupId, saved.id) } },
+        onDismiss = { model.clearCollaborationRosterError(); onClose() },
+    )
 }
 
 /** Inline name field shared by "New group" / group rename (issue #119) and the session-row rename
@@ -965,6 +1091,7 @@ private fun SessionRow(
     // came from THIS row, so the feedback lands here — the chat transcript is the wrong surface (the
     // common refusal, a terminal-held session, is renamed with no chat open at all). Esc dismisses.
     var renaming by remember(s.sessionId) { mutableStateOf(false) }
+    var configureCollaborationGroupId by remember(s.sessionId) { mutableStateOf<String?>(null) }
     val renameError = model.renameError(s.sessionId)
     if (renaming || renameError != null) {
         Column {
@@ -991,6 +1118,8 @@ private fun SessionRow(
     val moveOut = stringResource(Res.string.group_move_out)
     val archive = stringResource(Res.string.archive_session)
     val removeRecents = stringResource(Res.string.archive_remove_from_recents)
+    val addCollaboration = stringResource(Res.string.ag_add_member)
+    val editCollaboration = stringResource(Res.string.ag_edit_member)
     ContextMenuArea(
         items = {
             // order: edit → file → hide (the design's "编辑 → 归位 → 隐藏"). Archive sits directly ABOVE
@@ -998,10 +1127,18 @@ private fun SessionRow(
             // reading them adjacently is what teaches the difference (persistent+shared vs local+temporary).
             buildList {
                 if (canRename) add(ContextMenuItem(rename) { renaming = true })
-                menuGroups.filter { it.id != s.group }.forEach { grp ->
+                menuGroups.filter { it.purpose != SESSION_GROUP_COLLABORATION && it.id != s.group }.forEach { grp ->
                     add(ContextMenuItem("$moveTo · ${grp.name}") { model.assignGroup(s.sessionId, grp.id) })
                 }
-                if (s.group != null) add(ContextMenuItem(moveOut) { model.assignGroup(s.sessionId, null) })
+                menuGroups.filter { it.purpose == SESSION_GROUP_COLLABORATION }.forEach { grp ->
+                    val existing = model.collaborationGroup(grp.id)?.members?.any { it.sessionId == s.sessionId } == true
+                    add(ContextMenuItem("${if (existing) editCollaboration else addCollaboration} · ${grp.name}") {
+                        configureCollaborationGroupId = grp.id
+                    })
+                }
+                if (s.group != null && menuGroups.firstOrNull { it.id == s.group }?.purpose != SESSION_GROUP_COLLABORATION) {
+                    add(ContextMenuItem(moveOut) { model.assignGroup(s.sessionId, null) })
+                }
                 if (canArchive) {
                     add(ContextMenuItem(archive) { model.archiveSession(s) })
                     add(ContextMenuItem(removeRecents) { model.hideSession(s) })
@@ -1010,6 +1147,11 @@ private fun SessionRow(
         },
         content = { SessionRowBody(model, s, selected, indented, onClick) },
     )
+    configureCollaborationGroupId?.let { groupId ->
+        CollaborationMemberForm(model, groupId, s.sessionId, s.agent, s.model) {
+            configureCollaborationGroupId = null
+        }
+    }
 }
 
 @Composable

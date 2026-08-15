@@ -44,6 +44,7 @@ import dev.ccpocket.app.resources.*
 import dev.ccpocket.app.theme.Tok
 import dev.ccpocket.protocol.SessionGroup
 import dev.ccpocket.protocol.SessionSummary
+import dev.ccpocket.protocol.SESSION_GROUP_COLLABORATION
 import org.jetbrains.compose.resources.stringResource
 
 /** Collapse-map key for the trailing "ungrouped" bucket (real group ids are daemon-minted, never blank). */
@@ -82,7 +83,16 @@ internal fun sessionSections(sessions: List<SessionSummary>, groups: List<Sessio
  *  when [onManage] is set) opens rename/delete. The ungrouped bucket passes [onManage] == null (nothing to
  *  rename or delete). */
 @Composable
-internal fun GroupHeader(name: String, count: Int, collapsed: Boolean, onToggle: () -> Unit, onManage: (() -> Unit)?) {
+internal fun GroupHeader(
+    name: String,
+    count: Int,
+    collapsed: Boolean,
+    onToggle: () -> Unit,
+    onManage: (() -> Unit)?,
+    // #232: a collaboration group is a roster of addressable members, not a filing folder — the two behave
+    // differently under every row action, so they must not look identical in the list.
+    collaboration: Boolean = false,
+) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
             .combinedClickable(onClick = onToggle, onLongClick = onManage)
@@ -97,6 +107,15 @@ internal fun GroupHeader(name: String, count: Int, collapsed: Boolean, onToggle:
         Text(name, color = Tok.tx2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
         Spacer(Modifier.width(6.dp))
         Text(count.toString(), color = Tok.muted, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+        if (collaboration) {
+            Spacer(Modifier.width(6.dp))
+            Text(
+                stringResource(Res.string.ag_group_badge), color = Tok.accent, fontSize = 9.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Tok.accent.copy(alpha = 0.12f))
+                    .padding(horizontal = 4.dp, vertical = 1.dp),
+            )
+        }
         Spacer(Modifier.weight(1f))
         if (onManage != null) {
             Icon(
@@ -119,6 +138,19 @@ internal fun NewGroupRow(onClick: () -> Unit) {
         Icon(Icons.Rounded.Add, null, tint = Tok.tx2, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(4.dp))
         Text(stringResource(Res.string.group_new), color = Tok.tx2, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+internal fun NewCollaborationGroupRow(onClick: () -> Unit) {
+    Row(
+        Modifier.heightIn(min = 36.dp).clip(RoundedCornerShape(9.dp)).clickable(onClick = onClick)
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("@", color = Tok.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.width(4.dp))
+        Text(stringResource(Res.string.ag_new_group), color = Tok.tx2, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -176,10 +208,21 @@ internal fun DeleteGroupConfirm(group: SessionGroup, onConfirm: () -> Unit, onDi
 
 /** Group-header ⋯ / long-press menu: rename or delete. */
 @Composable
-internal fun GroupActionsSheet(group: SessionGroup, onRename: () -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit) {
+internal fun GroupActionsSheet(
+    group: SessionGroup,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+    onMakeCollaboration: (() -> Unit)? = null,
+    onDismiss: () -> Unit,
+) {
     PocketSheet(onDismiss) {
         Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 14.dp, top = 4.dp)) {
             Text(group.name, color = Tok.tx, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (group.purpose == SESSION_GROUP_COLLABORATION) {
+                Text(stringResource(Res.string.ag_group_badge), color = Tok.accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 5.dp))
+            } else onMakeCollaboration?.let { convert ->
+                SheetActionRow(stringResource(Res.string.ag_make_collaboration), Tok.accent) { convert(); onDismiss() }
+            }
             SheetActionRow(stringResource(Res.string.group_rename), Tok.tx) { onRename(); onDismiss() }
             SheetActionRow(stringResource(Res.string.group_delete), Tok.danger) { onDelete(); onDismiss() }
         }
@@ -201,6 +244,7 @@ internal fun MoveSessionSheet(
     session: SessionSummary,
     groups: List<SessionGroup>,
     onAssign: (String?) -> Unit,
+    onConfigureMember: ((SessionGroup) -> Unit)? = null,
     onArchive: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
@@ -219,7 +263,11 @@ internal fun MoveSessionSheet(
                 val current = session.group == g.id
                 Row(
                     Modifier.padding(top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Tok.surface)
-                        .clickable(enabled = !current) { onAssign(g.id); onDismiss() }
+                        .clickable(enabled = !current || (g.purpose == SESSION_GROUP_COLLABORATION && onConfigureMember != null)) {
+                            if (g.purpose == SESSION_GROUP_COLLABORATION && onConfigureMember != null) onConfigureMember(g)
+                            else onAssign(g.id)
+                            onDismiss()
+                        }
                         .padding(horizontal = 14.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
@@ -228,7 +276,7 @@ internal fun MoveSessionSheet(
                 }
             }
             // "Remove from group" only when this session is actually filed under one.
-            if (session.group != null) {
+            if (session.group != null && groups.firstOrNull { it.id == session.group }?.purpose != SESSION_GROUP_COLLABORATION) {
                 SheetActionRow(stringResource(Res.string.group_move_out), Tok.tx2) { onAssign(null); onDismiss() }
             }
             onArchive?.let { archive ->

@@ -167,6 +167,39 @@ data class SessionSummary(
     // stamped by the daemon per row; a trailing optional — an old daemon omits it (every row reads ungrouped),
     // an old app ignores it (renders today's flat list).
     val group: String? = null,
+    // issue #232: populated only for a member of a capability-visible collaboration group. The stable
+    // identity is [memberId]; name/role are display + explicit-@ metadata, never routing authority.
+    val memberId: String? = null,
+    val memberName: String? = null,
+    val memberRole: String? = null,
+)
+
+/** String-valued on purpose: an app only treats the exact collaboration value specially; a future
+ * purpose degrades to an ordinary group instead of making an older enum decoder drop the Sessions frame. */
+const val SESSION_GROUP_ORGANIZATION = "organization"
+const val SESSION_GROUP_COLLABORATION = "collaboration"
+
+/** Settings used when a collaboration member is cold-resumed. A hot member keeps its live settings. */
+@Serializable
+data class AgentGroupLaunchProfile(
+    val agent: AgentKind = AgentKind.CLAUDE,
+    val model: String? = null,
+    val mode: PermissionMode = PermissionMode.DEFAULT,
+    val permissionMode: String? = null,
+    val effort: String? = null,
+    val serviceTier: String? = null,
+)
+
+/** Stable collaboration roster entry. [id] is daemon-minted and survives session forks; [sessionId]
+ * may be rebound to the fork while the member identity and explicit @ name remain stable. */
+@Serializable
+data class AgentGroupMember(
+    val id: String,
+    val sessionId: String,
+    val name: String,
+    val role: String? = null,
+    val order: Int = 0,
+    val launchProfile: AgentGroupLaunchProfile = AgentGroupLaunchProfile(),
 )
 
 /**
@@ -176,7 +209,14 @@ data class SessionSummary(
  * lists groups by. Rides the session-list frame as a trailing optional (an old app never sees it).
  */
 @Serializable
-data class SessionGroup(val id: String, val name: String, val order: Int)
+data class SessionGroup(
+    val id: String,
+    val name: String,
+    val order: Int,
+    val purpose: String = SESSION_GROUP_ORGANIZATION,
+    val members: List<AgentGroupMember> = emptyList(),
+    val defaultMemberId: String? = null,
+)
 
 /**
  * One file a session created/edited, as recorded in its transcript (see ListSessionFiles).

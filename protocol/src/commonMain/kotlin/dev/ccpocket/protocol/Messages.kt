@@ -33,10 +33,15 @@ data class ListSessions(val workdir: String) : ToDaemon
 //    change reflects immediately. A daemon that predates these drops the unknown frame (the group op just
 //    no-ops there — the client keeps its flat list). ──
 
-/** phone -> daemon: create a new group named [name] under [workdir]. Reply: the re-pushed [Sessions]. */
+/** phone -> daemon: create a new group named [name] under [workdir]. [purpose] is additive: an old daemon
+ * ignores it and echoes an ordinary group, so clients must trust the echoed [SessionGroup.purpose]. */
 @Serializable
 @SerialName("pocket/group.create")
-data class GroupCreate(val workdir: String, val name: String) : ToDaemon
+data class GroupCreate(
+    val workdir: String,
+    val name: String,
+    val purpose: String = SESSION_GROUP_ORGANIZATION,
+) : ToDaemon
 
 /** phone -> daemon: rename group [groupId] under [workdir] to [name]. Reply: the re-pushed [Sessions]. */
 @Serializable
@@ -54,6 +59,100 @@ data class GroupDelete(val workdir: String, val groupId: String) : ToDaemon
 @Serializable
 @SerialName("pocket/group.assign")
 data class GroupAssign(val workdir: String, val sessionId: String, val groupId: String? = null) : ToDaemon
+
+// ── explicit multi-agent collaboration groups (issue #232 MVP) ──
+
+/** Upgrade/downgrade an existing group. Only the two currently-known purposes are accepted. Downgrading
+ * clears the collaboration roster but leaves the sessions as ordinary members of the organization group. */
+@Serializable
+@SerialName("pocket/agentGroup.configure")
+data class ConfigureAgentGroup(
+    val workdir: String,
+    val groupId: String,
+    val purpose: String,
+) : ToDaemon
+
+/** Atomically create/update one stable roster member and bind [sessionId] into the collaboration group.
+ * Null [memberId] creates a daemon-minted identity; a non-null id updates that exact member. */
+@Serializable
+@SerialName("pocket/agentGroup.member.configure")
+data class ConfigureAgentGroupMember(
+    val workdir: String,
+    val groupId: String,
+    val sessionId: String,
+    val name: String,
+    val role: String? = null,
+    val launchProfile: AgentGroupLaunchProfile = AgentGroupLaunchProfile(),
+    val memberId: String? = null,
+    val defaultMember: Boolean = false,
+) : ToDaemon
+
+/** Remove a roster member and move its session back to the ungrouped project list. */
+@Serializable
+@SerialName("pocket/agentGroup.member.remove")
+data class RemoveAgentGroupMember(
+    val workdir: String,
+    val groupId: String,
+    val memberId: String,
+) : ToDaemon
+
+/** A context-isolated handoff: this brief is the only upstream context formatted into the target prompt. */
+@Serializable
+data class AgentGroupHandoffBrief(
+    val objective: String,
+    val conclusions: List<String> = emptyList(),
+    val constraints: List<String> = emptyList(),
+    val doneWhen: List<String> = emptyList(),
+)
+
+/** Explicit @ route to one stable member. The target member id, not its mutable name/session id, is authority. */
+@Serializable
+@SerialName("pocket/agentGroup.route")
+data class RouteAgentGroup(
+    val requestId: String,
+    val workdir: String,
+    val groupId: String,
+    val fromConvoId: String,
+    val targetMemberId: String,
+    val text: String,
+    val images: List<ImageData> = emptyList(),
+    val promptId: String? = null,
+) : ToDaemon
+
+/** User-authored structured transfer from one isolated member context to another. */
+@Serializable
+@SerialName("pocket/agentGroup.handoff")
+data class HandoffAgentGroup(
+    val requestId: String,
+    val workdir: String,
+    val groupId: String,
+    val fromConvoId: String,
+    val fromMemberId: String,
+    val targetMemberId: String,
+    val brief: AgentGroupHandoffBrief,
+    val promptId: String? = null,
+) : ToDaemon
+
+const val AGENT_GROUP_DELIVERY_ROUTE = "route"
+const val AGENT_GROUP_DELIVERY_HANDOFF = "handoff"
+
+/** Route acceptance/failure. On success it arrives before target SessionLive/history so the client can arm
+ * its expected target. PromptAck remains the separate proof that the CLI accepted/queued the prompt. */
+@Serializable
+@SerialName("pocket/agentGroup.delivery")
+data class AgentGroupDelivery(
+    val requestId: String,
+    val kind: String,
+    val ok: Boolean,
+    val groupId: String,
+    val fromConvoId: String,
+    val targetMemberId: String,
+    val targetSessionId: String? = null,
+    val targetConvoId: String? = null,
+    val promptId: String? = null,
+    val errorCode: String? = null,
+    val error: String? = null,
+) : ToPhone
 
 // ── session archive (issue #202): file a session away from the regular lists without deleting it. Daemon-
 //    side truth like the groups above, so archiving on one client hides the row on every other. The daemon
@@ -754,6 +853,10 @@ data class Sessions(
     // clients hide every archive affordance rather than firing frames that would be dropped; an old app
     // ignores it (and still benefits, since the archived rows are already filtered out of [items]).
     val archiveSupported: Boolean = false,
+    // issue #232 capability echo: a client declaration alone cannot prove the daemon understood it. Old
+    // daemons omit this field, so the app hides collaboration create/manage entry points instead of creating
+    // an ordinary #119 group after its additive purpose field was ignored.
+    val agentGroupsSupported: Boolean = false,
 ) : ToPhone
 
 /** daemon -> phone: every archived session across all projects, newest-archived first (issue #202). Each row's
@@ -1789,6 +1892,9 @@ data class ClientCaps(
     // undeclared peer — an already-shipped client drops unknown frame types silently, but gating
     // here keeps the wire quiet and the contract explicit.
     val supportsApprovalV2: Boolean = false,
+    // issue #232: without this declaration the daemon must hide collaboration groups and roster metadata;
+    // an old app would otherwise render them as mutable organization groups and could corrupt the roster.
+    val supportsAgentGroups: Boolean = false,
 ) : ToDaemon
 
 // ── agent model listing ─────────────────────────────────────────────────

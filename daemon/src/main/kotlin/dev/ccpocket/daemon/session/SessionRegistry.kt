@@ -14,6 +14,7 @@ import dev.ccpocket.daemon.disk.ProjectPaths
 import dev.ccpocket.daemon.disk.SessionGroups
 import dev.ccpocket.daemon.disk.TranscriptScanner
 import dev.ccpocket.protocol.AgentKind
+import dev.ccpocket.protocol.AgentGroupMember
 import dev.ccpocket.protocol.AuthBlockReason
 import dev.ccpocket.protocol.AuthBlocker
 import dev.ccpocket.protocol.CancelTurn
@@ -69,6 +70,8 @@ class SessionRegistry(
     // M3 deterministic risk radar (advisory) — daemon-wide so the sequence ledger survives relaunches
     private val riskEngine: dev.ccpocket.daemon.approval.ApprovalRiskEngine? =
         dev.ccpocket.daemon.approval.ApprovalRiskEngine(),
+    /** Single source of truth for issue #119/#232 group + roster persistence. */
+    internal val groupStore: java.io.File = SessionGroups.defaultFile(),
 ) : dev.ccpocket.daemon.handoff.SessionTurnControl {
     private val mutex = Mutex()
     private val log = dev.ccpocket.daemon.util.logger("SessionRegistry")
@@ -410,7 +413,7 @@ class SessionRegistry(
         // installed" failure surfaces synchronously from c.open() below, so one guard there covers it.
         val convoId = UUID.randomUUID().toString()
         val c = Conversation(
-            convoId, Path.of(open.workdir), open.mode, sink, scope, factory.create(),
+            convoId, Path.of(open.workdir), open.mode, sink, scope, factory.create(), groupStore = groupStore,
             pushHookProvider = { pushHook }, origin = origin, askPushHookProvider = { askPushHook },
             pathScope = pathScope, bridgeAllowedCommands = bridgeAllowedCommands, ownerBypass = ownerBypass,
             handoffAccess = handoffAccess, headless = headless,
@@ -465,6 +468,130 @@ class SessionRegistry(
         return convoId
     }
 
+    /** Prepared target for issue #232's single-view route transaction. The staging sink has received a
+     * complete first SessionLive/replay before this is returned to the router; [created] lets a failed
+     * transaction reap only the cold conversation it introduced, never somebody else's hot member. */
+    data class AgentGroupPrepared(
+        val convoId: String,
+        val sessionId: String,
+        val created: Boolean,
+    )
+
+    sealed interface AgentGroupPrepareResult {
+        data class Ready(val value: AgentGroupPrepared) : AgentGroupPrepareResult
+        data class Refused(val code: String, val message: String) : AgentGroupPrepareResult
+    }
+
+    /** Prepare a collaboration target without going through ordinary OpenSession semantics: a hot target
+     * keeps its settings; a cold target uses its persisted launch profile; an externally-driven Claude
+     * target is refused (never observe/take-over/fork). All target frames go only to [stage]. */
+    suspend fun prepareAgentGroupTarget(
+        workdir: String,
+        member: AgentGroupMember,
+        stage: OutboundSink,
+        peerSupportsOpencode: Boolean,
+        peerSupportsKimi: Boolean,
+    ): AgentGroupPrepareResult {
+        val profile = member.launchProfile
+        val targetWorkdir = Path.of(workdir).toAbsolutePath().normalize()
+        if ((profile.agent == AgentKind.OPENCODE && !peerSupportsOpencode) ||
+            (profile.agent == AgentKind.KIMI && !peerSupportsKimi)
+        ) {
+            return AgentGroupPrepareResult.Refused("open_failed", "update the app to open ${profile.agent} members")
+        }
+        val hot = mutex.withLock {
+            convos.values.firstOrNull {
+                it.workdir.toAbsolutePath().normalize() == targetWorkdir &&
+                    (it.sessionId == member.sessionId || (it.sessionId == null && it.resumeAnchor == member.sessionId))
+            }
+        }
+        if (hot != null) {
+            if (hot.kind != profile.agent) {
+                return AgentGroupPrepareResult.Refused("not_member", "member launch profile does not match its live session")
+            }
+            cancelPendingClose(hot.convoId)
+            val attached = runCatching { hot.reattach(stage) }
+            if (attached.isFailure) {
+                hot.detach(stage)
+                return AgentGroupPrepareResult.Refused(
+                    "open_failed",
+                    attached.exceptionOrNull()?.message ?: "target member replay failed",
+                )
+            }
+            return AgentGroupPrepareResult.Ready(AgentGroupPrepared(hot.convoId, member.sessionId, created = false))
+        }
+        if (profile.agent == AgentKind.CLAUDE) {
+            val file = ProjectPaths.dirFor(workdir).resolve("${member.sessionId}.jsonl")
+            if (externallyActive(member.sessionId, workdir, file)) {
+                return AgentGroupPrepareResult.Refused("target_external_active", "target member is active in an external terminal")
+            }
+        }
+        val factory = backends[profile.agent]
+            ?: return AgentGroupPrepareResult.Refused("open_failed", "no backend registered for ${profile.agent}")
+        val convoId = UUID.randomUUID().toString()
+        val convo = Conversation(
+            convoId, Path.of(workdir), profile.mode, stage, scope, factory.create(), groupStore = groupStore,
+            pushHookProvider = { pushHook }, askPushHookProvider = { askPushHook },
+            announcedWorkdir = workdir, approvals = approvals, grants = grants, riskEngine = riskEngine,
+        )
+        mutex.withLock { convos[convoId] = convo }
+        val opened = runCatching {
+            convo.open(
+                member.sessionId,
+                profile.model,
+                profile.effort,
+                fork = false,
+                takeOver = false,
+                permissionMode = profile.permissionMode,
+                serviceTier = profile.serviceTier,
+            )
+        }
+        if (opened.isFailure) {
+            mutex.withLock { convos.remove(convoId) }
+            runCatching { convo.close() }
+            return AgentGroupPrepareResult.Refused("open_failed", opened.exceptionOrNull()?.message ?: "target member could not be opened")
+        }
+        return AgentGroupPrepareResult.Ready(AgentGroupPrepared(convoId, member.sessionId, created = true))
+    }
+
+    /** Confirm the switchable staging view is still attached. Its sinkKey already IS the real client's
+     * identity; the router activates its delegate after Delivery instead of replaying a second baseline. */
+    suspend fun activateAgentGroupTarget(prepared: AgentGroupPrepared, stage: OutboundSink): Boolean {
+        val convo = get(prepared.convoId) ?: return false
+        return convo.isAttachedTo(stage)
+    }
+
+    /** Current persisted identity after staging. A cold resume may heal/fork while its first SessionLive is
+     * buffered; receipts must name that new id or the app's exact target fence will correctly reject it. */
+    suspend fun agentGroupTargetSessionId(prepared: AgentGroupPrepared): String? =
+        get(prepared.convoId)?.let { it.sessionId ?: it.resumeAnchor }
+
+    /** Roll back a prepare. A hot target is never closed; a cold target is removed only when staging was
+     * still its sole view. */
+    suspend fun discardAgentGroupTarget(prepared: AgentGroupPrepared, stage: OutboundSink) {
+        var close: Conversation? = null
+        mutex.withLock {
+            val convo = convos[prepared.convoId] ?: return@withLock
+            val empty = convo.detach(stage)
+            if (prepared.created && empty && convos.remove(prepared.convoId) === convo) close = convo
+        }
+        close?.close()
+        close?.let { noteSelfClosed(it) }
+    }
+
+    /** Persistent identity of a controllable daemon conversation. Observe views deliberately return null. */
+    suspend fun routingSourceSession(convoId: String): String? =
+        get(convoId)?.let { it.sessionId ?: it.resumeAnchor }
+
+    suspend fun routingSourceWorkdir(convoId: String): Path? = get(convoId)?.workdir?.toAbsolutePath()?.normalize()
+
+    suspend fun routingSourceObserved(convoId: String): Boolean = mutex.withLock { convoId in observes }
+
+    /** The transport may route only from the conversation view it actually owns; a guessed live convoId
+     * must not become authority to detach/switch somebody else's session. */
+    suspend fun routingSourceAttached(convoId: String, sink: OutboundSink): Boolean =
+        mutex.withLock { convos[convoId]?.isAttachedTo(sink) == true }
+
     /** Test hook: is [convoId] still a live observe view? (the issue-107 stale-observer reap) */
     internal suspend fun observing(convoId: String): Boolean = mutex.withLock { observes.containsKey(convoId) }
 
@@ -478,9 +605,17 @@ class SessionRegistry(
 
     /** Resumable sessions for [workdir] across every agent backend (each tags its summaries with its kind),
      *  newest-first, each stamped with its [SessionGroup] membership (issue #119; null = ungrouped). */
-    fun listSessions(workdir: String): List<SessionSummary> =
+    fun listSessions(workdir: String, groupsFile: java.io.File = groupStore): List<SessionSummary> =
         backends.values.flatMap { runCatching { it.create().listSessions(workdir) }.getOrDefault(emptyList()) }
-            .map { it.copy(group = SessionGroups.groupOf(workdir, it.sessionId)) }
+            .map { row ->
+                val member = SessionGroups.memberOf(workdir, row.sessionId, groupsFile)
+                row.copy(
+                    group = SessionGroups.groupOf(workdir, row.sessionId, groupsFile),
+                    memberId = member?.id,
+                    memberName = member?.name,
+                    memberRole = member?.role,
+                )
+            }
             .sortedByDescending { it.lastModified }
 
     /**

@@ -1734,10 +1734,13 @@ internal fun SessionsScreen(repo: PocketRepository, onOpenInbox: () -> Unit = {}
     // transient UI: which manage-sheet/dialog is open, and (client-only) which sections are collapsed —
     // kept per group id and reset per project (keyed on [dir]), so folding a group doesn't leak across projects.
     var showNewGroup by remember { mutableStateOf(false) }
+    var creatingCollaborationGroup by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<SessionGroup?>(null) }
     var deleteTarget by remember { mutableStateOf<SessionGroup?>(null) }
     var manageTarget by remember { mutableStateOf<SessionGroup?>(null) }
     var moveTarget by remember { mutableStateOf<SessionSummary?>(null) }
+    var configureAgentMember by remember { mutableStateOf<Pair<SessionSummary, SessionGroup>?>(null) }
+    var addMemberTo by remember { mutableStateOf<SessionGroup?>(null) }
     val collapsed = remember(dir) { mutableStateMapOf<String, Boolean>() }
     val approvalCount = repo.fleetAttention().size
     val approvalsRefreshing = repo.fleetMachines().any { it.pending > 0 && it.status != MachineStatus.ONLINE }
@@ -1839,10 +1842,19 @@ internal fun SessionsScreen(repo: PocketRepository, onOpenInbox: () -> Unit = {}
                         }
                     }
                 }
+                if (repo.agentGroupsSupported.value) item(key = "new-agent-group") {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        NewCollaborationGroupRow {
+                            creatingCollaborationGroup = true
+                            showNewGroup = true
+                        }
+                    }
+                }
                 for (section in sessionSections(split.recent.map { it.session }, repo.sessionGroups)) {
                     val g = section.group
                     val key = g?.id ?: UNGROUPED_KEY
                     val isCollapsed = collapsed[key] == true
+                    val collaboration = g?.purpose == dev.ccpocket.protocol.SESSION_GROUP_COLLABORATION
                     if (grouped) {
                         item(key = "grp:$key") {
                             GroupHeader(
@@ -1854,7 +1866,15 @@ internal fun SessionsScreen(repo: PocketRepository, onOpenInbox: () -> Unit = {}
                                 collapsed = isCollapsed,
                                 onToggle = { collapsed[key] = !isCollapsed },
                                 onManage = g?.let { { manageTarget = it } }, // ungrouped bucket: nothing to manage
+                                collaboration = collaboration,
                             )
+                        }
+                    }
+                    // a collaboration group is created empty, and the only way to fill it used to be the
+                    // per-session "move to group" sheet — an entry nobody finds from the group they made
+                    if (collaboration && g != null && g.members.isEmpty() && !isCollapsed) {
+                        item(key = "grp-empty:$key") {
+                            CollaborationEmptyRosterRow(onAdd = { addMemberTo = g })
                         }
                     }
                     if (!isCollapsed) {
@@ -1910,12 +1930,21 @@ internal fun SessionsScreen(repo: PocketRepository, onOpenInbox: () -> Unit = {}
         }
         // issue #119 group management — the daemon re-pushes the Sessions frame after every mutation, so the
         // list/headers refresh themselves (no optimistic edit here).
-        if (showNewGroup) NewGroupDialog(onConfirm = { repo.createGroup(it) }, onDismiss = { showNewGroup = false })
+        if (showNewGroup) NewGroupDialog(
+            onConfirm = {
+                if (creatingCollaborationGroup) repo.createCollaborationGroup(it) else repo.createGroup(it)
+                creatingCollaborationGroup = false
+            },
+            onDismiss = { showNewGroup = false; creatingCollaborationGroup = false },
+        )
         manageTarget?.let { g ->
             GroupActionsSheet(
                 group = g,
                 onRename = { renameTarget = g },
                 onDelete = { deleteTarget = g },
+                onMakeCollaboration = if (repo.agentGroupsSupported.value && repo.sessions.none { it.group == g.id }) ({
+                    repo.configureAgentGroup(g.id, true)
+                }) else null,
                 onDismiss = { manageTarget = null },
             )
         }
@@ -1930,6 +1959,7 @@ internal fun SessionsScreen(repo: PocketRepository, onOpenInbox: () -> Unit = {}
                 session = s,
                 groups = repo.sessionGroups,
                 onAssign = { repo.assignGroup(s.sessionId, it) },
+                onConfigureMember = if (repo.agentGroupsSupported.value) ({ configureAgentMember = s to it }) else null,
                 onArchive = if (repo.archiveSupported.value) ({
                     repo.setSessionArchived(
                         dir, s.sessionId, archived = true,
@@ -1937,6 +1967,48 @@ internal fun SessionsScreen(repo: PocketRepository, onOpenInbox: () -> Unit = {}
                     )
                 }) else null,
                 onDismiss = { moveTarget = null },
+            )
+        }
+        addMemberTo?.let { group ->
+            AddCollaborationMemberSheet(
+                candidates = repo.collaborationCandidates(),
+                onPick = { session -> configureAgentMember = session to group },
+                onDismiss = { addMemberTo = null },
+            )
+        }
+        configureAgentMember?.let { (session, group) ->
+            // the roster lives on the daemon: hold the form open across the round trip so a refusal
+            // ("that name is taken", "the group is full") lands on the field that caused it
+            val live = repo.sessionGroups.firstOrNull { it.id == group.id } ?: group
+            val existing = live.members.firstOrNull { it.sessionId == session.sessionId }
+            val member = CollaborationMemberUi(
+                memberId = existing?.id ?: "new:${session.sessionId}",
+                sessionId = session.sessionId,
+                label = existing?.name.orEmpty(),
+                role = existing?.role,
+                agent = existing?.launchProfile?.agent ?: session.agent ?: AgentKind.CLAUDE,
+                model = existing?.launchProfile?.model ?: session.model,
+                status = CollaborationMemberStatus.IDLE,
+            )
+            val settledGen = remember(session.sessionId, group.id) { repo.agentGroupRosterGen.value }
+            LaunchedEffect(repo.agentGroupRosterGen.value) {
+                if (repo.agentGroupRosterGen.value != settledGen) configureAgentMember = null
+            }
+            ConfigureCollaborationMemberSheet(
+                member = member,
+                suggestedName = suggestedCollaborationMemberName(
+                    member.agent, member.model, live.members.map { it.name },
+                ),
+                saving = repo.agentGroupRosterBusy.value,
+                error = agentGroupRosterErrorText(repo.agentGroupRosterError.value),
+                usedNames = live.members.filter { it.id != existing?.id }.map { it.name },
+                memberCount = live.members.size,
+                editingExisting = existing != null,
+                onSave = { name, role ->
+                    repo.configureAgentGroupMember(group.id, session.sessionId, name, role, existing?.id)
+                },
+                onRemove = existing?.let { saved -> { repo.removeAgentGroupMember(group.id, saved.id) } },
+                onDismiss = { configureAgentMember = null; repo.clearAgentGroupRosterError() },
             )
         }
     }
@@ -1976,6 +2048,27 @@ internal fun ChatScreen( // internal: rendered offscreen by ShowcaseRender (mark
     var showTerminal by remember { mutableStateOf(false) }
     var showChangedFiles by remember { mutableStateOf(false) }
     var showScheduleSheet by remember { mutableStateOf(false) } // send long-press → schedule send (issue #137)
+    val agentGroup = repo.currentAgentGroup()
+    val agentMembers = agentGroup?.let {
+        collaborationMembersUi(
+            it, repo.sessions, repo.sessionKey.value,
+            currentNeedsInput = repo.pendingAsk.value != null,
+            online = repo.phase.value == ConnPhase.Ready,
+            needsInputSessionIds = repo.pendingApprovals.values.mapNotNullTo(HashSet()) { it.sessionId },
+        )
+    }.orEmpty()
+    val currentAgentMember = agentMembers.firstOrNull { it.sessionId == repo.sessionKey.value }
+    // No resting target: an unarmed composer behaves exactly like every other session's. Selecting one is
+    // the deliberate act that makes send leave this session (see CollaborationDispatchBar).
+    val agentTarget = remember(agentGroup?.id) { CollaborationTargetState() }
+    LaunchedEffect(agentGroup?.id, agentGroup?.members, currentAgentMember?.memberId) {
+        agentTarget.reconcile(agentGroup?.id, agentMembers)
+        // opening the member you were aiming at is the same as aiming at yourself — disarm rather than
+        // leave a pill that would silently downgrade the next send to an ordinary one
+        if (agentTarget.target?.memberId == currentAgentMember?.memberId) agentTarget.clear()
+    }
+    var showAgentDelegate by remember(agentGroup?.id) { mutableStateOf(false) }
+    var showAgentTargetPicker by remember(agentGroup?.id) { mutableStateOf(false) }
     // ── session handoff (SESSION-HANDOFF.md; design session-handoff/) ──
     var showHandoffDraft by remember { mutableStateOf(false) }
     var showHandoffReturn by remember { mutableStateOf(false) }
@@ -2237,6 +2330,26 @@ internal fun ChatScreen( // internal: rendered offscreen by ShowcaseRender (mark
                         contentAlignment = Alignment.Center,
                     ) { Text("⋯", color = Tok.tx2, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
                 }
+            }
+            if (agentGroup != null) {
+                CollaborationMemberStrip(
+                    members = agentMembers,
+                    currentMemberId = currentAgentMember?.memberId,
+                    targetMemberId = agentTarget.target?.memberId,
+                    onOpenMember = { member ->
+                        if (member.sessionId != repo.sessionKey.value) {
+                            repo.saveDraft(draftKey, composer.text)
+                            val summary = repo.sessions.firstOrNull { it.sessionId == member.sessionId }
+                            val memberWorkdir = summary?.cwd ?: repo.workdir.value ?: return@CollaborationMemberStrip
+                            repo.openSession(
+                                memberWorkdir,
+                                member.sessionId,
+                                title = summary?.title,
+                                agent = member.agent,
+                            )
+                        }
+                    },
+                )
             }
             // ── the one pinned state, chosen by the shared ladder from real facts only ────────────────
             // Approval/Answer lead; a streaming turn under them is demoted to a qualifying line, and
@@ -2534,6 +2647,34 @@ internal fun ChatScreen( // internal: rendered offscreen by ShowcaseRender (mark
                         // owns the full width on top; attach + model chip + the action slot live on an
                         // accessory row below — the chip no longer squeezes what you type on narrow phones.
                         Column(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 8.dp)) {
+                            // #232 dispatch surface — one column that answers "where does this go?" and, once
+                            // a dispatch is on the wire, why every control below it stopped responding.
+                            if (agentGroup != null && agentMembers.size > 1) {
+                                Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 7.dp)) {
+                                    if (repo.agentGroupDeliveryPending.value) {
+                                        CollaborationLockBanner(
+                                            repo.agentGroupDeliveryTarget.value
+                                                ?: agentTarget.target?.label.orEmpty(),
+                                        )
+                                    } else {
+                                        CollaborationDispatchBar(
+                                            target = agentTarget.target,
+                                            onPickTarget = {
+                                                repo.clearAgentGroupDeliveryError()
+                                                showAgentTargetPicker = true
+                                            },
+                                            onClearTarget = {
+                                                repo.clearAgentGroupDeliveryError()
+                                                agentTarget.clear()
+                                            },
+                                            onDelegate = { showAgentDelegate = true },
+                                        )
+                                    }
+                                    repo.agentGroupDeliveryError.value?.let { code ->
+                                        CollaborationDeliveryNotice(code, Modifier.padding(top = 7.dp))
+                                    }
+                                }
+                            }
                             // all that survives of the old full-width amber strip: one slim line, and only
                             // once turns are actually about to drop (design: context-occupancy.jsx)
                             val ctxUsed = repo.contextUsed.value
@@ -2661,7 +2802,15 @@ internal fun ChatScreen( // internal: rendered offscreen by ShowcaseRender (mark
                                                 // `input` — a same-frame IME commit racing the tap must still be sent
                                                 val t = composer.text.trim()
                                                 // a gated send (degraded session, issue #65) returns false — keep the text for the retry
-                                                if ((t.isNotBlank() || hasReady || hasLanded) && repo.sendPrompt(t)) { composer.clear(); repo.clearDraft(draftKey) }
+                                                val target = agentTarget.target
+                                                val routed = agentGroup != null && target != null && target.memberId != currentAgentMember?.memberId
+                                                if (routed) {
+                                                    // the composer text stays put until the target's own
+                                                    // PromptAck commits it (repo clears the source draft)
+                                                    repo.routeAgentGroup(agentGroup.id, target!!.memberId, t)
+                                                } else if ((t.isNotBlank() || hasReady || hasLanded) && repo.sendPrompt(t)) {
+                                                    composer.clear(); repo.clearDraft(draftKey)
+                                                }
                                             },
                                             filled = true, contentDescription = sendLabel,
                                             // long-press → schedule this message for later (issue #137). Text-only:
@@ -2718,6 +2867,37 @@ internal fun ChatScreen( // internal: rendered offscreen by ShowcaseRender (mark
                 },
                 onDismiss = { showScheduleSheet = false },
             )
+        }
+        if (showAgentTargetPicker && agentGroup != null) {
+            CollaborationTargetPickerSheet(
+                members = agentMembers,
+                currentMemberId = currentAgentMember?.memberId,
+                selectedMemberId = agentTarget.target?.memberId,
+                onPick = { agentTarget.select(agentGroup.id, it) },
+                onDismiss = { showAgentTargetPicker = false },
+            )
+        }
+        if (showAgentDelegate && agentGroup != null && currentAgentMember != null) {
+            val target = agentTarget.target?.let { t -> agentMembers.firstOrNull { it.memberId == t.memberId } }
+            if (target != null && target.memberId != currentAgentMember.memberId) {
+                CollaborationDelegateSheet(
+                    source = currentAgentMember,
+                    target = target,
+                    sending = repo.agentGroupDeliveryPending.value,
+                    error = agentGroupDeliveryErrorText(repo.agentGroupDeliveryError.value),
+                    onSubmit = { brief ->
+                        repo.saveDraft(draftKey, composer.text)
+                        if (repo.handoffAgentGroup(
+                                agentGroup.id,
+                                currentAgentMember.memberId,
+                                target.memberId,
+                                brief.toBrief(),
+                            )
+                        ) showAgentDelegate = false
+                    },
+                    onDismiss = { showAgentDelegate = false },
+                )
+            }
         }
         if (showSessionInfo) SessionInfoSheet(repo, onDismiss = { showSessionInfo = false }, onHandoff = { showHandoffDraft = true })
         if (showQuickActions) {

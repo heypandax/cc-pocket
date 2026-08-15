@@ -58,6 +58,15 @@ open class SeedDesktopModel : DesktopModel {
     private val groupList = mutableStateListOf(DkGroup("g-auth", "Auth work", 0), DkGroup("g-ci", "CI & release", 1))
     override val customGroups: List<DkGroup> get() = groupList.sortedBy { it.order }
     override val canEditGroups = true // the seed's current project (cc-pocket) is owner-editable
+    // Keep these explicit instead of relying on DesktopModel's default getters. Screenshot/UI tests
+    // persist compiled SeedDesktopModel subclasses across incremental runs; an added interface getter
+    // would otherwise surface as AbstractMethodError until every fixture happens to be recompiled.
+    override val canEditCollaborationGroups = false
+    override val collaborationDeliveryPending = false
+    override val collaborationDeliveryTarget: String? = null
+    override val collaborationRosterBusy = false
+    override val collaborationRosterError: String? = null
+    override val collaborationRosterGen = 0
     override fun createGroup(name: String) { groupList.add(DkGroup("g-${groupList.size + 1}", name.trim(), groupList.size)) }
     override fun renameGroup(groupId: String, name: String) {
         val i = groupList.indexOfFirst { it.id == groupId }

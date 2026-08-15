@@ -7,6 +7,9 @@ import dev.ccpocket.daemon.bridge.PathScope
 import dev.ccpocket.daemon.claude.AuthService
 import dev.ccpocket.daemon.claude.ClaudeModelService
 import dev.ccpocket.daemon.conversation.OutboundSink
+import dev.ccpocket.daemon.conversation.KeyedSink
+import dev.ccpocket.daemon.conversation.isWatching
+import dev.ccpocket.daemon.conversation.sinkKey
 import dev.ccpocket.daemon.codex.CodexModelService
 import dev.ccpocket.daemon.disk.DirectoryService
 import dev.ccpocket.daemon.disk.FileExportService
@@ -34,6 +37,11 @@ import dev.ccpocket.protocol.ApprovalGrantMutationResult
 import dev.ccpocket.protocol.FetchApprovalHistory
 import dev.ccpocket.protocol.RevokeGrant
 import dev.ccpocket.protocol.AgentKind
+import dev.ccpocket.protocol.AgentGroupDelivery
+import dev.ccpocket.protocol.AgentGroupHandoffBrief
+import dev.ccpocket.protocol.AgentGroupMember
+import dev.ccpocket.protocol.AGENT_GROUP_DELIVERY_HANDOFF
+import dev.ccpocket.protocol.AGENT_GROUP_DELIVERY_ROUTE
 import dev.ccpocket.protocol.AGENT_WIRE_KIMI
 import dev.ccpocket.protocol.AGENT_WIRE_OPENCODE
 import dev.ccpocket.protocol.ScheduleState
@@ -78,6 +86,11 @@ import dev.ccpocket.protocol.GroupAssign
 import dev.ccpocket.protocol.GroupCreate
 import dev.ccpocket.protocol.GroupDelete
 import dev.ccpocket.protocol.GroupRename
+import dev.ccpocket.protocol.ConfigureAgentGroup
+import dev.ccpocket.protocol.ConfigureAgentGroupMember
+import dev.ccpocket.protocol.RemoveAgentGroupMember
+import dev.ccpocket.protocol.RouteAgentGroup
+import dev.ccpocket.protocol.HandoffAgentGroup
 import dev.ccpocket.protocol.ListDirectories
 import dev.ccpocket.protocol.ListPendingApprovals
 import dev.ccpocket.protocol.ListPathEntries
@@ -121,6 +134,7 @@ import dev.ccpocket.protocol.SessionFiles
 import dev.ccpocket.protocol.OpenSession
 import dev.ccpocket.protocol.PermissionVerdict
 import dev.ccpocket.protocol.PocketError
+import dev.ccpocket.protocol.PromptAck
 import dev.ccpocket.protocol.ApprovalPrefs
 import dev.ccpocket.protocol.ArchivedSessions
 import dev.ccpocket.protocol.PushPrefs
@@ -139,9 +153,18 @@ import dev.ccpocket.protocol.StopBackgroundJob
 import dev.ccpocket.protocol.SwitchDirectory
 import dev.ccpocket.protocol.SwitchMode
 import dev.ccpocket.protocol.SwitchServiceTier
+import dev.ccpocket.protocol.SessionLive
+import dev.ccpocket.protocol.SESSION_GROUP_COLLABORATION
+import dev.ccpocket.protocol.SESSION_GROUP_ORGANIZATION
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.LinkedHashMap
+import java.util.concurrent.ConcurrentHashMap
 
 /** Maps an inbound [Frame] to the registry/services. Returns fast; turns run on conversation scopes. */
 class RequestRouter(
@@ -170,6 +193,8 @@ class RequestRouter(
     // the session-archive store's backing file (issue #202). Injectable like prefs/presets/schedules so a
     // test never reads or rewrites the developer's real ~/.cc-pocket/session-archive.json.
     private val archiveFile: java.io.File = SessionArchive.defaultFile(),
+    /** Session group/roster store, injectable so router tests never touch the developer's real metadata. */
+    private val groupsFile: java.io.File = registry.groupStore,
     /** ReviewRequest, sender-authoritative side (REVIEW-REQUEST.md). Null = this daemon has no review
      *  plane wired (a bare router in a unit test): every pocket/review.* frame then answers with an
      *  honest `review_unavailable` instead of silently doing nothing. Deliberately a SEPARATE handle
@@ -197,12 +222,73 @@ class RequestRouter(
          *  would drop the unknown types anyway, but gating keeps the wire quiet and the contract real. */
         @Volatile var supportsApprovalV2: Boolean = false
 
+        /** issue #232: opts this one connection into collaboration group/roster frames. */
+        @Volatile var supportsAgentGroups: Boolean = false
+
         /** Whether this peer can decode [agent]. CLAUDE/CODEX are the baseline vocabulary every shipped
          *  client understands; OPENCODE/KIMI are post-baseline additions each guarded by its own cap. */
         fun allows(agent: AgentKind): Boolean = when (agent) {
             AgentKind.OPENCODE -> supportsOpencode
             AgentKind.KIMI -> supportsKimi
             AgentKind.CLAUDE, AgentKind.CODEX -> true
+        }
+    }
+
+    private data class AgentGroupDeliveryKey(val deviceId: String, val requestId: String)
+
+    private data class AgentGroupRequestFingerprint(
+        val kind: String,
+        val workdir: String,
+        val groupId: String,
+        val fromConvoId: String,
+        val fromMemberId: String?,
+        val targetMemberId: String,
+        val text: String,
+        val images: List<dev.ccpocket.protocol.ImageData>,
+        val promptId: String?,
+    )
+
+    private data class AgentGroupDeliveryEntry(
+        val fingerprint: AgentGroupRequestFingerprint,
+        val delivery: AgentGroupDelivery,
+        val promptDispatched: Boolean,
+    )
+
+    private val agentGroupLocks = ConcurrentHashMap<String, Mutex>()
+    private val agentGroupDeliveries = object : LinkedHashMap<AgentGroupDeliveryKey, AgentGroupDeliveryEntry>(256, .75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<AgentGroupDeliveryKey, AgentGroupDeliveryEntry>): Boolean = size > 256
+    }
+
+    /** Switchable sink with the REAL transport identity. Target baseline/in-flight events are buffered until
+     * Delivery has armed the app; activation flushes in order and then becomes a direct pass-through. */
+    private class AgentGroupStage(real: OutboundSink) {
+        private val mutex = Mutex()
+        private val buffered = mutableListOf<Frame>()
+        private val acknowledgedPromptIds = ConcurrentHashMap.newKeySet<String>()
+        private var delegate: OutboundSink? = null
+        val ready = CompletableDeferred<Unit>()
+        private val collector = OutboundSink { frame ->
+            if (frame is PromptAck) acknowledgedPromptIds += frame.promptId
+            mutex.withLock {
+                val active = delegate
+                if (active == null) {
+                    buffered += frame
+                    if (frame is SessionLive) ready.complete(Unit)
+                } else {
+                    active.emit(frame)
+                }
+            }
+        }
+        val sink: OutboundSink = KeyedSink(sinkKey(real), collector, watching = real.isWatching())
+
+        fun acknowledged(promptId: String): Boolean = promptId in acknowledgedPromptIds
+
+        suspend fun activate(real: OutboundSink) {
+            mutex.withLock {
+                delegate = real
+                buffered.forEach { real.emit(it) }
+                buffered.clear()
+            }
         }
     }
 
@@ -297,6 +383,9 @@ class RequestRouter(
     // op, and carries the vetted OpenSession's path scope into the conversation's PermissionBridge.
     suspend fun handle(frame: Frame, sink: OutboundSink, origin: String? = null, guestScope: GuestScope? = null, caps: ClientCapsHolder? = null, bridgeAllowedCommands: List<String> = emptyList(), ownerBypass: Boolean = false, deviceId: String? = null, collabScope: CollaboratorScope? = null, onOpened: suspend (String) -> Unit = {}) {
         val dev = deviceId ?: LOCAL_DEVICE_ID
+        // the one owner test, spelled once: NOT a bridge origin, NOT a guest scope, NOT a collaborator link.
+        // Every #232 collaboration branch below gates on it, and one drifting copy would be a privilege hole.
+        val owner = origin == null && guestScope == null && collabScope == null
         when (frame) {
             // capability declaration (wire-compat gate for AgentKind additions) — no reply; the very
             // next list request answers unfiltered. Ingress handlers may process frames concurrently,
@@ -306,6 +395,7 @@ class RequestRouter(
                 caps?.supportsOpencode = AGENT_WIRE_OPENCODE in frame.supportsAgents
                 caps?.supportsKimi = AGENT_WIRE_KIMI in frame.supportsAgents // issue #206: gates KIMI rows
                 caps?.supportsApprovalV2 = frame.supportsApprovalV2 // P2-3: gates the V2 approval frames
+                caps?.supportsAgentGroups = frame.supportsAgentGroups
             }
 
             is ListDirectories ->
@@ -319,27 +409,97 @@ class RequestRouter(
                 sink.emit(PendingApprovals(registry.pendingApprovals(shell.pendingApprovals() + exports.pendingApprovals())))
             }
 
-            is ListSessions -> emitSessions(frame.workdir, sink, guestScope, caps)
+            is ListSessions -> emitSessions(frame.workdir, sink, guestScope, caps, owner)
 
             // session groups (issue #119): mutate the daemon-side group store, then re-push this workdir's
             // session list so the grouping change reflects immediately (same response path as ListSessions).
             // A GUEST can't manage groups (they belong to the owner's project view) — silently no-op the
             // mutation but still answer with the (re-filtered) list so the client isn't left hanging.
             is GroupCreate -> {
-                if (guestScope == null) SessionGroups.create(groupWorkdir(frame.workdir), frame.name)
-                emitSessions(frame.workdir, sink, guestScope, caps)
+                when (frame.purpose) {
+                    SESSION_GROUP_ORGANIZATION -> if (guestScope == null) {
+                        SessionGroups.create(groupWorkdir(frame.workdir), frame.name, groupsFile)
+                    }
+                    SESSION_GROUP_COLLABORATION -> when {
+                        !owner -> sink.emit(PocketError("owner_only", "collaboration groups can only be managed by the owner"))
+                        caps?.supportsAgentGroups != true -> sink.emit(PocketError("invalid_group", "client did not declare agent-group support"))
+                        else -> SessionGroups.create(groupWorkdir(frame.workdir), frame.name, groupsFile, purpose = frame.purpose)
+                    }
+                    else -> sink.emit(PocketError("invalid_group", "unknown session group purpose"))
+                }
+                emitSessions(frame.workdir, sink, guestScope, caps, owner)
             }
             is GroupRename -> {
-                if (guestScope == null) SessionGroups.rename(groupWorkdir(frame.workdir), frame.groupId, frame.name)
-                emitSessions(frame.workdir, sink, guestScope, caps)
+                val wd = groupWorkdir(frame.workdir)
+                val collab = SessionGroups.groupsFor(wd, groupsFile).any {
+                    it.id == frame.groupId && it.purpose == SESSION_GROUP_COLLABORATION
+                }
+                if (!collab && guestScope == null) SessionGroups.rename(wd, frame.groupId, frame.name, groupsFile)
+                else if (collab && owner && caps?.supportsAgentGroups == true) SessionGroups.rename(wd, frame.groupId, frame.name, groupsFile)
+                else if (collab && owner) sink.emit(PocketError("invalid_group", "client did not declare agent-group support"))
+                else if (collab) sink.emit(PocketError("owner_only", "collaboration groups can only be managed by the owner"))
+                emitSessions(frame.workdir, sink, guestScope, caps, owner)
             }
             is GroupDelete -> {
-                if (guestScope == null) SessionGroups.delete(groupWorkdir(frame.workdir), frame.groupId)
-                emitSessions(frame.workdir, sink, guestScope, caps)
+                val wd = groupWorkdir(frame.workdir)
+                val collab = SessionGroups.groupsFor(wd, groupsFile).any {
+                    it.id == frame.groupId && it.purpose == SESSION_GROUP_COLLABORATION
+                }
+                if (!collab && guestScope == null) SessionGroups.delete(wd, frame.groupId, groupsFile)
+                else if (collab && owner && caps?.supportsAgentGroups == true) SessionGroups.delete(wd, frame.groupId, groupsFile)
+                else if (collab && owner) sink.emit(PocketError("invalid_group", "client did not declare agent-group support"))
+                else if (collab) sink.emit(PocketError("owner_only", "collaboration groups can only be managed by the owner"))
+                emitSessions(frame.workdir, sink, guestScope, caps, owner)
             }
             is GroupAssign -> {
-                if (guestScope == null) SessionGroups.assign(groupWorkdir(frame.workdir), frame.sessionId, frame.groupId)
-                emitSessions(frame.workdir, sink, guestScope, caps)
+                if (guestScope == null) SessionGroups.assign(groupWorkdir(frame.workdir), frame.sessionId, frame.groupId, groupsFile)
+                emitSessions(frame.workdir, sink, guestScope, caps, owner)
+            }
+
+            is ConfigureAgentGroup -> {
+                when {
+                    !owner -> sink.emit(PocketError("owner_only", "collaboration groups can only be managed by the owner"))
+                    caps?.supportsAgentGroups != true -> sink.emit(PocketError("invalid_group", "client did not declare agent-group support"))
+                    !SessionGroups.configurePurpose(groupWorkdir(frame.workdir), frame.groupId, frame.purpose, groupsFile) ->
+                        sink.emit(PocketError("invalid_group", "group purpose could not be changed (an organization group must be empty before upgrade)"))
+                }
+                emitSessions(frame.workdir, sink, guestScope, caps, owner)
+            }
+            is ConfigureAgentGroupMember -> {
+                if (!owner) {
+                    sink.emit(PocketError("owner_only", "collaboration groups can only be managed by the owner"))
+                } else if (caps?.supportsAgentGroups != true) {
+                    sink.emit(PocketError("invalid_group", "client did not declare agent-group support"))
+                } else {
+                    val wd = groupWorkdir(frame.workdir)
+                    val summary = registry.listSessions(wd, groupsFile).firstOrNull { it.sessionId == frame.sessionId }
+                    if (summary == null || (summary.agent ?: AgentKind.CLAUDE) != frame.launchProfile.agent) {
+                        sink.emit(PocketError("not_member", "session does not exist here or its agent does not match the launch profile"))
+                    } else {
+                        val result = SessionGroups.configureMember(
+                            wd, frame.groupId, frame.sessionId, frame.name, frame.role, frame.launchProfile,
+                            frame.memberId, frame.defaultMember, groupsFile,
+                        )
+                        if (!result.ok) sink.emit(PocketError(result.errorCode ?: "not_member", result.error ?: "member could not be configured"))
+                    }
+                }
+                emitSessions(frame.workdir, sink, guestScope, caps, owner)
+            }
+            is RemoveAgentGroupMember -> {
+                when {
+                    !owner -> sink.emit(PocketError("owner_only", "collaboration groups can only be managed by the owner"))
+                    caps?.supportsAgentGroups != true -> sink.emit(PocketError("invalid_group", "client did not declare agent-group support"))
+                    !SessionGroups.removeMember(groupWorkdir(frame.workdir), frame.groupId, frame.memberId, groupsFile) ->
+                        sink.emit(PocketError("not_member", "member does not exist in that collaboration group"))
+                }
+                emitSessions(frame.workdir, sink, guestScope, caps, owner)
+            }
+
+            is RouteAgentGroup -> scope.launch {
+                routeAgentGroup(frame, sink, dev, owner, caps)
+            }
+            is HandoffAgentGroup -> scope.launch {
+                handoffAgentGroup(frame, sink, dev, owner, caps)
             }
 
             // session archive (issue #202): same daemon-side-truth + re-push contract as the groups above.
@@ -350,7 +510,6 @@ class RequestRouter(
             // first two alone is vacuous for exactly the weakest credential we hand out. The handoff plane
             // in this same file already spells all three out; so does this.
             is SetSessionArchived -> {
-                val owner = origin == null && guestScope == null && collabScope == null
                 if (owner) {
                     val ok = SessionArchive.setArchived(groupWorkdir(frame.workdir), frame.sessionId, frame.archived, archiveFile)
                     // a refused write (bad id, cap hit) must not read as success: the re-pushed list would
@@ -363,12 +522,12 @@ class RequestRouter(
                 // the emit is gated too, not just the mutation: emitArchivedSessions is a whole-machine
                 // enumeration with no scope filter, so a non-owner must never reach it through this door
                 if (owner && frame.fromArchiveView) scope.launch { emitArchivedSessions(sink, caps) }
-                else emitSessions(frame.workdir, sink, guestScope, caps)
+                else emitSessions(frame.workdir, sink, guestScope, caps, owner)
             }
             // a multi-project scan → off the inbound pump like FetchUsage. Owner only: this is a
             // cross-project discovery surface, strictly more than the per-dir listing a guest may have.
             is ListArchivedSessions ->
-                if (origin == null && guestScope == null && collabScope == null) {
+                if (owner) {
                     scope.launch { emitArchivedSessions(sink, caps) }
                 }
 
@@ -379,9 +538,9 @@ class RequestRouter(
             // guest never reaches here (GuestCaps default-denies the frame type at the choke point) —
             // the null-check is belt-and-suspenders like the group mutations', answering with the list.
             is RenameSession -> scope.launch {
-                if (guestScope != null) { emitSessions(frame.workdir, sink, guestScope, caps); return@launch }
+                if (guestScope != null) { emitSessions(frame.workdir, sink, guestScope, caps, owner = false); return@launch }
                 val err = registry.renameSession(groupWorkdir(frame.workdir), frame.sessionId, frame.title)
-                if (err == null) emitSessions(frame.workdir, sink, guestScope, caps)
+                if (err == null) emitSessions(frame.workdir, sink, guestScope, caps, origin == null && collabScope == null)
                 else sink.emit(PocketError("rename_failed", err))
             }
 
@@ -783,7 +942,7 @@ class RequestRouter(
             // ---- ReviewRequest control frames (REVIEW-REQUEST.md §10). A SEPARATE plane from the
             // handoff frames above: no session, no lease, no workdir — so the checks are correspondingly
             // narrow. Two credential classes only:
-            //   OWNER (create/cancel/close): origin == null && guestScope == null && collabScope == null;
+            //   OWNER (create/cancel/close): no origin, no guest scope, no collaborator scope;
             //   RECIPIENT (delivered/acknowledge/start/decline/respond): collabScope != null, and the
             //     registry additionally requires the row to be addressed to THAT device.
             // A bridge or guest reaches neither: their ingress caps deny these types outright, and the
@@ -1066,6 +1225,352 @@ class RequestRouter(
      *  one dir-key. An unresolvable path keeps the raw string (the same empty answer as before). */
     private fun groupWorkdir(workdir: String): String = dirs.validateWorkdir(workdir)?.toString() ?: workdir
 
+    private suspend fun routeAgentGroup(
+        frame: RouteAgentGroup,
+        sink: OutboundSink,
+        deviceId: String,
+        owner: Boolean,
+        caps: ClientCapsHolder?,
+    ) = deliverAgentGroup(
+        requestId = frame.requestId,
+        kind = AGENT_GROUP_DELIVERY_ROUTE,
+        workdir = frame.workdir,
+        groupId = frame.groupId,
+        fromConvoId = frame.fromConvoId,
+        fromMemberId = null,
+        targetMemberId = frame.targetMemberId,
+        text = frame.text,
+        images = frame.images,
+        promptId = frame.promptId,
+        sink = sink,
+        deviceId = deviceId,
+        owner = owner,
+        caps = caps,
+    )
+
+    private suspend fun handoffAgentGroup(
+        frame: HandoffAgentGroup,
+        sink: OutboundSink,
+        deviceId: String,
+        owner: Boolean,
+        caps: ClientCapsHolder?,
+    ) {
+        val briefError = validateAgentGroupBrief(frame.brief)
+        deliverAgentGroup(
+        requestId = frame.requestId,
+        kind = AGENT_GROUP_DELIVERY_HANDOFF,
+        workdir = frame.workdir,
+        groupId = frame.groupId,
+        fromConvoId = frame.fromConvoId,
+        fromMemberId = frame.fromMemberId,
+        targetMemberId = frame.targetMemberId,
+        text = formatAgentGroupBrief(frame.brief),
+        images = emptyList(),
+        promptId = frame.promptId,
+        sink = sink,
+        deviceId = deviceId,
+        owner = owner,
+        caps = caps,
+        validationError = briefError,
+        )
+    }
+
+    /** One per authenticated device: retries serialize behind the original and read its bounded receipt,
+     * so a lost Delivery can be retried without creating a second agent turn. */
+    private suspend fun deliverAgentGroup(
+        requestId: String,
+        kind: String,
+        workdir: String,
+        groupId: String,
+        fromConvoId: String,
+        fromMemberId: String?,
+        targetMemberId: String,
+        text: String,
+        images: List<dev.ccpocket.protocol.ImageData>,
+        promptId: String?,
+        sink: OutboundSink,
+        deviceId: String,
+        owner: Boolean,
+        caps: ClientCapsHolder?,
+        validationError: String? = null,
+    ) {
+        val key = AgentGroupDeliveryKey(deviceId, requestId)
+        val fingerprint = AgentGroupRequestFingerprint(
+            kind, workdir, groupId, fromConvoId, fromMemberId, targetMemberId, text, images, promptId,
+        )
+        val lock = agentGroupLocks.computeIfAbsent(deviceId) { Mutex() }
+        lock.withLock {
+            synchronized(agentGroupDeliveries) { agentGroupDeliveries[key] }?.let { entry ->
+                if (entry.fingerprint != fingerprint) {
+                    sink.emit(
+                        AgentGroupDelivery(
+                            requestId, kind, false, groupId, fromConvoId, targetMemberId,
+                            promptId = promptId, errorCode = "request_conflict",
+                            error = "requestId was already used for a different agent-group delivery",
+                        ),
+                    )
+                    return@withLock
+                }
+                val cached = entry.delivery
+                if (!cached.ok || cached.targetConvoId == null) {
+                    sink.emit(cached)
+                    return@withLock
+                }
+                if (cached.targetConvoId == cached.fromConvoId) {
+                    // Self-route never switched views. Replaying the receipt is sufficient; staging with
+                    // the same sinkKey would replace then close the only current view.
+                    sink.emit(cached)
+                    if (entry.promptDispatched) cached.promptId?.let { sink.emit(PromptAck(cached.fromConvoId, it)) }
+                    return@withLock
+                }
+                // A successful receipt may itself have been lost before the client switched. Re-stage the
+                // SAME target and baseline, repeat the switch transaction, but never re-send the prompt.
+                val cachedWd = dirs.validateWorkdir(workdir)?.toString()
+                val cachedGroup = cachedWd?.let { path ->
+                    SessionGroups.groupsFor(path, groupsFile).firstOrNull { it.id == cached.groupId && it.purpose == SESSION_GROUP_COLLABORATION }
+                }
+                val cachedMember = cachedGroup?.members?.firstOrNull { it.id == cached.targetMemberId }
+                if (cachedWd == null || cachedMember == null) {
+                    sink.emit(cached.copy(ok = false, errorCode = "not_member", error = "the delivered member is no longer in this group"))
+                    return@withLock
+                }
+                val retryStage = AgentGroupStage(sink)
+                val retryPrepared = when (val result = registry.prepareAgentGroupTarget(
+                    cachedWd, cachedMember, retryStage.sink,
+                    peerSupportsOpencode = caps?.supportsOpencode == true,
+                    peerSupportsKimi = caps?.supportsKimi == true,
+                )) {
+                    is SessionRegistry.AgentGroupPrepareResult.Refused -> {
+                        sink.emit(cached.copy(ok = false, errorCode = result.code, error = result.message)); return@withLock
+                    }
+                    is SessionRegistry.AgentGroupPrepareResult.Ready -> result.value
+                }
+                if (runCatching { withTimeout(5_000) { retryStage.ready.await() } }.isFailure ||
+                    !registry.activateAgentGroupTarget(retryPrepared, retryStage.sink)
+                ) {
+                    registry.discardAgentGroupTarget(retryPrepared, retryStage.sink)
+                    sink.emit(cached.copy(ok = false, errorCode = "open_failed", error = "target member did not become ready"))
+                    return@withLock
+                }
+                // Stable member identity survives a backend heal/fork. The roster may now bind this member
+                // to a NEW session id; restage and re-announce that current identity, never the stale receipt.
+                val retryReceipt = cached.copy(
+                    targetSessionId = registry.agentGroupTargetSessionId(retryPrepared) ?: cachedMember.sessionId,
+                    targetConvoId = retryPrepared.convoId,
+                )
+                val receiptSent = runCatching { sink.emit(retryReceipt) }.isSuccess
+                if (!receiptSent) {
+                    registry.discardAgentGroupTarget(retryPrepared, retryStage.sink)
+                    return@withLock
+                }
+                runCatching { registry.close(cached.fromConvoId, sink) }
+                runCatching { retryStage.activate(sink) }
+                synchronized(agentGroupDeliveries) {
+                    agentGroupDeliveries[key] = entry.copy(delivery = retryReceipt)
+                }
+                if (!entry.promptDispatched) {
+                    val reachedConversation = runCatching {
+                        registry.sendPrompt(SendPrompt(retryPrepared.convoId, text, images, cached.promptId))
+                    }.getOrDefault(false)
+                    val dispatched = reachedConversation && cached.promptId?.let(retryStage::acknowledged) == true
+                    if (dispatched) synchronized(agentGroupDeliveries) {
+                        agentGroupDeliveries[key] = entry.copy(
+                            delivery = retryReceipt,
+                            promptDispatched = true,
+                        )
+                    } else if (!dispatched) {
+                        sink.emit(
+                            retryReceipt.copy(
+                                ok = false,
+                                errorCode = "delivery_failed",
+                                error = "target conversation did not acknowledge prompt delivery",
+                            ),
+                        )
+                    }
+                } else if (retryReceipt.promptId != null) {
+                    // The original PromptAck may have been lost with the transport. This in-memory
+                    // ledger bit is set only after the staging sink observed that exact ack, so replaying
+                    // it is proof, not an optimistic acknowledgement. A daemon restart loses the ledger
+                    // and deliberately falls back to the client's ambiguous-delivery recovery instead.
+                    retryReceipt.promptId?.let { sink.emit(PromptAck(retryPrepared.convoId, it)) }
+                }
+                return@withLock
+            }
+            val effectivePromptId = promptId ?: "agent-group:$deviceId:$requestId"
+            fun failure(code: String, message: String, targetSessionId: String? = null) = AgentGroupDelivery(
+                requestId, kind, false, groupId, fromConvoId, targetMemberId,
+                targetSessionId = targetSessionId, promptId = effectivePromptId, errorCode = code, error = message,
+            )
+            suspend fun finish(delivery: AgentGroupDelivery) {
+                synchronized(agentGroupDeliveries) { agentGroupDeliveries[key] = AgentGroupDeliveryEntry(fingerprint, delivery, promptDispatched = false) }
+                sink.emit(delivery)
+            }
+            if (requestId.isBlank() || requestId.length > 128) {
+                finish(failure("delivery_failed", "requestId must be 1-128 characters")); return@withLock
+            }
+            if (!owner) {
+                finish(failure("owner_only", "agent-group routing is available only to the owner")); return@withLock
+            }
+            if (validationError != null) {
+                finish(failure("delivery_failed", validationError)); return@withLock
+            }
+            if (kind == AGENT_GROUP_DELIVERY_ROUTE && text.isBlank() && images.isEmpty()) {
+                finish(failure("delivery_failed", "route needs text or at least one image")); return@withLock
+            }
+            if (caps?.supportsAgentGroups != true) {
+                finish(failure("invalid_group", "this client did not declare agent-group support")); return@withLock
+            }
+            val wd = dirs.validateWorkdir(workdir)?.toString()
+            if (wd == null) {
+                finish(failure("invalid_group", "collaboration group workdir is not readable")); return@withLock
+            }
+            val group = SessionGroups.groupsFor(wd, groupsFile).firstOrNull { it.id == groupId && it.purpose == SESSION_GROUP_COLLABORATION }
+            if (group == null) {
+                finish(failure("invalid_group", "collaboration group does not exist")); return@withLock
+            }
+            val target = group.members.firstOrNull { it.id == targetMemberId }
+            if (target == null) {
+                finish(failure("not_member", "target is not a member of this collaboration group")); return@withLock
+            }
+            val sourceSession = registry.routingSourceSession(fromConvoId)
+            if (sourceSession == null) {
+                val why = if (registry.routingSourceObserved(fromConvoId))
+                    "source member is an external read-only session" else "source conversation is no longer active"
+                finish(failure("delivery_failed", why, target.sessionId)); return@withLock
+            }
+            if (registry.routingSourceWorkdir(fromConvoId) != java.nio.file.Path.of(wd).toAbsolutePath().normalize()) {
+                finish(failure("not_member", "source conversation belongs to a different project", target.sessionId)); return@withLock
+            }
+            if (!registry.routingSourceAttached(fromConvoId, sink)) {
+                finish(failure("delivery_failed", "source conversation is not attached to this device", target.sessionId)); return@withLock
+            }
+            val sourceMember = group.members.firstOrNull { it.sessionId == sourceSession }
+            if (sourceMember == null || (fromMemberId != null && sourceMember.id != fromMemberId)) {
+                finish(failure("not_member", "source conversation is not the declared group member", target.sessionId)); return@withLock
+            }
+            if (kind == AGENT_GROUP_DELIVERY_HANDOFF && sourceMember.id == target.id) {
+                finish(failure("delivery_failed", "a handoff target must be a different member", target.sessionId)); return@withLock
+            }
+            val targetSummary = registry.listSessions(wd, groupsFile).firstOrNull { it.sessionId == target.sessionId }
+            if (targetSummary == null || (targetSummary.agent ?: AgentKind.CLAUDE) != target.launchProfile.agent) {
+                finish(failure("not_member", "target session is missing or does not match its launch profile", target.sessionId)); return@withLock
+            }
+
+            // Self-route fallback: the app normally uses SendPrompt directly, but a retried/stale @ route is
+            // still idempotent and never opens/detaches/replays the current conversation.
+            if (sourceMember.id == target.id) {
+                val accepted = AgentGroupDelivery(
+                    requestId, kind, true, groupId, fromConvoId, target.id,
+                    targetSessionId = target.sessionId, targetConvoId = fromConvoId, promptId = effectivePromptId,
+                )
+                synchronized(agentGroupDeliveries) {
+                    agentGroupDeliveries[key] = AgentGroupDeliveryEntry(fingerprint, accepted, promptDispatched = false)
+                }
+                if (runCatching { sink.emit(accepted) }.isFailure) return@withLock
+                val dispatched = registry.sendPrompt(SendPrompt(fromConvoId, text, images, effectivePromptId))
+                if (dispatched) synchronized(agentGroupDeliveries) {
+                    agentGroupDeliveries[key] = AgentGroupDeliveryEntry(fingerprint, accepted, promptDispatched = true)
+                } else {
+                    sink.emit(
+                        accepted.copy(
+                            ok = false,
+                            errorCode = "delivery_failed",
+                            error = "source conversation did not acknowledge prompt delivery",
+                        ),
+                    )
+                }
+                return@withLock
+            }
+
+            val stage = AgentGroupStage(sink)
+            val prepared = when (val result = registry.prepareAgentGroupTarget(
+                wd, target, stage.sink,
+                peerSupportsOpencode = caps.supportsOpencode,
+                peerSupportsKimi = caps.supportsKimi,
+            )) {
+                is SessionRegistry.AgentGroupPrepareResult.Refused -> {
+                    finish(failure(result.code, result.message, target.sessionId)); return@withLock
+                }
+                is SessionRegistry.AgentGroupPrepareResult.Ready -> result.value
+            }
+            val baselineReady = runCatching { withTimeout(5_000) { stage.ready.await() } }.isSuccess
+            if (!baselineReady) {
+                registry.discardAgentGroupTarget(prepared, stage.sink)
+                finish(failure("open_failed", "target member did not become ready", target.sessionId)); return@withLock
+            }
+            if (!registry.activateAgentGroupTarget(prepared, stage.sink)) {
+                registry.discardAgentGroupTarget(prepared, stage.sink)
+                finish(failure("open_failed", "target member closed while it was being prepared", target.sessionId)); return@withLock
+            }
+            val accepted = AgentGroupDelivery(
+                requestId, kind, true, groupId, fromConvoId, target.id,
+                targetSessionId = registry.agentGroupTargetSessionId(prepared) ?: target.sessionId,
+                targetConvoId = prepared.convoId, promptId = effectivePromptId,
+            )
+            // Cache before transport send. If the receipt itself is lost, keep source untouched, discard
+            // this stage, and let the same requestId's retry restage without double-sending the prompt.
+            synchronized(agentGroupDeliveries) {
+                agentGroupDeliveries[key] = AgentGroupDeliveryEntry(fingerprint, accepted, promptDispatched = false)
+            }
+            if (runCatching { sink.emit(accepted) }.isFailure) {
+                registry.discardAgentGroupTarget(prepared, stage.sink)
+                return@withLock
+            }
+            runCatching { registry.close(fromConvoId, sink) } // 2. source loses only this client's view
+            runCatching { stage.activate(sink) }              // 3. target baseline/in-flight frames flush once
+            val reachedConversation = runCatching {
+                registry.sendPrompt(SendPrompt(prepared.convoId, text, images, effectivePromptId))
+            }.getOrDefault(false)
+            val dispatched = reachedConversation && stage.acknowledged(effectivePromptId)
+            if (dispatched) synchronized(agentGroupDeliveries) {
+                agentGroupDeliveries[key] = AgentGroupDeliveryEntry(fingerprint, accepted, promptDispatched = true)
+            } else {
+                // Correlate the post-receipt failure with the same requestId. A generic PocketError would
+                // leave the app's delivery transaction pinned forever and make every later route a no-op.
+                sink.emit(
+                    accepted.copy(
+                        ok = false,
+                        errorCode = "delivery_failed",
+                        error = "target conversation did not acknowledge prompt delivery",
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun validateAgentGroupBrief(brief: AgentGroupHandoffBrief): String? {
+        if (brief.objective.isBlank()) return "handoff objective is required"
+        if (brief.conclusions.none { it.isNotBlank() }) return "handoff conclusions need at least one item"
+        if (brief.constraints.none { it.isNotBlank() }) return "handoff constraints need at least one item"
+        if (brief.doneWhen.none { it.isNotBlank() }) return "handoff doneWhen needs at least one item"
+        val all = listOf(brief.objective) + brief.conclusions + brief.constraints + brief.doneWhen
+        if (all.size > 97 || all.any { it.length > 2_000 } || all.sumOf { it.length } > 16_000) {
+            return "handoff brief is too large"
+        }
+        if (all.any { value -> value.any { it.isISOControl() && it != '\n' && it != '\t' } }) {
+            return "handoff brief contains unsafe control characters"
+        }
+        return null
+    }
+
+    private fun formatAgentGroupBrief(brief: AgentGroupHandoffBrief): String = buildString {
+        // "delegated", not "handoff": the app reserves handoff for transferring a session to another PERSON,
+        // and the receiving agent should read this as work passed between members of one machine's roster.
+        appendLine("# Delegated task brief")
+        appendLine()
+        appendLine("## Objective")
+        appendLine(brief.objective.trim())
+        fun section(title: String, values: List<String>) {
+            if (values.isEmpty()) return
+            appendLine()
+            appendLine("## $title")
+            values.filter { it.isNotBlank() }.forEach { appendLine("- ${it.trim()}") }
+        }
+        section("Known conclusions", brief.conclusions)
+        section("Constraints", brief.constraints)
+        section("Done when", brief.doneWhen)
+    }
+
     /**
      * Emit this [workdir]'s resumable-session list — the single reply to [ListSessions] AND the re-push after
      * every session-group mutation (issue #119). Resolves the workdir like [OpenSession] (else a raw `~/…`
@@ -1073,10 +1578,16 @@ class RequestRouter(
      * sessions, marks the busy ones, and stamps the project's groups. A GUEST (issue #115) sees ONLY the
      * sessions IT started (visibility "by initiator") and no group headers.
      */
-    private suspend fun emitSessions(workdir: String, sink: OutboundSink, guestScope: GuestScope?, caps: ClientCapsHolder? = null) {
+    private suspend fun emitSessions(
+        workdir: String,
+        sink: OutboundSink,
+        guestScope: GuestScope?,
+        caps: ClientCapsHolder? = null,
+        owner: Boolean = guestScope == null,
+    ) {
         val busy = registry.busySessionIds()
         val wd = groupWorkdir(workdir)
-        var items = registry.listSessions(wd).map { if (it.sessionId in busy) it.copy(busy = true) else it }
+        var items = registry.listSessions(wd, groupsFile).map { if (it.sessionId in busy) it.copy(busy = true) else it }
         if (guestScope != null) items = items.filter { it.sessionId in guestScope.ownedSessions }
         // archived rows are filtered HERE, not client-side (issue #202): the desktop's RECENT snapshot holds
         // rows for projects it isn't currently listing and could never re-filter them, and doing it daemon-side
@@ -1085,13 +1596,25 @@ class RequestRouter(
         if (archived.isNotEmpty()) items = items.filter { it.sessionId !in archived }
         // wire-compat (ClientCaps): an undeclared client would drop this WHOLE frame on one opencode/kimi row
         items = items.filter { capsAllow(caps, it.agent) }
-        val groups = if (guestScope != null) null else SessionGroups.groupsFor(wd)
+        var groups = if (guestScope != null) null else SessionGroups.groupsFor(wd, groupsFile)
+        // An old app sees no collaboration vocabulary. Hide those headers AND strip their member rows back
+        // to ordinary ungrouped summaries; otherwise its legacy Move/Delete actions could corrupt a roster.
+        if (groups != null && caps?.supportsAgentGroups != true) {
+            val hidden = groups.filter { it.purpose == SESSION_GROUP_COLLABORATION }.mapTo(HashSet()) { it.id }
+            groups = groups.filterNot { it.id in hidden }
+            if (hidden.isNotEmpty()) {
+                items = items.map { row ->
+                    if (row.group in hidden) row.copy(group = null, memberId = null, memberName = null, memberRole = null) else row
+                }
+            }
+        }
         // renameSupported (issue #158) / archiveSupported (issue #202): owner-only — a guest's frame is
         // capability-denied anyway, so its client must not show the entry
         sink.emit(
             Sessions(
                 workdir, items, groups = groups,
                 renameSupported = guestScope == null, archiveSupported = guestScope == null,
+                agentGroupsSupported = owner && caps?.supportsAgentGroups == true,
             ),
         )
     }

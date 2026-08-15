@@ -21,10 +21,15 @@ import androidx.compose.ui.unit.dp
 import dev.ccpocket.app.data.ChatItem
 import dev.ccpocket.app.theme.ThemeMode
 import dev.ccpocket.app.ui.ComposerState
+import dev.ccpocket.app.ui.CollaborationMemberUi
+import dev.ccpocket.protocol.AgentGroupHandoffBrief
+import dev.ccpocket.protocol.SessionGroup
+import dev.ccpocket.protocol.SessionSummary
 import dev.ccpocket.app.ui.tilde
 import dev.ccpocket.protocol.AgentKind
 import dev.ccpocket.protocol.PermissionAsk
 import dev.ccpocket.protocol.PermissionMode
+import dev.ccpocket.protocol.SESSION_GROUP_ORGANIZATION
 
 /** Chat-stream alignment preference (issue #213, desktop-only). LEFT = the current document flow (every turn
  *  left-aligned, unchanged — the default so existing users see no difference). BUBBLES = classic chat layout:
@@ -89,7 +94,12 @@ data class DkSession(
 
 /** One custom session group inside a project (issue #119) — the view mirror of protocol's SessionGroup.
  *  Ordered by [order]; a project with no groups (or an older daemon that omits them) renders sessions flat. */
-data class DkGroup(val id: String, val name: String, val order: Int)
+data class DkGroup(
+    val id: String,
+    val name: String,
+    val order: Int,
+    val purpose: String = SESSION_GROUP_ORGANIZATION,
+)
 
 /**
  * One RECENT group — a project the user listed this run, with the sessions we know it has. The
@@ -365,8 +375,20 @@ interface DesktopModel {
     /** Owner + group-capable connection: false hides every group-edit affordance (a guest is a daemon-side
      *  no-op anyway; the seed/preview model leaves it inert). */
     val canEditGroups: Boolean get() = false
+    val canEditCollaborationGroups: Boolean get() = false
     /** Create a group in the current project (the daemon re-pushes Sessions, refreshing [customGroups]). */
     fun createGroup(name: String) {}
+    fun createCollaborationGroup(name: String) {}
+    fun collaborationGroup(groupId: String): SessionGroup? = null
+    fun configureCollaborationMember(groupId: String, sessionId: String, name: String, role: String?, memberId: String?) {}
+    fun removeCollaborationMember(groupId: String, memberId: String) {}
+    /** Sessions this project can still adopt into a roster (a session belongs to at most one). */
+    fun collaborationCandidates(): List<SessionSummary> = emptyList()
+    /** Roster edits are daemon-authoritative: the form stays up until one of these settles it. */
+    val collaborationRosterBusy: Boolean get() = false
+    val collaborationRosterError: String? get() = null
+    val collaborationRosterGen: Int get() = 0
+    fun clearCollaborationRosterError() {}
     fun renameGroup(groupId: String, name: String) {}
     /** Delete a group; its sessions fall back to Ungrouped (daemon-side). */
     fun deleteGroup(groupId: String) {}
@@ -481,6 +503,28 @@ interface DesktopModel {
     val chatWorkdir: String
     val chatBranch: String?
     val chatModel: String
+    val collaborationGroup: SessionGroup? get() = null
+    val collaborationMembers: List<CollaborationMemberUi> get() = emptyList()
+    val currentCollaborationMemberId: String? get() = null
+    var collaborationTargetMemberId: String?
+        get() = null
+        set(_) {}
+    var showCollaborationDelegate: Boolean
+        get() = false
+        set(_) {}
+    var showCollaborationTargetPicker: Boolean
+        get() = false
+        set(_) {}
+    fun openCollaborationMember(member: CollaborationMemberUi) {}
+    fun routeCollaboration(targetMemberId: String, text: String): Boolean = false
+    fun delegateCollaboration(fromMemberId: String, targetMemberId: String, brief: AgentGroupHandoffBrief): Boolean = false
+    val collaborationDeliveryPending: Boolean get() = false
+    val collaborationDeliveryError: String? get() = null
+    /** Who the in-flight dispatch is for, so the lock can name its destination after the view switched. */
+    val collaborationDeliveryTarget: String? get() = null
+    fun clearCollaborationDeliveryError() {}
+    val collaborationAcceptedGen: Int get() = 0
+    val collaborationAcceptedText: String? get() = null
     /** Raw model id (unaliased) — the quick-actions picker compares options against this. */
     val chatModelId: String get() = chatModel
     val chatMode: PermissionMode
