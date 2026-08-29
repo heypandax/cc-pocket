@@ -1,42 +1,24 @@
 name: asc-maintenance
 
-# Purges DEVELOPMENT certificates from the Apple Developer account. Why this exists: ios-release.yml
-# archives with cloud-managed automatic signing, and every ephemeral runner mints a brand-new Apple
-# Development certificate (the private key dies with the runner). After a handful of releases the
-# account hits Apple's cert cap and archives fail with "Choose a certificate to revoke. Your account
-# has reached the maximum number of certificates." (first seen on the 1.2.2 release). Run this, then
-# re-dispatch ios-release.yml.
-#
-# Scope guard: ONLY certificateType DEVELOPMENT / IOS_DEVELOPMENT is touched. DISTRIBUTION (App Store
-# signing) and DEVELOPER_ID_APPLICATION (daemon notarization) are never revoked — losing those would
-# break shipping, while a revoked development cert costs nothing (Xcode / the next CI run re-mints
-# one on demand).
-#
-# Uses the same App Store Connect API key secrets as ios-release.yml. Revoking certificates needs the
-# key's role to be Admin — if the run fails with 403, revoke by hand at
-# https://developer.apple.com/account/resources/certificates/list instead.
+# TEMPORARY branch variant (ci/asc-review-status): read-only App Store review status probe.
+# The purge-dev-certs job from main is intentionally absent here — dispatching this branch
+# can never revoke anything. Prints only version/review states (no metadata, no reasons).
 
 on:
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: "List matching development certificates without revoking them."
-        type: boolean
-        default: false
 
 permissions:
   contents: read
 
 jobs:
-  purge-dev-certs:
+  review-status:
     runs-on: ubuntu-latest
     steps:
-      - name: Revoke development certificates via the ASC API
+      - name: Query App Store version + review submission states
         env:
           ASC_KEY_P8: ${{ secrets.APPSTORE_API_KEY_P8 }}
           ASC_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
-          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           pip install --quiet PyJWT cryptography
           python3 - <<'PY'
@@ -44,50 +26,71 @@ jobs:
 
           key = __import__("base64").b64decode(os.environ["ASC_KEY_P8"]).decode()
           kid, iss = os.environ["ASC_KEY_ID"], os.environ["ASC_ISSUER_ID"]
-          dry = os.environ.get("DRY_RUN", "false") == "true"
 
           def token():
               now = int(time.time())
               return jwt.encode({"iss": iss, "iat": now, "exp": now + 900, "aud": "appstoreconnect-v1"},
                                 key, algorithm="ES256", headers={"kid": kid})
 
-          def call(method, path):
-              req = urllib.request.Request("https://api.appstoreconnect.apple.com" + path, method=method)
+          def call(path):
+              req = urllib.request.Request("https://api.appstoreconnect.apple.com" + path)
               req.add_header("Authorization", f"Bearer {token()}")
               try:
                   with urllib.request.urlopen(req) as r:
-                      body = r.read()
-                      return r.status, json.loads(body) if body else {}
+                      return r.status, json.loads(r.read() or b"{}")
               except urllib.error.HTTPError as e:
                   return e.code, json.loads(e.read() or b"{}")
 
-          status, data = call("GET", "/v1/certificates?limit=200")
-          if status != 200:
-              print(f"::error::listing certificates failed ({status}): {data}"); sys.exit(1)
+          st, data = call("/v1/apps?filter[bundleId]=com.panda.ccpocket&fields[apps]=bundleId")
+          if st != 200 or not data.get("data"):
+              print(f"::error::app lookup failed ({st})"); sys.exit(1)
+          app_id = data["data"][0]["id"]
+          print(f"app id: {app_id}\n")
 
-          DEV_TYPES = {"DEVELOPMENT", "IOS_DEVELOPMENT"}
-          certs = data.get("data", [])
-          # only the CI runners' orphans ("Created via API") — a developer's own machine-named
-          # development cert stays, so local device debugging keeps working untouched
-          targets = [c for c in certs if c["attributes"]["certificateType"] in DEV_TYPES
-                     and "Created via API" in (c["attributes"].get("name") or "")]
-          # public repo → public Actions logs: list only the CI-minted certs being revoked,
-          # never the account's full certificate inventory
-          for c in targets:
-              a = c["attributes"]
-              print(f"{c['id']}  {a['certificateType']:<26} {a.get('name','')}  expires {a.get('expirationDate','?')}")
-          print(f"\n{len(certs)} certificates total, {len(targets)} CI-minted development certs to revoke")
+          print("== appStoreVersions (newest first) ==")
+          st, data = call(f"/v1/apps/{app_id}/appStoreVersions?limit=6"
+                          "&fields[appStoreVersions]=versionString,appStoreState,appVersionState,platform,createdDate")
+          for v in data.get("data", []):
+              a = v["attributes"]
+              print(f"{a.get('platform','?'):<6} {a.get('versionString','?'):<8} "
+                    f"state={a.get('appVersionState') or a.get('appStoreState')}  created={a.get('createdDate')}  id={v['id']}")
 
-          if dry:
-              print("dry run — nothing revoked"); sys.exit(0)
-          failed = False
-          for c in targets:
-              status, body = call("DELETE", f"/v1/certificates/{c['id']}")
-              ok = status in (200, 204)
-              failed = failed or not ok
-              print(f"revoke {c['id']}: {'ok' if ok else f'FAILED ({status}) {body}'}")
-          if failed:
-              print("::error::some revocations failed — the API key likely lacks the Admin role; "
-                    "revoke by hand at https://developer.apple.com/account/resources/certificates/list")
-              sys.exit(1)
+          print("\n== reviewSubmissions ==")
+          st, data = call(f"/v1/reviewSubmissions?filter[app]={app_id}&limit=8"
+                          "&fields[reviewSubmissions]=platform,state,submittedDate")
+          for s in data.get("data", []):
+              a = s["attributes"]
+              print(f"{a.get('platform','?'):<6} state={a.get('state'):<22} submitted={a.get('submittedDate')}  id={s['id']}")
+              ist, idata = call(f"/v1/reviewSubmissions/{s['id']}/items?limit=10&include=appStoreVersion"
+                                "&fields[appStoreVersions]=versionString")
+              vers = {i["id"]: i["attributes"].get("versionString") for i in idata.get("included", []) if i["type"] == "appStoreVersions"}
+              for it in idata.get("data", []):
+                  rel = (((it.get("relationships") or {}).get("appStoreVersion") or {}).get("data") or {})
+                  print(f"   item state={it['attributes'].get('state'):<12} version={vers.get(rel.get('id'), '?')}")
+
+          print("\n== recent builds / TestFlight beta review ==")
+          st, data = call(f"/v1/builds?filter[app]={app_id}&sort=-uploadedDate&limit=6"
+                          "&fields[builds]=version,uploadedDate,processingState"
+                          "&include=betaAppReviewSubmission,preReleaseVersion"
+                          "&fields[betaAppReviewSubmissions]=betaReviewState,submittedDate"
+                          "&fields[preReleaseVersions]=version")
+          beta = {i["id"]: i["attributes"] for i in data.get("included", []) if i["type"] == "betaAppReviewSubmissions"}
+          pre = {i["id"]: i["attributes"].get("version") for i in data.get("included", []) if i["type"] == "preReleaseVersions"}
+          for b in data.get("data", []):
+              a = b["attributes"]
+              rels = b.get("relationships") or {}
+              bid = ((rels.get("betaAppReviewSubmission") or {}).get("data") or {}).get("id")
+              pid = ((rels.get("preReleaseVersion") or {}).get("data") or {}).get("id")
+              bs = beta.get(bid, {})
+              print(f"v{pre.get(pid,'?'):<8} build {a.get('version','?'):<6} uploaded={a.get('uploadedDate')} "
+                    f"processing={a.get('processingState')} betaReview={bs.get('betaReviewState','-')}")
+
+          # Speculative: resolution-center-ish endpoints (expected 4xx if unsupported; harmless probe).
+          print("\n== resolution center probes ==")
+          for p in (f"/v1/resolutionCenterThreads?filter[app]={app_id}",
+                    f"/v1/apps/{app_id}/resolutionCenterThreads"):
+              st, data = call(p)
+              print(f"GET {p} -> {st}")
+              if st == 200:
+                  print(json.dumps(data, ensure_ascii=False)[:2000])
           PY
