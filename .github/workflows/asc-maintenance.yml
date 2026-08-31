@@ -54,57 +54,40 @@ jobs:
           app_id = data["data"][0]["id"]
           print(f"app id: {app_id}")
 
-          # Locate the draft submission ("可供审核" in the UI).
-          st, data = call(f"/v1/reviewSubmissions?filter[app]={app_id}&filter[state]=READY_FOR_REVIEW&limit=8"
+          # List every submission; the rejected one (UNRESOLVED_ISSUES) still owns 1.9.5.
+          st, data = call(f"/v1/reviewSubmissions?filter[app]={app_id}&limit=10"
                           "&fields[reviewSubmissions]=platform,state,submittedDate")
-          drafts = data.get("data", []) if st == 200 else []
-          print(f"draft submissions: {[d['id'] for d in drafts]}")
-
-          sub_id = None
-          if len(drafts) > 1:
-              print("::error::more than one draft submission — refusing to guess"); sys.exit(1)
-
-          if drafts:
-              sub_id = drafts[0]["id"]
-              st, idata = call(f"/v1/reviewSubmissions/{sub_id}/items?limit=10&include=appStoreVersion"
-                               "&fields[appStoreVersions]=versionString")
+          subs = data.get("data", []) if st == 200 else []
+          target_sub, strays = None, []
+          for s in subs:
+              a = s["attributes"]
+              ist, idata = call(f"/v1/reviewSubmissions/{s['id']}/items?limit=10&include=appStoreVersion"
+                                "&fields[appStoreVersions]=versionString")
               vers = [i["attributes"].get("versionString") for i in idata.get("included", [])
                       if i["type"] == "appStoreVersions"]
-              print(f"draft {sub_id} contains versions: {vers}")
-              if vers != [TARGET]:
-                  print(f"::error::draft does not contain exactly {TARGET} — refusing"); sys.exit(1)
-          else:
-              # No draft: stage 1.9.5 ourselves (resubmission after rejection).
-              st, vdata = call(f"/v1/apps/{app_id}/appStoreVersions?filter[versionString]={TARGET}&filter[platform]=IOS"
-                               "&fields[appStoreVersions]=versionString,appVersionState")
-              if st != 200 or not vdata.get("data"):
-                  print(f"::error::version {TARGET} lookup failed ({st})"); sys.exit(1)
-              ver = vdata["data"][0]
-              print(f"version {TARGET} id={ver['id']} state={ver['attributes'].get('appVersionState')}")
-              st, sdata = call("/v1/reviewSubmissions", "POST", {
-                  "data": {"type": "reviewSubmissions",
-                           "attributes": {"platform": "IOS"},
-                           "relationships": {"app": {"data": {"type": "apps", "id": app_id}}}}})
-              if st not in (200, 201):
-                  print(f"::error::create submission failed ({st}): {json.dumps(sdata)[:800]}"); sys.exit(1)
-              sub_id = sdata["data"]["id"]
-              st, idata = call("/v1/reviewSubmissionItems", "POST", {
-                  "data": {"type": "reviewSubmissionItems",
-                           "relationships": {
-                               "reviewSubmission": {"data": {"type": "reviewSubmissions", "id": sub_id}},
-                               "appStoreVersion": {"data": {"type": "appStoreVersions", "id": ver["id"]}}}}})
-              if st not in (200, 201):
-                  print(f"::error::add item failed ({st}): {json.dumps(idata)[:800]}"); sys.exit(1)
-              print(f"staged new submission {sub_id} with {TARGET}")
+              print(f"sub {s['id']} state={a.get('state')} items={vers}")
+              if a.get("state") in ("UNRESOLVED_ISSUES", "READY_FOR_REVIEW") and vers == [TARGET]:
+                  target_sub = s
+              elif a.get("state") == "READY_FOR_REVIEW" and not vers:
+                  strays.append(s["id"])
 
-          # The actual submit.
+          # Cancel the empty draft(s) accidentally created by the previous run.
+          for sid in strays:
+              st, cdata = call(f"/v1/reviewSubmissions/{sid}", "PATCH", {
+                  "data": {"type": "reviewSubmissions", "id": sid, "attributes": {"canceled": True}}})
+              print(f"cancel stray {sid} -> {st}")
+
+          if target_sub is None:
+              print(f"::error::no submission holding exactly [{TARGET}] in a resubmittable state"); sys.exit(1)
+          sub_id = target_sub["id"]
+          print(f"resubmitting {sub_id} (state={target_sub['attributes'].get('state')})")
+
           st, pdata = call(f"/v1/reviewSubmissions/{sub_id}", "PATCH", {
               "data": {"type": "reviewSubmissions", "id": sub_id, "attributes": {"submitted": True}}})
           if st != 200:
               print(f"::error::submit failed ({st}): {json.dumps(pdata)[:1200]}"); sys.exit(1)
           print(f"PATCH ok -> state={pdata['data']['attributes'].get('state')}")
 
-          # Confirm final state.
           st, data = call(f"/v1/reviewSubmissions/{sub_id}?fields[reviewSubmissions]=state,submittedDate")
           a = data.get("data", {}).get("attributes", {})
           print(f"final: state={a.get('state')} submittedDate={a.get('submittedDate')}")
