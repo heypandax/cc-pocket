@@ -1,7 +1,7 @@
 name: ios-submit-197-build54-review
 
-# ONE-OFF OPS BRANCH: independently verify and submit already-attached 1.9.7 build 54.
-# Never merge this branch into main. No binary is uploaded or changed by this operation.
+# ONE-OFF OPS BRANCH: independently verify, attach and submit processed 1.9.7 build 54.
+# Never merge this branch into main. No binary is uploaded by this operation.
 on:
   workflow_dispatch:
     inputs:
@@ -10,7 +10,7 @@ on:
         required: true
         type: string
       submit_for_review:
-        description: "Submit already-attached 1.9.7 build 54 after all read-only checks pass."
+        description: "Attach and submit processed 1.9.7 build 54 after media checks pass."
         type: boolean
         default: false
 
@@ -146,7 +146,7 @@ jobs:
             echo "- Locales: en-US, zh-Hans"
             echo "- Screenshots: 6 per locale per device family (iPhone 6.5-inch + iPad 12.9-inch)"
             echo "- App Previews: 1 per locale"
-            echo "- Build: 54 (already attached and VALID)"
+            echo "- Build: 54 (VALID; explicitly selected and read back before submission)"
             echo "- Binary uploaded: no"
             echo "- Submitted for review: $SUBMIT_FOR_REVIEW (read back from App Store Connect when enabled)"
           } >> "$GITHUB_STEP_SUMMARY"
