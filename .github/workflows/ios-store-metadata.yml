@@ -1,4 +1,4 @@
-name: ios-store-metadata
+name: ios-submit-197-build54-review
 
 # ONE-OFF OPS BRANCH: independently verify and submit already-attached 1.9.7 build 54.
 # Never merge this branch into main. No binary is uploaded or changed by this operation.
@@ -9,8 +9,8 @@ on:
         description: "Editable App Store version to create or update (for example 1.8.1)."
         required: true
         type: string
-      verify_only:
-        description: "Read back the existing store media without changing metadata or uploading anything."
+      submit_for_review:
+        description: "Submit already-attached 1.9.7 build 54 after all read-only checks pass."
         type: boolean
         default: false
 
@@ -66,7 +66,7 @@ jobs:
                 > "$RUNNER_TEMP/asc_api_key.json"
 
       - name: Stage store-page metadata only
-        if: ${{ !inputs.verify_only }}
+        if: ${{ false }}
         # Release notes are managed by ios-release, which attaches the matching binary.
         run: |
           for locale in en-US zh-Hans; do
@@ -78,7 +78,7 @@ jobs:
           done
 
       - name: Create or update App Store version ${{ inputs.version }}
-        if: ${{ !inputs.verify_only }}
+        if: ${{ false }}
         env:
           VERSION: ${{ inputs.version }}
         run: |
@@ -93,7 +93,7 @@ jobs:
             --force true
 
       - name: Converge iPhone and iPad screenshot sets
-        if: ${{ !inputs.verify_only }}
+        if: ${{ false }}
         env:
           VERSION: ${{ inputs.version }}
           ASC_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
@@ -101,7 +101,7 @@ jobs:
         run: ruby scripts/sync-appstore-screenshots.rb
 
       - name: Replace localized App Previews after processing
-        if: ${{ !inputs.verify_only }}
+        if: ${{ false }}
         env:
           VERSION: ${{ inputs.version }}
           ASC_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
@@ -116,6 +116,7 @@ jobs:
         run: ruby scripts/verify-appstore-media.rb
 
       - name: Submit verified 1.9.7 build 54 for App Review
+        if: ${{ inputs.submit_for_review }}
         env:
           VERSION: ${{ inputs.version }}
           ASC_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
@@ -137,7 +138,7 @@ jobs:
       - name: Summary
         env:
           VERSION: ${{ inputs.version }}
-          VERIFY_ONLY: ${{ inputs.verify_only }}
+          SUBMIT_FOR_REVIEW: ${{ inputs.submit_for_review }}
         run: |
           {
             echo "## App Store media verified"
@@ -147,5 +148,5 @@ jobs:
             echo "- App Previews: 1 per locale"
             echo "- Build: 54 (already attached and VALID)"
             echo "- Binary uploaded: no"
-            echo "- Submitted for review: yes, read back from App Store Connect"
+            echo "- Submitted for review: $SUBMIT_FOR_REVIEW (read back from App Store Connect when enabled)"
           } >> "$GITHUB_STEP_SUMMARY"
