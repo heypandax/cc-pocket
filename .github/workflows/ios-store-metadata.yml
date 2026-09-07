@@ -1,7 +1,7 @@
 name: ios-store-metadata
 
-# Creates or updates an editable App Store version and syncs localized metadata + screenshots + previews.
-# No binary is uploaded, no build is attached, and the version is never submitted for review.
+# ONE-OFF OPS BRANCH: independently verify and submit already-attached 1.9.7 build 54.
+# Never merge this branch into main. No binary is uploaded or changed by this operation.
 on:
   workflow_dispatch:
     inputs:
@@ -115,6 +115,25 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
         run: ruby scripts/verify-appstore-media.rb
 
+      - name: Submit verified 1.9.7 build 54 for App Review
+        env:
+          VERSION: ${{ inputs.version }}
+          ASC_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+        run: |
+          ruby scripts/ios-197-build54-review-state.rb prepared
+          fastlane deliver \
+            --api_key_path "$RUNNER_TEMP/asc_api_key.json" \
+            --app_version "1.9.7" \
+            --build_number "54" \
+            --skip_binary_upload true \
+            --skip_metadata true \
+            --skip_screenshots true \
+            --submit_for_review true \
+            --automatic_release true \
+            --force true
+          ruby scripts/ios-197-build54-review-state.rb submitted
+
       - name: Summary
         env:
           VERSION: ${{ inputs.version }}
@@ -126,7 +145,7 @@ jobs:
             echo "- Locales: en-US, zh-Hans"
             echo "- Screenshots: 6 per locale per device family (iPhone 6.5-inch + iPad 12.9-inch)"
             echo "- App Previews: 1 per locale"
-            echo "- Read-only verification: $VERIFY_ONLY"
+            echo "- Build: 54 (already attached and VALID)"
             echo "- Binary uploaded: no"
-            echo "- Submitted for review: no"
+            echo "- Submitted for review: yes, read back from App Store Connect"
           } >> "$GITHUB_STEP_SUMMARY"
